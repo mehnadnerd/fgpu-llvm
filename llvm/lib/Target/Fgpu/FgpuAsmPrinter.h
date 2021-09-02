@@ -1,9 +1,8 @@
-//===-- FgpuAsmPrinter.h - Fgpu LLVM Assembly Printer ----------*- C++ -*--===//
+//===- FgpuAsmPrinter.h - Fgpu LLVM Assembly Printer -----------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,75 +10,156 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FGPUASMPRINTER_H
-#define FGPUASMPRINTER_H
+#ifndef LLVM_LIB_TARGET_Fgpu_FgpuASMPRINTER_H
+#define LLVM_LIB_TARGET_Fgpu_FgpuASMPRINTER_H
 
-
-#include "FgpuMachineFunction.h"
+#include "Fgpu16HardFloatInfo.h"
 #include "FgpuMCInstLower.h"
 #include "FgpuSubtarget.h"
-#include "FgpuTargetMachine.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/Support/Compiler.h"
-#include "llvm/Target/TargetMachine.h"
+#include <algorithm>
+#include <map>
+#include <memory>
 
 namespace llvm {
-class MCStreamer;
-class MachineInstr;
+
+class MCOperand;
+class MCSubtargetInfo;
+class MCSymbol;
 class MachineBasicBlock;
+class MachineConstantPool;
+class MachineFunction;
+class MachineInstr;
+class MachineOperand;
+class FgpuFunctionInfo;
+class FgpuTargetStreamer;
 class Module;
 class raw_ostream;
+class TargetMachine;
 
 class LLVM_LIBRARY_VISIBILITY FgpuAsmPrinter : public AsmPrinter {
+  FgpuTargetStreamer &getTargetStreamer() const;
 
   void EmitInstrWithMacroNoAT(const MachineInstr *MI);
 
+  //===------------------------------------------------------------------===//
+  // XRay implementation
+  //===------------------------------------------------------------------===//
+
+public:
+  // XRay-specific lowering for Fgpu.
+  void LowerPATCHABLE_FUNCTION_ENTER(const MachineInstr &MI);
+  void LowerPATCHABLE_FUNCTION_EXIT(const MachineInstr &MI);
+  void LowerPATCHABLE_TAIL_CALL(const MachineInstr &MI);
+
 private:
+  /// MCP - Keep a pointer to constantpool entries of the current
+  /// MachineFunction.
+  const MachineConstantPool *MCP = nullptr;
+
+  /// InConstantPool - Maintain state when emitting a sequence of constant
+  /// pool entries so we can properly mark them as data regions.
+  bool InConstantPool = false;
+
+  std::map<const char *, const Fgpu16HardFloatInfo::FuncSignature *>
+      StubsNeeded;
+
+  void EmitSled(const MachineInstr &MI, SledKind Kind);
+
+  // tblgen'erated function.
+  bool emitPseudoExpansionLowering(MCStreamer &OutStreamer,
+                                   const MachineInstr *MI);
+
+  // Emit PseudoReturn, PseudoReturn64, PseudoIndirectBranch,
+  // and PseudoIndirectBranch64 as a JR, JR_MM, JALR, or JALR64 as appropriate
+  // for the target.
+  void emitPseudoIndirectBranch(MCStreamer &OutStreamer,
+                                const MachineInstr *MI);
 
   // lowerOperand - Convert a MachineOperand into the equivalent MCOperand.
   bool lowerOperand(const MachineOperand &MO, MCOperand &MCOp);
 
-public:
+  void emitInlineAsmStart() const override;
 
+  void emitInlineAsmEnd(const MCSubtargetInfo &StartInfo,
+                        const MCSubtargetInfo *EndInfo) const override;
+
+  void EmitJal(const MCSubtargetInfo &STI, MCSymbol *Symbol);
+
+  void EmitInstrReg(const MCSubtargetInfo &STI, unsigned Opcode, unsigned Reg);
+
+  void EmitInstrRegReg(const MCSubtargetInfo &STI, unsigned Opcode,
+                       unsigned Reg1, unsigned Reg2);
+
+  void EmitInstrRegRegReg(const MCSubtargetInfo &STI, unsigned Opcode,
+                          unsigned Reg1, unsigned Reg2, unsigned Reg3);
+
+  void EmitMovFPIntPair(const MCSubtargetInfo &STI, unsigned MovOpc,
+                        unsigned Reg1, unsigned Reg2, unsigned FPReg1,
+                        unsigned FPReg2, bool LE);
+
+  void EmitSwapFPIntParams(const MCSubtargetInfo &STI,
+                           Fgpu16HardFloatInfo::FPParamVariant, bool LE,
+                           bool ToFP);
+
+  void EmitSwapFPIntRetval(const MCSubtargetInfo &STI,
+                           Fgpu16HardFloatInfo::FPReturnVariant, bool LE);
+
+  void EmitFPCallStub(const char *, const Fgpu16HardFloatInfo::FuncSignature *);
+
+  void NaClAlignIndirectJumpTargets(MachineFunction &MF);
+
+  bool isLongBranchPseudo(int Opcode) const;
+
+public:
   const FgpuSubtarget *Subtarget;
   const FgpuFunctionInfo *FgpuFI;
   FgpuMCInstLower MCInstLowering;
 
   explicit FgpuAsmPrinter(TargetMachine &TM,
                           std::unique_ptr<MCStreamer> Streamer)
-    : AsmPrinter(TM, std::move(Streamer)), 
-      MCInstLowering(*this) {
-    Subtarget = static_cast<FgpuTargetMachine &>(TM).getSubtargetImpl();
+      : AsmPrinter(TM, std::move(Streamer)), MCInstLowering(*this) {}
+
+  StringRef getPassName() const override { return "Fgpu Assembly Printer"; }
+
+  bool runOnMachineFunction(MachineFunction &MF) override;
+
+  void emitConstantPool() override {
+    bool UsingConstantPools =
+      (Subtarget->inFgpu16Mode() && Subtarget->useConstantIslands());
+    if (!UsingConstantPools)
+      AsmPrinter::emitConstantPool();
+    // we emit constant pools customly!
   }
 
-  virtual const char *getPassName() const override {
-    return "Fgpu Assembly Printer";
-  }
-
-  virtual bool runOnMachineFunction(MachineFunction &MF) override;
-
-//- EmitInstruction() must exists or will have run time error.
-  void EmitInstruction(const MachineInstr *MI) override;
-  void printSavedRegsBitmask(raw_ostream &O);
-  void printHex32(unsigned int Value, raw_ostream &O);
+  void emitInstruction(const MachineInstr *MI) override;
+  void printSavedRegsBitmask();
   void emitFrameDirective();
   const char *getCurrentABIString() const;
-  void EmitFunctionEntryLabel() override;
-  void EmitFunctionBodyStart() override;
-  void EmitFunctionBodyEnd() override;
+  void emitFunctionEntryLabel() override;
+  void emitFunctionBodyStart() override;
+  void emitFunctionBodyEnd() override;
+  void emitBasicBlockEnd(const MachineBasicBlock &MBB) override;
+  bool isBlockOnlyReachableByFallthrough(
+                                   const MachineBasicBlock* MBB) const override;
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                       unsigned AsmVariant, const char *ExtraCode,
-                       raw_ostream &O) override;
+                       const char *ExtraCode, raw_ostream &O) override;
   bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNum,
-                             unsigned AsmVariant, const char *ExtraCode,
-                             raw_ostream &O) override;
+                             const char *ExtraCode, raw_ostream &O) override;
   void printOperand(const MachineInstr *MI, int opNum, raw_ostream &O);
-  void EmitStartOfAsmFile(Module &M) override;
+  void printMemOperand(const MachineInstr *MI, int opNum, raw_ostream &O);
+  void printMemOperandEA(const MachineInstr *MI, int opNum, raw_ostream &O);
+  void printFCCOperand(const MachineInstr *MI, int opNum, raw_ostream &O,
+                       const char *Modifier = nullptr);
+  void printRegisterList(const MachineInstr *MI, int opNum, raw_ostream &O);
+  void emitStartOfAsmFile(Module &M) override;
+  void emitEndOfAsmFile(Module &M) override;
   void PrintDebugValueComment(const MachineInstr *MI, raw_ostream &OS);
+  void emitDebugValue(const MCExpr *Value, unsigned Size) const override;
 };
-}
 
+} // end namespace llvm
 
-#endif
-
+#endif // LLVM_LIB_TARGET_Fgpu_FgpuASMPRINTER_H

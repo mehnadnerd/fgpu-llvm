@@ -1,9 +1,8 @@
-//===-- FgpuTargetMachine.h - Define TargetMachine for Fgpu -----*- C++ -*-===//
+//===- FgpuTargetMachine.h - Define TargetMachine for Fgpu ------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,37 +10,40 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FGPUTARGETMACHINE_H
-#define FGPUTARGETMACHINE_H
-
+#ifndef LLVM_LIB_TARGET_Fgpu_FgpuTARGETMACHINE_H
+#define LLVM_LIB_TARGET_Fgpu_FgpuTARGETMACHINE_H
 
 #include "MCTargetDesc/FgpuABIInfo.h"
 #include "FgpuSubtarget.h"
-#include "llvm/CodeGen/Passes.h"
-#include "llvm/CodeGen/SelectionDAGISel.h"
-#include "llvm/Target/TargetFrameLowering.h"
+#include "llvm/ADT/Optional.h"
+#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/CodeGen.h"
 #include "llvm/Target/TargetMachine.h"
+#include <memory>
 
 namespace llvm {
-// class formatted_raw_ostream;
-class FgpuRegisterInfo;
 
 class FgpuTargetMachine : public LLVMTargetMachine {
   bool isLittle;
-  virtual void anchor();
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
-  
+  // Selected ABI
   FgpuABIInfo ABI;
-  FgpuSubtarget *Subtarget;
+  const FgpuSubtarget *Subtarget;
   FgpuSubtarget DefaultSubtarget;
+  FgpuSubtarget NoFgpu16Subtarget;
+  FgpuSubtarget Fgpu16Subtarget;
 
   mutable StringMap<std::unique_ptr<FgpuSubtarget>> SubtargetMap;
+
 public:
-  FgpuTargetMachine(const Target &T, const Triple &TT, StringRef CPU, 
-                    StringRef FS, const TargetOptions &Options, 
-                    Reloc::Model RM, CodeModel::Model CM, 
-                    CodeGenOpt::Level OL);
+  FgpuTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
+                    StringRef FS, const TargetOptions &Options,
+                    Optional<Reloc::Model> RM, Optional<CodeModel::Model> CM,
+                    CodeGenOpt::Level OL, bool JIT, bool isLittle);
   ~FgpuTargetMachine() override;
+
+  TargetTransformInfo getTargetTransformInfo(const Function &F) override;
 
   const FgpuSubtarget *getSubtargetImpl() const {
     if (Subtarget)
@@ -51,16 +53,52 @@ public:
 
   const FgpuSubtarget *getSubtargetImpl(const Function &F) const override;
 
+  /// Reset the subtarget for the Fgpu target.
+  void resetSubtarget(MachineFunction *MF);
+
   // Pass Pipeline Configuration
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
 
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();
   }
+
+  /// Returns true if a cast between SrcAS and DestAS is a noop.
+  bool isNoopAddrSpaceCast(unsigned SrcAS, unsigned DestAS) const override {
+    // Fgpu doesn't have any special address spaces so we just reserve
+    // the first 256 for software use (e.g. OpenCL) and treat casts
+    // between them as noops.
+    return SrcAS < 256 && DestAS < 256;
+  }
+
   bool isLittleEndian() const { return isLittle; }
   const FgpuABIInfo &getABI() const { return ABI; }
 };
 
-} 
+/// Fgpu32/64 big endian target machine.
+///
+class FgpuebTargetMachine : public FgpuTargetMachine {
+  virtual void anchor();
 
-#endif
+public:
+  FgpuebTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
+                      StringRef FS, const TargetOptions &Options,
+                      Optional<Reloc::Model> RM, Optional<CodeModel::Model> CM,
+                      CodeGenOpt::Level OL, bool JIT);
+};
+
+/// Fgpu32/64 little endian target machine.
+///
+class FgpuelTargetMachine : public FgpuTargetMachine {
+  virtual void anchor();
+
+public:
+  FgpuelTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
+                      StringRef FS, const TargetOptions &Options,
+                      Optional<Reloc::Model> RM, Optional<CodeModel::Model> CM,
+                      CodeGenOpt::Level OL, bool JIT);
+};
+
+} // end namespace llvm
+
+#endif // LLVM_LIB_TARGET_Fgpu_FgpuTARGETMACHINE_H

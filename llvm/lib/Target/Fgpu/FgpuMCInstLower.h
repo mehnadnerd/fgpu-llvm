@@ -1,42 +1,53 @@
-//===-- FgpuMCInstLower.h - Lower MachineInstr to MCInst -------*- C++ -*--===//
+//===- FgpuMCInstLower.h - Lower MachineInstr to MCInst --------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FGPUMCINSTLOWER_H
-#define FGPUMCINSTLOWER_H
+#ifndef LLVM_LIB_TARGET_Fgpu_FgpuMCINSTLOWER_H
+#define LLVM_LIB_TARGET_Fgpu_FgpuMCINSTLOWER_H
 
-#include "llvm/ADT/SmallVector.h"
+#include "MCTargetDesc/FgpuMCExpr.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/Support/Compiler.h"
 
 namespace llvm {
-  class MCContext;
-  class MCInst;
-  class MCOperand;
-  class MachineInstr;
-  class MachineFunction;
-  class FgpuAsmPrinter;
 
-/// This class is used to lower an MachineInstr into an MCInst.
+class MachineBasicBlock;
+class MachineInstr;
+class MCContext;
+class MCInst;
+class MCOperand;
+class FgpuAsmPrinter;
+
+/// FgpuMCInstLower - This class is used to lower an MachineInstr into an
+///                   MCInst.
 class LLVM_LIBRARY_VISIBILITY FgpuMCInstLower {
-  typedef MachineOperand::MachineOperandType MachineOperandType;
+  using MachineOperandType = MachineOperand::MachineOperandType;
+
   MCContext *Ctx;
   FgpuAsmPrinter &AsmPrinter;
+
 public:
   FgpuMCInstLower(FgpuAsmPrinter &asmprinter);
-  void Initialize(MCContext* C);
+
+  void Initialize(MCContext *C);
   void Lower(const MachineInstr *MI, MCInst &OutMI) const;
-  MCOperand LowerOperand(const MachineOperand& MO, unsigned offset = 0) const;
+  MCOperand LowerOperand(const MachineOperand &MO, int64_t offset = 0) const;
+
 private:
   MCOperand LowerSymbolOperand(const MachineOperand &MO,
-                               MachineOperandType MOTy, unsigned Offset) const;
+                               MachineOperandType MOTy, int64_t Offset) const;
+  MCOperand createSub(MachineBasicBlock *BB1, MachineBasicBlock *BB2,
+                      FgpuMCExpr::FgpuExprKind Kind) const;
+  void lowerLongBranchLUi(const MachineInstr *MI, MCInst &OutMI) const;
+  void lowerLongBranchADDiu(const MachineInstr *MI, MCInst &OutMI,
+                            int Opcode) const;
+  bool lowerLongBranch(const MachineInstr *MI, MCInst &OutMI) const;
 };
-}
 
+} // end namespace llvm
 
-#endif
+#endif // LLVM_LIB_TARGET_Fgpu_FgpuMCINSTLOWER_H

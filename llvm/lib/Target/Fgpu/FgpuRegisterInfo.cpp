@@ -1,136 +1,242 @@
-//===-- FgpuRegisterInfo.cpp - FGPU Register Information -== --------------===//
+//===- FgpuRegisterInfo.cpp - Fgpu Register Information -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-//
-//===----------------------------------------------------------------------===//
-//
-// This file contains the FGPU implementation of the TargetRegisterInfo class.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-
-#define DEBUG_TYPE "fgpu-reg-info"
+//
+// This file contains the Fgpu implementation of the TargetRegisterInfo class.
+//
+//===----------------------------------------------------------------------===//
 
 #include "FgpuRegisterInfo.h"
-
 #include "Fgpu.h"
-#include "FgpuSubtarget.h"
+#include "MCTargetDesc/FgpuABIInfo.h"
 #include "FgpuMachineFunction.h"
+#include "FgpuSubtarget.h"
+#include "FgpuTargetMachine.h"
+#include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/Type.h"
-#include "llvm/Support/CommandLine.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include <cstdint>
+
+using namespace llvm;
+
+#define DEBUG_TYPE "Fgpu-reg-info"
 
 #define GET_REGINFO_TARGET_DESC
 #include "FgpuGenRegisterInfo.inc"
 
-using namespace llvm;
+FgpuRegisterInfo::FgpuRegisterInfo() : FgpuGenRegisterInfo(Fgpu::RA) {}
 
-FgpuRegisterInfo::FgpuRegisterInfo(const FgpuSubtarget &ST)
-  : FgpuGenRegisterInfo(Fgpu::LR), Subtarget(ST) {}
+unsigned FgpuRegisterInfo::getPICCallReg() { return Fgpu::T9; }
 
+const TargetRegisterClass *
+FgpuRegisterInfo::getPointerRegClass(const MachineFunction &MF,
+                                     unsigned Kind) const {
+  FgpuABIInfo ABI = MF.getSubtarget<FgpuSubtarget>().getABI();
+  FgpuPtrClass PtrClassKind = static_cast<FgpuPtrClass>(Kind);
+
+  switch (PtrClassKind) {
+  case FgpuPtrClass::Default:
+    return ABI.ArePtrs64bit() ? &Fgpu::GPR64RegClass : &Fgpu::GPR32RegClass;
+  case FgpuPtrClass::GPR16MM:
+    return &Fgpu::GPRMM16RegClass;
+  case FgpuPtrClass::StackPointer:
+    return ABI.ArePtrs64bit() ? &Fgpu::SP64RegClass : &Fgpu::SP32RegClass;
+  case FgpuPtrClass::GlobalPointer:
+    return ABI.ArePtrs64bit() ? &Fgpu::GP64RegClass : &Fgpu::GP32RegClass;
+  }
+
+  llvm_unreachable("Unknown pointer kind");
+}
+
+unsigned
+FgpuRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
+                                      MachineFunction &MF) const {
+  switch (RC->getID()) {
+  default:
+    return 0;
+  case Fgpu::GPR32RegClassID:
+  case Fgpu::GPR64RegClassID:
+  case Fgpu::DSPRRegClassID: {
+    const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
+    return 28 - TFI->hasFP(MF);
+  }
+  case Fgpu::FGR32RegClassID:
+    return 32;
+  case Fgpu::AFGR64RegClassID:
+    return 16;
+  case Fgpu::FGR64RegClassID:
+    return 32;
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // Callee Saved Registers methods
 //===----------------------------------------------------------------------===//
+
 /// Fgpu Callee Saved Registers
-// In FgpuCallConv.td,
-const uint16_t* FgpuRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  // return NULL;
-  return CSR_CC_Fgpu_SaveList;
+const MCPhysReg *
+FgpuRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
+  const FgpuSubtarget &Subtarget = MF->getSubtarget<FgpuSubtarget>();
+  const Function &F = MF->getFunction();
+  if (F.hasFnAttribute("interrupt")) {
+    if (Subtarget.hasFgpu64())
+      return Subtarget.hasFgpu64r6() ? CSR_Interrupt_64R6_SaveList
+                                     : CSR_Interrupt_64_SaveList;
+    else
+      return Subtarget.hasFgpu32r6() ? CSR_Interrupt_32R6_SaveList
+                                     : CSR_Interrupt_32_SaveList;
+  }
+
+  if (Subtarget.isSingleFloat())
+    return CSR_SingleFloatOnly_SaveList;
+
+  if (Subtarget.isABI_N64())
+    return CSR_N64_SaveList;
+
+  if (Subtarget.isABI_N32())
+    return CSR_N32_SaveList;
+
+  if (Subtarget.isFP64bit())
+    return CSR_O32_FP64_SaveList;
+
+  if (Subtarget.isFPXX())
+    return CSR_O32_FPXX_SaveList;
+
+  return CSR_O32_SaveList;
 }
 
-const uint32_t* FgpuRegisterInfo::getCallPreservedMask(const MachineFunction &MF, CallingConv::ID) const {
-  // return NULL;
-  return CSR_CC_Fgpu_RegMask; 
+const uint32_t *
+FgpuRegisterInfo::getCallPreservedMask(const MachineFunction &MF,
+                                       CallingConv::ID) const {
+  const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
+  if (Subtarget.isSingleFloat())
+    return CSR_SingleFloatOnly_RegMask;
+
+  if (Subtarget.isABI_N64())
+    return CSR_N64_RegMask;
+
+  if (Subtarget.isABI_N32())
+    return CSR_N32_RegMask;
+
+  if (Subtarget.isFP64bit())
+    return CSR_O32_FP64_RegMask;
+
+  if (Subtarget.isFPXX())
+    return CSR_O32_FPXX_RegMask;
+
+  return CSR_O32_RegMask;
 }
 
-// pure virtual method
-BitVector FgpuRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
-  static const uint16_t ReservedCPURegs[] = {
-    Fgpu::R0, Fgpu::SP, Fgpu::LR
+const uint32_t *FgpuRegisterInfo::getFgpu16RetHelperMask() {
+  return CSR_Fgpu16RetHelper_RegMask;
+}
+
+BitVector FgpuRegisterInfo::
+getReservedRegs(const MachineFunction &MF) const {
+  static const MCPhysReg ReservedGPR32[] = {
+    Fgpu::ZERO, Fgpu::K0, Fgpu::K1, Fgpu::SP
   };
-  BitVector Reserved(getNumRegs());
 
-  for (unsigned I = 0; I < array_lengthof(ReservedCPURegs); ++I)
-    Reserved.set(ReservedCPURegs[I]);
+  static const MCPhysReg ReservedGPR64[] = {
+    Fgpu::ZERO_64, Fgpu::K0_64, Fgpu::K1_64, Fgpu::SP_64
+  };
+
+  BitVector Reserved(getNumRegs());
+  const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
+
+  for (unsigned I = 0; I < array_lengthof(ReservedGPR32); ++I)
+    Reserved.set(ReservedGPR32[I]);
+
+  // Reserve registers for the NaCl sandbox.
+  if (Subtarget.isTargetNaCl()) {
+    Reserved.set(Fgpu::T6);   // Reserved for control flow mask.
+    Reserved.set(Fgpu::T7);   // Reserved for memory access mask.
+    Reserved.set(Fgpu::T8);   // Reserved for thread pointer.
+  }
+
+  for (unsigned I = 0; I < array_lengthof(ReservedGPR64); ++I)
+    Reserved.set(ReservedGPR64[I]);
+
+  // For mno-abicalls, GP is a program invariant!
+  if (!Subtarget.isABICalls()) {
+    Reserved.set(Fgpu::GP);
+    Reserved.set(Fgpu::GP_64);
+  }
+
+  if (Subtarget.isFP64bit()) {
+    // Reserve all registers in AFGR64.
+    for (MCPhysReg Reg : Fgpu::AFGR64RegClass)
+      Reserved.set(Reg);
+  } else {
+    // Reserve all registers in FGR64.
+    for (MCPhysReg Reg : Fgpu::FGR64RegClass)
+      Reserved.set(Reg);
+  }
+  // Reserve FP if this function should have a dedicated frame pointer register.
+  if (Subtarget.getFrameLowering()->hasFP(MF)) {
+    if (Subtarget.inFgpu16Mode())
+      Reserved.set(Fgpu::S0);
+    else {
+      Reserved.set(Fgpu::FP);
+      Reserved.set(Fgpu::FP_64);
+
+      // Reserve the base register if we need to both realign the stack and
+      // allocate variable-sized objects at runtime. This should test the
+      // same conditions as FgpuFrameLowering::hasBP().
+      if (hasStackRealignment(MF) && MF.getFrameInfo().hasVarSizedObjects()) {
+        Reserved.set(Fgpu::S7);
+        Reserved.set(Fgpu::S7_64);
+      }
+    }
+  }
+
+  // Reserve hardware registers.
+  Reserved.set(Fgpu::HWR29);
+
+  // Reserve DSP control register.
+  Reserved.set(Fgpu::DSPPos);
+  Reserved.set(Fgpu::DSPSCount);
+  Reserved.set(Fgpu::DSPCarry);
+  Reserved.set(Fgpu::DSPEFI);
+  Reserved.set(Fgpu::DSPOutFlag);
+
+  // Reserve MSA control registers.
+  for (MCPhysReg Reg : Fgpu::MSACtrlRegClass)
+    Reserved.set(Reg);
+
+  // Reserve RA if in Fgpu16 mode.
+  if (Subtarget.inFgpu16Mode()) {
+    const FgpuFunctionInfo *FgpuFI = MF.getInfo<FgpuFunctionInfo>();
+    Reserved.set(Fgpu::RA);
+    Reserved.set(Fgpu::RA_64);
+    Reserved.set(Fgpu::T0);
+    Reserved.set(Fgpu::T1);
+    if (MF.getFunction().hasFnAttribute("saveS2") || FgpuFI->hasSaveS2())
+      Reserved.set(Fgpu::S2);
+  }
+
+  // Reserve GP if small section is used.
+  if (Subtarget.useSmallSection()) {
+    Reserved.set(Fgpu::GP);
+    Reserved.set(Fgpu::GP_64);
+  }
 
   return Reserved;
-}
-
-//- If no eliminateFrameIndex(), it will hang on run. 
-// pure virtual method
-// FrameIndex represent objects inside a abstract stack.
-// We must replace FrameIndex with an stack/frame pointer
-// direct reference.
-void FgpuRegisterInfo::
-eliminateFrameIndex(MachineBasicBlock::iterator II, int SPAdj,
-                    unsigned FIOperandNum, RegScavenger *RS) const {
-
-  DEBUG(dbgs() << "soubhi: eliminateFrameIndex entered" << "\n");
-  MachineInstr &MI = *II;
-  MachineFunction &MF = *MI.getParent()->getParent();
-  unsigned i = 0;
-  while (!MI.getOperand(i).isFI()) {
-    ++i;
-    assert(i < MI.getNumOperands() &&
-           "Instr doesn't have FrameIndex operand!");
-  }
-
-  DEBUG(dbgs() << "\nFunction : " << MF.getFunction()->getName() << "\n";
-        dbgs() << "<--------->\n" << MI);
-
-  int FrameIndex = MI.getOperand(i).getIndex();
-  uint64_t stackSize = MF.getFrameInfo()->getStackSize();
-  int64_t spOffset = MF.getFrameInfo()->getObjectOffset(FrameIndex);
-
-  DEBUG(dbgs() << "FrameIndex : " << FrameIndex << "\n"
-               << "spOffset   : " << spOffset << "\n"
-               << "stackSize  : " << stackSize << "\n");
-
-  unsigned FrameReg;
-
-  FrameReg = Fgpu::SP;
-
-  // Calculate final offset.
-  // - There is no need to change the offset if the frame object is one of the
-  //   following: an outgoing argument, pointer to a dynamically allocated
-  //   stack space or a $gp restore location,
-  // - If the frame object is any of the following, its offset must be adjusted
-  //   by adding the size of the stack:
-  //   incoming argument, callee-saved register location or local variable.
-  int64_t Offset;
-  Offset = spOffset + (int64_t)stackSize;
-
-  Offset    += MI.getOperand(i+1).getImm();
-
-  DEBUG(dbgs() << "Offset     : " << Offset << "\n" << "<--------->\n");
-
-  // If MI is not a debug value, make sure Offset fits in the 16-bit immediate
-  // field.
-  if (!MI.isDebugValue() && !isInt<16>(Offset)) {
-        assert("(!MI.isDebugValue() && !isInt<16>(Offset))");
-  }
-  // const FgpuSEInstrInfo &TII =
-  //     *static_cast<const FgpuSEInstrInfo*>(Subtarget.getInstrInfo());
-  
-  auto &FgpuST = static_cast<const FgpuSubtarget&>(MF.getSubtarget());
-  auto &FgpuII = *FgpuST.getInstrInfo();
-  if ( MI.getOpcode() == Fgpu::LW){
-    DEBUG(dbgs() << "soubhi: It is a LW\n");
-    MI.setDesc(FgpuII.get(Fgpu::LLWI));
-  }
-  if ( MI.getOpcode() == Fgpu::SW){
-    DEBUG(dbgs() << "soubhi: It is a SW\n");
-    MI.setDesc(FgpuII.get(Fgpu::LSWI));
-  }
-  MI.getOperand(i).ChangeToRegister(FrameReg, false);
-  MI.getOperand(i+1).ChangeToImmediate(Offset);
-  DEBUG(dbgs() << "soubhi: eliminateFrameIndex exiting\n");
 }
 
 bool
@@ -138,12 +244,77 @@ FgpuRegisterInfo::requiresRegisterScavenging(const MachineFunction &MF) const {
   return true;
 }
 
-bool
-FgpuRegisterInfo::trackLivenessAfterRegAlloc(const MachineFunction &MF) const {
-  return true;
+// FrameIndex represent objects inside a abstract stack.
+// We must replace FrameIndex with an stack/frame pointer
+// direct reference.
+void FgpuRegisterInfo::
+eliminateFrameIndex(MachineBasicBlock::iterator II, int SPAdj,
+                    unsigned FIOperandNum, RegScavenger *RS) const {
+  MachineInstr &MI = *II;
+  MachineFunction &MF = *MI.getParent()->getParent();
+
+  LLVM_DEBUG(errs() << "\nFunction : " << MF.getName() << "\n";
+             errs() << "<--------->\n"
+                    << MI);
+
+  int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
+  uint64_t stackSize = MF.getFrameInfo().getStackSize();
+  int64_t spOffset = MF.getFrameInfo().getObjectOffset(FrameIndex);
+
+  LLVM_DEBUG(errs() << "FrameIndex : " << FrameIndex << "\n"
+                    << "spOffset   : " << spOffset << "\n"
+                    << "stackSize  : " << stackSize << "\n"
+                    << "alignment  : "
+                    << DebugStr(MF.getFrameInfo().getObjectAlign(FrameIndex))
+                    << "\n");
+
+  eliminateFI(MI, FIOperandNum, FrameIndex, stackSize, spOffset);
 }
 
-// pure virtual method
-unsigned FgpuRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
-  return (Fgpu::SP);
+Register FgpuRegisterInfo::
+getFrameRegister(const MachineFunction &MF) const {
+  const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
+  const TargetFrameLowering *TFI = Subtarget.getFrameLowering();
+  bool IsN64 =
+      static_cast<const FgpuTargetMachine &>(MF.getTarget()).getABI().IsN64();
+
+  if (Subtarget.inFgpu16Mode())
+    return TFI->hasFP(MF) ? Fgpu::S0 : Fgpu::SP;
+  else
+    return TFI->hasFP(MF) ? (IsN64 ? Fgpu::FP_64 : Fgpu::FP) :
+                            (IsN64 ? Fgpu::SP_64 : Fgpu::SP);
+}
+
+bool FgpuRegisterInfo::canRealignStack(const MachineFunction &MF) const {
+  // Avoid realigning functions that explicitly do not want to be realigned.
+  // Normally, we should report an error when a function should be dynamically
+  // realigned but also has the attribute no-realign-stack. Unfortunately,
+  // with this attribute, MachineFrameInfo clamps each new object's alignment
+  // to that of the stack's alignment as specified by the ABI. As a result,
+  // the information of whether we have objects with larger alignment
+  // requirement than the stack's alignment is already lost at this point.
+  if (!TargetRegisterInfo::canRealignStack(MF))
+    return false;
+
+  const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
+  unsigned FP = Subtarget.isGP32bit() ? Fgpu::FP : Fgpu::FP_64;
+  unsigned BP = Subtarget.isGP32bit() ? Fgpu::S7 : Fgpu::S7_64;
+
+  // Support dynamic stack realignment for all targets except Fgpu16.
+  if (Subtarget.inFgpu16Mode())
+    return false;
+
+  // We can't perform dynamic stack realignment if we can't reserve the
+  // frame pointer register.
+  if (!MF.getRegInfo().canReserveReg(FP))
+    return false;
+
+  // We can realign the stack if we know the maximum call frame size and we
+  // don't have variable sized objects.
+  if (Subtarget.getFrameLowering()->hasReservedCallFrame(MF))
+    return true;
+
+  // We have to reserve the base pointer register in the presence of variable
+  // sized objects.
+  return MF.getRegInfo().canReserveReg(BP);
 }

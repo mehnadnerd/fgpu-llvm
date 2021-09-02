@@ -1,23 +1,21 @@
-//===-- FgpuSEFrameLowering.h - Fgpu32/64 frame lowering --------*- C++ -*-===//
+//===- FgpuSEFrameLowering.h - Fgpu32/64 frame lowering ---------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-//
-//===----------------------------------------------------------------------===//
-//
-//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FGPUSE_FRAMEINFO_H
-#define FGPUSE_FRAMEINFO_H
-
+#ifndef LLVM_LIB_TARGET_Fgpu_FgpuSEFRAMELOWERING_H
+#define LLVM_LIB_TARGET_Fgpu_FgpuSEFRAMELOWERING_H
 
 #include "FgpuFrameLowering.h"
 
 namespace llvm {
+
+class MachineBasicBlock;
+class MachineFunction;
+class FgpuSubtarget;
 
 class FgpuSEFrameLowering : public FgpuFrameLowering {
 public:
@@ -28,25 +26,26 @@ public:
   void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
   void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
 
-  void eliminateCallFramePseudoInstr(MachineFunction &MF,
-                                  MachineBasicBlock &MBB,
-                                  MachineBasicBlock::iterator I) const override;
+  StackOffset getFrameIndexReference(const MachineFunction &MF, int FI,
+                                     Register &FrameReg) const override;
 
   bool spillCalleeSavedRegisters(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator MI,
-                                 const std::vector<CalleeSavedInfo> &CSI,
+                                 ArrayRef<CalleeSavedInfo> CSI,
                                  const TargetRegisterInfo *TRI) const override;
-
-  bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
-                                  MachineBasicBlock::iterator MI,
-                                  const std::vector<CalleeSavedInfo> &CSI,
-                                  const TargetRegisterInfo *TRI) const override;
 
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
 
   void determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
                             RegScavenger *RS) const override;
+
+private:
+  void emitInterruptEpilogueStub(MachineFunction &MF,
+                                 MachineBasicBlock &MBB) const;
+  void emitInterruptPrologueStub(MachineFunction &MF,
+                                 MachineBasicBlock &MBB) const;
 };
 
-} // End llvm namespace
-#endif
+} // end namespace llvm
+
+#endif // LLVM_LIB_TARGET_Fgpu_FgpuSEFRAMELOWERING_H

@@ -1,9 +1,8 @@
-//===-- FgpuMachineFunctionInfo.h - Private data used for Fgpu ----*- C++ -*-=//
+//===- FgpuMachineFunctionInfo.h - Private data used for Fgpu ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,111 +10,119 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FGPU_MACHINE_FUNCTION_INFO_H
-#define FGPU_MACHINE_FUNCTION_INFO_H
+#ifndef LLVM_LIB_TARGET_Fgpu_FgpuMACHINEFUNCTION_H
+#define LLVM_LIB_TARGET_Fgpu_FgpuMACHINEFUNCTION_H
 
-#include "llvm/ADT/StringMap.h"
-#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "Fgpu16HardFloatInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
-#include "llvm/CodeGen/PseudoSourceValue.h"
-#include "llvm/IR/GlobalValue.h"
-#include "llvm/IR/ValueMap.h"
-#include "llvm/Target/TargetFrameLowering.h"
-#include "llvm/Target/TargetMachine.h"
 #include <map>
-#include <string>
-#include <utility>
 
 namespace llvm {
 
-/// \brief A class derived from PseudoSourceValue that represents a GOT entry
-/// resolved by lazy-binding.
-class FgpuCallEntry : public PseudoSourceValue {
-public:
-  explicit FgpuCallEntry(const StringRef &N);
-  explicit FgpuCallEntry(const GlobalValue *V);
-  bool isConstant(const MachineFrameInfo *) const override;
-  bool isAliased(const MachineFrameInfo *) const override;
-  bool mayAlias(const MachineFrameInfo *) const override;
-
-private:
-  void printCustom(raw_ostream &O) const override;
-#ifndef NDEBUG
-  std::string Name;
-  const GlobalValue *Val;
-#endif
-};
-
-//@1 {
 /// FgpuFunctionInfo - This class is derived from MachineFunction private
 /// Fgpu target-specific information for each MachineFunction.
 class FgpuFunctionInfo : public MachineFunctionInfo {
 public:
-  FgpuFunctionInfo(MachineFunction& MF)
-  : MF(MF), 
-    SRetReturnReg(0),
-    VarArgsFrameIndex(0), 
-    CallsEhReturn(false),
-    MaxCallFrameSize(0)
-    {}
+  FgpuFunctionInfo(MachineFunction &MF) {}
 
-  ~FgpuFunctionInfo();
+  ~FgpuFunctionInfo() override;
 
   unsigned getSRetReturnReg() const { return SRetReturnReg; }
   void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
 
+  bool globalBaseRegSet() const;
+  Register getGlobalBaseReg(MachineFunction &MF);
+  Register getGlobalBaseRegForGlobalISel(MachineFunction &MF);
+
+  // Insert instructions to initialize the global base register in the
+  // first MBB of the function.
+  void initGlobalBaseReg(MachineFunction &MF);
+
   int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
   void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
 
-  void setFormalArgInfo(unsigned Size) {
+  bool hasByvalArg() const { return HasByvalArg; }
+  void setFormalArgInfo(unsigned Size, bool HasByval) {
     IncomingArgSize = Size;
+    HasByvalArg = HasByval;
   }
 
   unsigned getIncomingArgSize() const { return IncomingArgSize; }
 
   bool callsEhReturn() const { return CallsEhReturn; }
+  void setCallsEhReturn() { CallsEhReturn = true; }
 
-  void createEhDataRegsFI();
+  void createEhDataRegsFI(MachineFunction &MF);
+  int getEhDataRegFI(unsigned Reg) const { return EhDataRegFI[Reg]; }
+  bool isEhDataRegFI(int FI) const;
 
-  unsigned getMaxCallFrameSize() const { return MaxCallFrameSize; }
-  void setMaxCallFrameSize(unsigned S) { MaxCallFrameSize = S; }
+  /// Create a MachinePointerInfo that has an ExternalSymbolPseudoSourceValue
+  /// object representing a GOT entry for an external function.
+  MachinePointerInfo callPtrInfo(MachineFunction &MF, const char *ES);
+
+  // Functions with the "interrupt" attribute require special prologues,
+  // epilogues and additional spill slots.
+  bool isISR() const { return IsISR; }
+  void setISR() { IsISR = true; }
+  void createISRRegFI(MachineFunction &MF);
+  int getISRRegFI(Register Reg) const { return ISRDataRegFI[Reg]; }
+  bool isISRRegFI(int FI) const;
+
+  /// Create a MachinePointerInfo that has a GlobalValuePseudoSourceValue object
+  /// representing a GOT entry for a global function.
+  MachinePointerInfo callPtrInfo(MachineFunction &MF, const GlobalValue *GV);
+
+  void setSaveS2() { SaveS2 = true; }
+  bool hasSaveS2() const { return SaveS2; }
+
+  int getMoveF64ViaSpillFI(MachineFunction &MF, const TargetRegisterClass *RC);
+
+  std::map<const char *, const Fgpu16HardFloatInfo::FuncSignature *>
+  StubsNeeded;
 
 private:
   virtual void anchor();
 
-  MachineFunction& MF;
-
   /// SRetReturnReg - Some subtargets require that sret lowering includes
   /// returning the value of the returned struct in a register. This field
   /// holds the virtual register into which the sret argument is passed.
-  unsigned SRetReturnReg;
+  Register SRetReturnReg;
 
+  /// GlobalBaseReg - keeps track of the virtual register initialized for
+  /// use as the global base register. This is used for PIC in some PIC
+  /// relocation models.
+  Register GlobalBaseReg;
 
-  // VarArgsFrameIndex - FrameIndex for start of varargs area.
-  int VarArgsFrameIndex;
+  /// VarArgsFrameIndex - FrameIndex for start of varargs area.
+  int VarArgsFrameIndex = 0;
 
+  /// True if function has a byval argument.
+  bool HasByvalArg;
 
   /// Size of incoming argument area.
   unsigned IncomingArgSize;
 
   /// CallsEhReturn - Whether the function calls llvm.eh.return.
-  bool CallsEhReturn;
+  bool CallsEhReturn = false;
 
   /// Frame objects for spilling eh data registers.
   int EhDataRegFI[4];
 
-  // mutable int DynAllocFI; // Frame index of dynamically allocated stack area.
-  unsigned MaxCallFrameSize;
+  /// ISR - Whether the function is an Interrupt Service Routine.
+  bool IsISR = false;
 
-  /// FgpuCallEntry maps.
-  StringMap<std::unique_ptr<const FgpuCallEntry>> ExternalCallEntries;
-  ValueMap<const GlobalValue *, std::unique_ptr<const FgpuCallEntry>>
-      GlobalCallEntries;
+  /// Frame objects for spilling C0_STATUS, C0_EPC
+  int ISRDataRegFI[2];
+
+  // saveS2
+  bool SaveS2 = false;
+
+  /// FrameIndex for expanding BuildPairF64 nodes to spill and reload when the
+  /// O32 FPXX ABI is enabled. -1 is used to denote invalid index.
+  int MoveF64ViaSpillFI = -1;
 };
-//@1 }
 
-} // end of namespace llvm
+} // end namespace llvm
 
-
-#endif
+#endif // LLVM_LIB_TARGET_Fgpu_FgpuMACHINEFUNCTION_H

@@ -1,9 +1,8 @@
-//===-- FgpuISelLowering.h - Fgpu DAG Lowering Interface --------*- C++ -*-===//
+//===- FgpuISelLowering.h - Fgpu DAG Lowering Interface ---------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,24 +11,50 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FGPUISELLOWERING_H
-#define FGPUISELLOWERING_H
+#ifndef LLVM_LIB_TARGET_Fgpu_FgpuISELLOWERING_H
+#define LLVM_LIB_TARGET_Fgpu_FgpuISELLOWERING_H
 
-
-// #include "MCTargetDesc/FgpuBaseInfo.h"
-#include "MCTargetDesc/FgpuABIInfo.h"
 #include "Fgpu.h"
+#include "MCTargetDesc/FgpuABIInfo.h"
+#include "MCTargetDesc/FgpuBaseInfo.h"
+#include "MCTargetDesc/FgpuMCTargetDesc.h"
 #include "llvm/CodeGen/CallingConvLower.h"
+#include "llvm/CodeGen/ISDOpcodes.h"
+#include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/IR/Function.h"
-#include "llvm/Target/TargetLowering.h"
+#include "llvm/CodeGen/SelectionDAGNodes.h"
+#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/CodeGen/ValueTypes.h"
+#include "llvm/IR/CallingConv.h"
+#include "llvm/IR/InlineAsm.h"
+#include "llvm/IR/Type.h"
+#include "llvm/Support/MachineValueType.h"
+#include "llvm/Target/TargetMachine.h"
+#include <algorithm>
+#include <cassert>
 #include <deque>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace llvm {
 
-  
+class Argument;
+class FastISel;
+class FunctionLoweringInfo;
+class MachineBasicBlock;
+class MachineFrameInfo;
+class MachineInstr;
+class FgpuCCState;
+class FgpuFunctionInfo;
+class FgpuSubtarget;
+class FgpuTargetMachine;
+class TargetLibraryInfo;
+class TargetRegisterClass;
+
   namespace FgpuISD {
-    enum NodeType {
+
+    enum NodeType : unsigned {
       // Start the numbering from where ISD NodeType finishes.
       FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
@@ -72,19 +97,18 @@ namespace llvm {
       DynAlloc,
       Sync
     };
-  }
+
+  } // ene namespace FgpuISD
 
   //===--------------------------------------------------------------------===//
   // TargetLowering Implementation
   //===--------------------------------------------------------------------===//
-  class FgpuFunctionInfo;
-  class FgpuSubtarget;
   namespace FGPU {
     bool isKernelFunction(const Function &F);
-  }
+  } // namespace FGPU
 
-  //@class FgpuTargetLowering
   class FgpuTargetLowering : public TargetLowering  {
+
   public:
     explicit FgpuTargetLowering(const FgpuTargetMachine &TM,
                                 const FgpuSubtarget &STI);
@@ -92,81 +116,227 @@ namespace llvm {
     static const FgpuTargetLowering *create(const FgpuTargetMachine &TM,
                                             const FgpuSubtarget &STI);
 
+    /// createFastISel - This method returns a target specific FastISel object,
+    /// or null if the target does not support "fast" ISel.
+    FastISel *createFastISel(FunctionLoweringInfo &funcInfo,
+                             const TargetLibraryInfo *libInfo) const override;
+
+    MVT getScalarShiftAmountTy(const DataLayout &, EVT) const override {
+      return MVT::i32;
+    }
+
+    EVT getTypeForExtReturn(LLVMContext &Context, EVT VT,
+                            ISD::NodeType) const override;
+
+    bool isCheapToSpeculateCttz() const override;
+    bool isCheapToSpeculateCtlz() const override;
+    bool shouldFoldConstantShiftPairToMask(const SDNode *N,
+                                           CombineLevel Level) const override;
+
+    /// Return the register type for a given MVT, ensuring vectors are treated
+    /// as a series of gpr sized integers.
+    MVT getRegisterTypeForCallingConv(LLVMContext &Context, CallingConv::ID CC,
+                                      EVT VT) const override;
+
+    /// Return the number of registers for a given MVT, ensuring vectors are
+    /// treated as a series of gpr sized integers.
+    unsigned getNumRegistersForCallingConv(LLVMContext &Context,
+                                           CallingConv::ID CC,
+                                           EVT VT) const override;
+
+    /// Break down vectors to the correct number of gpr sized integers.
+    unsigned getVectorTypeBreakdownForCallingConv(
+        LLVMContext &Context, CallingConv::ID CC, EVT VT, EVT &IntermediateVT,
+        unsigned &NumIntermediates, MVT &RegisterVT) const override;
+
+    /// Return the correct alignment for the current calling convention.
+    Align getABIAlignmentForCallingConv(Type *ArgTy,
+                                        const DataLayout &DL) const override {
+      const Align ABIAlign = DL.getABITypeAlign(ArgTy);
+      if (ArgTy->isVectorTy())
+        return std::min(ABIAlign, Align(8));
+      return ABIAlign;
+    }
+
+    ISD::NodeType getExtendForAtomicOps() const override {
+      return ISD::SIGN_EXTEND;
+    }
+
     /// LowerOperation - Provide custom lowering hooks for some operations.
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
+
+    /// ReplaceNodeResults - Replace the results of node with an illegal result
+    /// type with new values built out of custom code.
+    ///
+    void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue>&Results,
+                            SelectionDAG &DAG) const override;
 
     /// getTargetNodeName - This method returns the name of a target specific
     //  DAG node.
     const char *getTargetNodeName(unsigned Opcode) const override;
 
+    /// getSetCCResultType - get the ISD::SETCC result ValueType
+    EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
+                           EVT VT) const override;
+
     SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
 
+    MachineBasicBlock *
+    EmitInstrWithCustomInserter(MachineInstr &MI,
+                                MachineBasicBlock *MBB) const override;
+
+    void AdjustInstrPostInstrSelection(MachineInstr &MI,
+                                       SDNode *Node) const override;
+
+    void HandleByVal(CCState *, unsigned &, Align) const override;
+
+    Register getRegisterByName(const char* RegName, LLT VT,
+                               const MachineFunction &MF) const override;
+
+    bool isJumpTableRelative() const override {
+      return getTargetMachine().isPositionIndependent();
+    }
+
+   CCAssignFn *CCAssignFnForCall() const;
+
+   CCAssignFn *CCAssignFnForReturn() const;
 
   protected:
+    SDValue getGlobalReg(SelectionDAG &DAG, EVT Ty) const;
+
+    // This method creates the following nodes, which are necessary for
+    // computing a local symbol's address:
+    //
+    // (add (load (wrapper $gp, %got(sym)), %lo(sym))
+    template <class NodeTy>
+    SDValue getAddrLocal(NodeTy *N, const SDLoc &DL, EVT Ty, SelectionDAG &DAG,
+                         bool IsN32OrN64) const {
+      unsigned GOTFlag = IsN32OrN64 ? FgpuII::MO_GOT_PAGE : FgpuII::MO_GOT;
+      SDValue GOT = DAG.getNode(FgpuISD::Wrapper, DL, Ty, getGlobalReg(DAG, Ty),
+                                getTargetNode(N, Ty, DAG, GOTFlag));
+      SDValue Load =
+          DAG.getLoad(Ty, DL, DAG.getEntryNode(), GOT,
+                      MachinePointerInfo::getGOT(DAG.getMachineFunction()));
+      unsigned LoFlag = IsN32OrN64 ? FgpuII::MO_GOT_OFST : FgpuII::MO_ABS_LO;
+      SDValue Lo = DAG.getNode(FgpuISD::Lo, DL, Ty,
+                               getTargetNode(N, Ty, DAG, LoFlag));
+      return DAG.getNode(ISD::ADD, DL, Ty, Load, Lo);
+    }
+
+    // This method creates the following nodes, which are necessary for
+    // computing a global symbol's address:
+    //
+    // (load (wrapper $gp, %got(sym)))
+    template <class NodeTy>
+    SDValue getAddrGlobal(NodeTy *N, const SDLoc &DL, EVT Ty, SelectionDAG &DAG,
+                          unsigned Flag, SDValue Chain,
+                          const MachinePointerInfo &PtrInfo) const {
+      SDValue Tgt = DAG.getNode(FgpuISD::Wrapper, DL, Ty, getGlobalReg(DAG, Ty),
+                                getTargetNode(N, Ty, DAG, Flag));
+      return DAG.getLoad(Ty, DL, Chain, Tgt, PtrInfo);
+    }
+
+    // This method creates the following nodes, which are necessary for
+    // computing a global symbol's address in large-GOT mode:
+    //
+    // (load (wrapper (add %hi(sym), $gp), %lo(sym)))
+    template <class NodeTy>
+    SDValue getAddrGlobalLargeGOT(NodeTy *N, const SDLoc &DL, EVT Ty,
+                                  SelectionDAG &DAG, unsigned HiFlag,
+                                  unsigned LoFlag, SDValue Chain,
+                                  const MachinePointerInfo &PtrInfo) const {
+      SDValue Hi = DAG.getNode(FgpuISD::GotHi, DL, Ty,
+                               getTargetNode(N, Ty, DAG, HiFlag));
+      Hi = DAG.getNode(ISD::ADD, DL, Ty, Hi, getGlobalReg(DAG, Ty));
+      SDValue Wrapper = DAG.getNode(FgpuISD::Wrapper, DL, Ty, Hi,
+                                    getTargetNode(N, Ty, DAG, LoFlag));
+      return DAG.getLoad(Ty, DL, Chain, Wrapper, PtrInfo);
+    }
+
+    // This method creates the following nodes, which are necessary for
+    // computing a symbol's address in non-PIC mode:
+    //
+    // (add %hi(sym), %lo(sym))
+    //
+    // This method covers O32, N32 and N64 in sym32 mode.
+    template <class NodeTy>
+    SDValue getAddrNonPIC(NodeTy *N, const SDLoc &DL, EVT Ty,
+                          SelectionDAG &DAG) const {
+      SDValue Hi = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_HI);
+      SDValue Lo = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_LO);
+      return DAG.getNode(ISD::ADD, DL, Ty,
+                         DAG.getNode(FgpuISD::Hi, DL, Ty, Hi),
+                         DAG.getNode(FgpuISD::Lo, DL, Ty, Lo));
+   }
+
+   // This method creates the following nodes, which are necessary for
+   // computing a symbol's address in non-PIC mode for N64.
+   //
+   // (add (shl (add (shl (add %highest(sym), %higher(sim)), 16), %high(sym)),
+   //            16), %lo(%sym))
+   //
+   // FIXME: This method is not efficent for (micro)Fgpu64R6.
+   template <class NodeTy>
+   SDValue getAddrNonPICSym64(NodeTy *N, const SDLoc &DL, EVT Ty,
+                          SelectionDAG &DAG) const {
+      SDValue Hi = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_HI);
+      SDValue Lo = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_LO);
+
+      SDValue Highest =
+          DAG.getNode(FgpuISD::Highest, DL, Ty,
+                      getTargetNode(N, Ty, DAG, FgpuII::MO_HIGHEST));
+      SDValue Higher = getTargetNode(N, Ty, DAG, FgpuII::MO_HIGHER);
+      SDValue HigherPart =
+          DAG.getNode(ISD::ADD, DL, Ty, Highest,
+                      DAG.getNode(FgpuISD::Higher, DL, Ty, Higher));
+      SDValue Cst = DAG.getConstant(16, DL, MVT::i32);
+      SDValue Shift = DAG.getNode(ISD::SHL, DL, Ty, HigherPart, Cst);
+      SDValue Add = DAG.getNode(ISD::ADD, DL, Ty, Shift,
+                                DAG.getNode(FgpuISD::Hi, DL, Ty, Hi));
+      SDValue Shift2 = DAG.getNode(ISD::SHL, DL, Ty, Add, Cst);
+
+      return DAG.getNode(ISD::ADD, DL, Ty, Shift2,
+                         DAG.getNode(FgpuISD::Lo, DL, Ty, Lo));
+   }
+
+    // This method creates the following nodes, which are necessary for
+    // computing a symbol's address using gp-relative addressing:
+    //
+    // (add $gp, %gp_rel(sym))
+    template <class NodeTy>
+    SDValue getAddrGPRel(NodeTy *N, const SDLoc &DL, EVT Ty,
+                         SelectionDAG &DAG, bool IsN64) const {
+      SDValue GPRel = getTargetNode(N, Ty, DAG, FgpuII::MO_GPREL);
+      return DAG.getNode(
+          ISD::ADD, DL, Ty,
+          DAG.getRegister(IsN64 ? Fgpu::GP_64 : Fgpu::GP, Ty),
+          DAG.getNode(FgpuISD::GPRel, DL, DAG.getVTList(Ty), GPRel));
+    }
 
     /// This function fills Ops, which is the list of operands that will later
     /// be used when a function call node is created. It also generates
     /// copyToReg nodes to set up argument registers.
     virtual void
     getOpndList(SmallVectorImpl<SDValue> &Ops,
-                std::deque< std::pair<unsigned, SDValue> > &RegsToPass,
+                std::deque<std::pair<unsigned, SDValue>> &RegsToPass,
                 bool IsPICCall, bool GlobalOrExternal, bool InternalLinkage,
-                CallLoweringInfo &CLI, SDValue Callee, SDValue Chain) const;
-
-    /// FgpuCC - This class provides methods used to analyze formal and call
-    /// arguments and inquire about calling convention information.
-    class FgpuCC {
-    public:
-
-      FgpuCC(CallingConv::ID CallConv, CCState &Info);
-
-      void analyzeCallOperands(const SmallVectorImpl<ISD::OutputArg> &Outs,
-                               const SDNode *CallNode);
-      void analyzeFormalArguments(const SmallVectorImpl<ISD::InputArg> &Ins,
-                                  Function::const_arg_iterator FuncArg);
-
-      void analyzeCallResult(const SmallVectorImpl<ISD::InputArg> &Ins,
-                             const SDNode *CallNode,
-                             const Type *RetTy) const;
-
-      void analyzeReturn(const SmallVectorImpl<ISD::OutputArg> &Outs,
-                         const Type *RetTy) const;
-
-      const CCState &getCCInfo() const { return CCInfo; }
-
-      /// regSize - Size (in number of bits) of integer registers.
-      unsigned regSize() const { return 4; }
-      /// numIntArgRegs - Number of integer registers available for calls.
-      unsigned numIntArgRegs() const;
-
-      /// reservedArgArea - The size of the area the caller reserves for
-      /// register arguments. This is 16-byte if ABI is CC_Fgpu.
-      unsigned reservedArgArea() const;
-
-      /// Return pointer to array of integer argument registers.
-      const ArrayRef<MCPhysReg> intArgRegs() const;
-
-    private:
-
-      /// useRegsForByval - Returns true if the calling convention allows the
-      /// use of registers to pass byval arguments.
-      bool useRegsForByval() const { return CallConv != CallingConv::Fast; }
-
-      template<typename Ty>
-      void analyzeReturn(const SmallVectorImpl<Ty> &RetVals,
-                         const SDNode *CallNode, const Type *RetTy) const;
-
-      CCState &CCInfo;
-      CallingConv::ID CallConv;
-    };
+                bool IsCallReloc, CallLoweringInfo &CLI, SDValue Callee,
+                SDValue Chain) const;
 
   protected:
+    SDValue lowerLOAD(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerSTORE(SDValue Op, SelectionDAG &DAG) const;
+
     // Subtarget Info
     const FgpuSubtarget &Subtarget;
     // Cache the ABI from the TargetMachine, we use it everywhere.
     const FgpuABIInfo &ABI;
 
   private:
+    // Create a TargetGlobalAddress node.
+    SDValue getTargetNode(GlobalAddressSDNode *N, EVT Ty, SelectionDAG &DAG,
+                          unsigned Flag) const;
+
     // Create a TargetExternalSymbol node.
     SDValue getTargetNode(ExternalSymbolSDNode *N, EVT Ty, SelectionDAG &DAG,
                           unsigned Flag) const;
@@ -175,61 +345,106 @@ namespace llvm {
     SDValue getTargetNode(BlockAddressSDNode *N, EVT Ty, SelectionDAG &DAG,
                           unsigned Flag) const;
 
+    // Create a TargetJumpTable node.
+    SDValue getTargetNode(JumpTableSDNode *N, EVT Ty, SelectionDAG &DAG,
+                          unsigned Flag) const;
+
+    // Create a TargetConstantPool node.
+    SDValue getTargetNode(ConstantPoolSDNode *N, EVT Ty, SelectionDAG &DAG,
+                          unsigned Flag) const;
+
     // Lower Operand helpers
-    SDValue LowerCallResult(SDValue Chain,
-                            SDValue InFlag,
-                            CallingConv::ID CallConv,
+    SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
+                            CallingConv::ID CallConv, bool isVarArg,
                             const SmallVectorImpl<ISD::InputArg> &Ins,
-                            SDLoc dl, SelectionDAG &DAG,
+                            const SDLoc &dl, SelectionDAG &DAG,
                             SmallVectorImpl<SDValue> &InVals,
-                            const SDNode *CallNode, const Type *RetTy) const;
+                            TargetLowering::CallLoweringInfo &CLI) const;
 
-    /// ReplaceNodeResults - Replace the results of node with an illegal result
-    /// type with new values built out of custom code.
-    ///
-    void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue>&Results,
-                            SelectionDAG &DAG) const override;
-
-    SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
+    // Lower Operand specifics
+    SDValue lowerBRCOND(SDValue Op, SelectionDAG &DAG) const;
     SDValue lowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
-    SDValue lowerLoad(SDValue Op, SelectionDAG &DAG) const;
-    SDValue lowerStore(SDValue Op, SelectionDAG &DAG) const;
-    // SDValue lowerBRCOND(SDValue Op, SelectionDAG &DAG) const;
-    SDValue lowerTargetGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
     SDValue lowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
-    SDValue lowerSINT_TO_FP(SDValue Op, SelectionDAG &DAG) const;
-    SDValue lowerFP_TO_SINT(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerJumpTable(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerSELECT(SDValue Op, SelectionDAG &DAG) const;
     SDValue lowerSETCC(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerFrameIndex(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerVASTART(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerVAARG(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerFCOPYSIGN(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerFABS(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerRETURNADDR(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerEH_RETURN(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerATOMIC_FENCE(SDValue Op, SelectionDAG& DAG) const;
+    SDValue lowerShiftLeftParts(SDValue Op, SelectionDAG& DAG) const;
+    SDValue lowerShiftRightParts(SDValue Op, SelectionDAG& DAG,
+                                 bool IsSRA) const;
+    SDValue lowerEH_DWARF_CFA(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerFP_TO_SINT(SDValue Op, SelectionDAG &DAG) const;
 
-    SDValue LowerFormalArguments(SDValue Chain,
-                           CallingConv::ID CallConv, bool IsVarArg,
-                           const SmallVectorImpl<ISD::InputArg> &Ins,
-                           SDLoc dl, SelectionDAG &DAG,
-                           SmallVectorImpl<SDValue> &InVals) const override;
-    SDValue LowerFormalArgumentsUsingCallStack(SDValue Chain,
-                           CallingConv::ID CallConv,
-                           const SmallVectorImpl<ISD::InputArg> &Ins,
-                           SDLoc dl, SelectionDAG &DAG,
-                           SmallVectorImpl<SDValue> &InVals) const;
-    SDValue LowerFormalArgumentsUsingLP(SDValue Chain,
-                           CallingConv::ID CallConv,
-                           const SmallVectorImpl<ISD::InputArg> &Ins,
-                           SDLoc dl, SelectionDAG &DAG,
-                           SmallVectorImpl<SDValue> &InVals) const;
+    /// isEligibleForTailCallOptimization - Check whether the call is eligible
+    /// for tail call optimization.
+    virtual bool
+    isEligibleForTailCallOptimization(const CCState &CCInfo,
+                                      unsigned NextStackOffset,
+                                      const FgpuFunctionInfo &FI) const = 0;
+
+    /// copyByValArg - Copy argument registers which were used to pass a byval
+    /// argument to the stack. Create a stack frame object for the byval
+    /// argument.
+    void copyByValRegs(SDValue Chain, const SDLoc &DL,
+                       std::vector<SDValue> &OutChains, SelectionDAG &DAG,
+                       const ISD::ArgFlagsTy &Flags,
+                       SmallVectorImpl<SDValue> &InVals,
+                       const Argument *FuncArg, unsigned FirstReg,
+                       unsigned LastReg, const CCValAssign &VA,
+                       FgpuCCState &State) const;
+
+    /// passByValArg - Pass a byval argument in registers or on stack.
+    void passByValArg(SDValue Chain, const SDLoc &DL,
+                      std::deque<std::pair<unsigned, SDValue>> &RegsToPass,
+                      SmallVectorImpl<SDValue> &MemOpChains, SDValue StackPtr,
+                      MachineFrameInfo &MFI, SelectionDAG &DAG, SDValue Arg,
+                      unsigned FirstReg, unsigned LastReg,
+                      const ISD::ArgFlagsTy &Flags, bool isLittle,
+                      const CCValAssign &VA) const;
+
+    /// writeVarArgRegs - Write variable function arguments passed in registers
+    /// to the stack. Also create a stack frame object for the first variable
+    /// argument.
+    void writeVarArgRegs(std::vector<SDValue> &OutChains, SDValue Chain,
+                         const SDLoc &DL, SelectionDAG &DAG,
+                         CCState &State) const;
+
+    SDValue
+    LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
+                         const SmallVectorImpl<ISD::InputArg> &Ins,
+                         const SDLoc &dl, SelectionDAG &DAG,
+                         SmallVectorImpl<SDValue> &InVals) const override;
 
     SDValue passArgOnStack(SDValue StackPtr, unsigned Offset, SDValue Chain,
-                           SDValue Arg, SDLoc DL, bool IsTailCall,
+                           SDValue Arg, const SDLoc &DL, bool IsTailCall,
                            SelectionDAG &DAG) const;
 
     SDValue LowerCall(TargetLowering::CallLoweringInfo &CLI,
                       SmallVectorImpl<SDValue> &InVals) const override;
 
-    SDValue LowerReturn(SDValue Chain,
-                        CallingConv::ID CallConv, bool IsVarArg,
+    bool CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
+                        bool isVarArg,
+                        const SmallVectorImpl<ISD::OutputArg> &Outs,
+                        LLVMContext &Context) const override;
+
+    SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
                         const SmallVectorImpl<ISD::OutputArg> &Outs,
                         const SmallVectorImpl<SDValue> &OutVals,
-                        SDLoc dl, SelectionDAG &DAG) const override;
+                        const SDLoc &dl, SelectionDAG &DAG) const override;
+
+    SDValue LowerInterruptReturn(SmallVectorImpl<SDValue> &RetOps,
+                                 const SDLoc &DL, SelectionDAG &DAG) const;
+
+    bool shouldSignExtendTypeInLibCall(EVT Type, bool IsSigned) const override;
 
     // Inline asm support
     ConstraintType getConstraintType(StringRef Constraint) const override;
@@ -242,7 +457,7 @@ namespace llvm {
     /// This function parses registers that appear in inline-asm constraints.
     /// It returns pair (0, 0) on failure.
     std::pair<unsigned, const TargetRegisterClass *>
-    parseRegForInlineAsmConstraint(const StringRef &C, MVT VT) const;
+    parseRegForInlineAsmConstraint(StringRef C, MVT VT) const;
 
     std::pair<unsigned, const TargetRegisterClass *>
     getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
@@ -257,17 +472,81 @@ namespace llvm {
                                       std::vector<SDValue> &Ops,
                                       SelectionDAG &DAG) const override;
 
+    unsigned
+    getInlineAsmMemConstraint(StringRef ConstraintCode) const override {
+      if (ConstraintCode == "o")
+        return InlineAsm::Constraint_o;
+      if (ConstraintCode == "R")
+        return InlineAsm::Constraint_R;
+      if (ConstraintCode == "ZC")
+        return InlineAsm::Constraint_ZC;
+      return TargetLowering::getInlineAsmMemConstraint(ConstraintCode);
+    }
+
     bool isLegalAddressingMode(const DataLayout &DL, const AddrMode &AM,
-                               Type *Ty, unsigned AS) const override;
+                               Type *Ty, unsigned AS,
+                               Instruction *I = nullptr) const override;
 
     bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
 
-    SDValue LowerExtractVector(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerBuildVector(SDValue Op, SelectionDAG &DAG) const;  
+    EVT getOptimalMemOpType(const MemOp &Op,
+                            const AttributeList &FuncAttributes) const override;
 
+    /// isFPImmLegal - Returns true if the target can instruction select the
+    /// specified FP immediate natively. If false, the legalizer will
+    /// materialize the FP immediate as a load from a constant pool.
+    bool isFPImmLegal(const APFloat &Imm, EVT VT,
+                      bool ForCodeSize) const override;
+
+    unsigned getJumpTableEncoding() const override;
+    bool useSoftFloat() const override;
+
+    bool shouldInsertFencesForAtomic(const Instruction *I) const override {
+      return true;
+    }
+
+    /// Emit a sign-extension using sll/sra, seb, or seh appropriately.
+    MachineBasicBlock *emitSignExtendToI32InReg(MachineInstr &MI,
+                                                MachineBasicBlock *BB,
+                                                unsigned Size, unsigned DstReg,
+                                                unsigned SrcRec) const;
+
+    MachineBasicBlock *emitAtomicBinary(MachineInstr &MI,
+                                        MachineBasicBlock *BB) const;
+    MachineBasicBlock *emitAtomicBinaryPartword(MachineInstr &MI,
+                                                MachineBasicBlock *BB,
+                                                unsigned Size) const;
+    MachineBasicBlock *emitAtomicCmpSwap(MachineInstr &MI,
+                                         MachineBasicBlock *BB) const;
+    MachineBasicBlock *emitAtomicCmpSwapPartword(MachineInstr &MI,
+                                                 MachineBasicBlock *BB,
+                                                 unsigned Size) const;
+    MachineBasicBlock *emitSEL_D(MachineInstr &MI, MachineBasicBlock *BB) const;
+    MachineBasicBlock *emitPseudoSELECT(MachineInstr &MI, MachineBasicBlock *BB,
+                                        bool isFPCmp, unsigned Opc) const;
+    MachineBasicBlock *emitPseudoD_SELECT(MachineInstr &MI,
+                                          MachineBasicBlock *BB) const;
+    MachineBasicBlock *emitLDR_W(MachineInstr &MI, MachineBasicBlock *BB) const;
+    MachineBasicBlock *emitLDR_D(MachineInstr &MI, MachineBasicBlock *BB) const;
+    MachineBasicBlock *emitSTR_W(MachineInstr &MI, MachineBasicBlock *BB) const;
+    MachineBasicBlock *emitSTR_D(MachineInstr &MI, MachineBasicBlock *BB) const;
   };
-  const FgpuTargetLowering *
-  createFgpuSETargetLowering(const FgpuTargetMachine &TM, const FgpuSubtarget &STI);
-}
 
-#endif
+  /// Create FgpuTargetLowering objects.
+  const FgpuTargetLowering *
+  createFgpu16TargetLowering(const FgpuTargetMachine &TM,
+                             const FgpuSubtarget &STI);
+  const FgpuTargetLowering *
+  createFgpuSETargetLowering(const FgpuTargetMachine &TM,
+                             const FgpuSubtarget &STI);
+
+namespace Fgpu {
+
+FastISel *createFastISel(FunctionLoweringInfo &funcInfo,
+                         const TargetLibraryInfo *libInfo);
+
+} // end namespace Fgpu
+
+} // end namespace llvm
+
+#endif // LLVM_LIB_TARGET_Fgpu_FgpuISELLOWERING_H

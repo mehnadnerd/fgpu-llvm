@@ -10,10 +10,9 @@
 // This file contains the Fgpu implementation of the TargetInstrInfo class.
 //
 //===----------------------------------------------------------------------===//
-include "FgpuRegisterInfo.td"
 
+include "FgpuInstrFormats.td"
 
-//def HasDSP : AssemblerPredicate<"FeatureHardFloat">;
 //===----------------------------------------------------------------------===//
 // Fgpu profiles and nodes
 //===----------------------------------------------------------------------===//
@@ -58,7 +57,7 @@ def FgpuRET   : SDNode<"FgpuISD::RET", SDTNone, [SDNPHasChain, SDNPOptInGlue, SD
 // Instruction format superclass
 //===----------------------------------------------------------------------===//
 
-include "FgpuInstrFormats.td"
+//include "FgpuInstrFormats.td"
 
 //===----------------------------------------------------------------------===//
 // Fgpu Operand, Complex Patterns and Transformations Definitions.
@@ -133,10 +132,10 @@ def imm32      : Operand<i32> {
   let PrintMethod = "printUnsignedImm";
 }
 
-def frameAddr: 
+def frameAddr:
   ComplexPattern<iPTR, 2, "selectFrameAddr", [frameindex], [SDNPWantParent]>;
 
-def frameAddr_LEA: 
+def frameAddr_LEA:
   ComplexPattern<iPTR, 2, "selectFrameAddr_LEA", [frameindex], [SDNPWantParent]>;
 
 def FgpuMemAsmOperand : AsmOperandClass {
@@ -220,7 +219,7 @@ class FPInsn<bits<8> op, string instr_asm, SDNode OpNode, InstrItinClass itin, R
 class FFMA<bits<8> op, string instr_asm, InstrItinClass itin, RegisterClass RC, bit isComm = 0>:
   FRRR<op, (outs RC:$rd_out), (ins RC:$rd, RC:$rs, RC:$rt), !strconcat(instr_asm, "\t$rd, $rs, $rt"),
      [(set RC:$rd_out, (fadd RC:$rd, (fmul RC:$rs, RC:$rt)))], itin> {
-  let isCommutable = isComm;	
+  let isCommutable = isComm;
   let isReMaterializable = 1;
   let Constraints = "$rd_out = $rd";
 }
@@ -260,7 +259,7 @@ class ACTC<bits<8> op, string instr_asm>:
     FRRI<op, (outs ALURegs:$rd), (ins ALURegs:$rs, uimm14:$imm14),
      !strconcat(instr_asm, "\t$rd, $rs, $imm14"),
      [], IIAlu> {}
-  
+
 class CFG<bits<8> op, string instr_asm>:
     FRI<op, (outs), (ins ALURegs:$rd, uimm14:$imm16),
      !strconcat(instr_asm, "\t$rd, $imm16"),
@@ -339,7 +338,7 @@ class VDOTC<bits<8> op, string instr_asm>:
 //  let mayLoad = 1;
 //  let Constraints = "$rd_out = $rd";
 //}
-  
+
 
 class LogicNOR<bits<8> op, string instr_asm,
                 InstrItinClass itin, RegisterClass RC, bit isComm = 0>:
@@ -348,7 +347,7 @@ class LogicNOR<bits<8> op, string instr_asm,
          [(set RC:$rd, (not (or RC:$rs, RC:$rt)))], itin> {
   let isCommutable = 1;
 }
-  
+
 class ArithOneARGTwoClasses<bits<8> op, string instr_asm, SDNode OpNode,
                   InstrItinClass itin, RegisterClass RCin, RegisterClass RCout, bit isComm = 0>:
   FRRR<op, (outs RCout:$rd), (ins RCin:$rs),
@@ -378,7 +377,7 @@ class Macc<bits<8> op, string instr_asm, InstrItinClass itin, RegisterClass RC, 
   FRRR<op, (outs RC:$rd_out), (ins RC:$rd, RC:$rs, RC:$rt),
      !strconcat(instr_asm, "\t$rd, $rs, $rt"),
      [(set RC:$rd_out, (add RC:$rd, (mul RC:$rs, RC:$rt)))], itin> {
-  let isCommutable = isComm;	
+  let isCommutable = isComm;
   let isReMaterializable = 1;
   let Constraints = "$rd_out = $rd";
 }
@@ -388,11 +387,11 @@ class Macc<bits<8> op, string instr_asm, InstrItinClass itin, RegisterClass RC, 
 //  FPU_VVV<op, (outs RC:$rd_out), (ins RC:$rd, RC:$rs, RC:$rt),
 //     !strconcat(instr_asm, "\t$rd, $rs, $rt"),
 //     [(set RC:$rd_out, (OpNode RC:$rd, RC:$rs, RC:$rt))], IIAlu> {
-//  let isCommutable = isComm;	
+//  let isCommutable = isComm;
 //  let isReMaterializable = 1;
 //  let Constraints = "$rd_out = $rd";
 //}
-  
+
 
 //Runtime Memory instructions
 class RTMInstr<bits<8> op, string instr_asm, SDNode OpNode, Operand Imm, PatLeaf imm_type>:
@@ -404,7 +403,7 @@ class RTMInstr<bits<8> op, string instr_asm, SDNode OpNode, Operand Imm, PatLeaf
 
 class LoadUpper<bits<8> op, string instr_asm, SDNode OpNode, RegisterClass RC, Operand Imm>:
   FRI<op, (outs RC:$rd), (ins Imm:$imm16),
-     !strconcat(instr_asm, "\t$rd, $imm16"), 
+     !strconcat(instr_asm, "\t$rd, $imm16"),
      [(set ALURegs:$rd, (OpNode uuimm16:$imm16))], IIAlu> {
   let isReMaterializable = 1;
   let AddedComplexity = 20;
@@ -999,11 +998,11 @@ return CurDAG->getTargetConstant(
 def : Pat<( f32 fpimm:$in),
       (COPY_TO_REGCLASS (Li32 (bitcast_fpimm_to_i32 f32:$in)), ALURegs)>;
 def : Pat<( f32 (load_a ALURegs:$in)), (COPY_TO_REGCLASS (LW R0,ALURegs:$in), FloatRegs)>;
-def : Pat<( f32 (load_a  (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_2)))), 
+def : Pat<( f32 (load_a  (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_2)))),
           (COPY_TO_REGCLASS (LW $rs,$rt), FloatRegs)>;
 def : Pat<( store_a (f32 FloatRegs:$rd), (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_2))),
           (SW ( i32 (COPY_TO_REGCLASS $rd, ALURegs)), $rs, $rt)>;
-def : Pat<( store_a (f32 FloatRegs:$rd), ALURegs:$in), 
+def : Pat<( store_a (f32 FloatRegs:$rd), ALURegs:$in),
           (SW ( i32 (COPY_TO_REGCLASS $rd, ALURegs)), R0, $in)>;
 def : Pat<( f32 (bitconvert (i32 ALURegs:$Xn))), (COPY_TO_REGCLASS ALURegs:$Xn, FloatRegs)>;
 def : Pat<( i32 (bitconvert (f32 FloatRegs:$Xn))), (COPY_TO_REGCLASS FloatRegs:$Xn, ALURegs)>;

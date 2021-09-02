@@ -1,9 +1,8 @@
-//===-- FgpuRegisterInfo.h - Fgpu Register Information Impl -----*- C++ -*-===//
+//===- FgpuRegisterInfo.h - Fgpu Register Information Impl ------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,50 +10,74 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FGPUREGISTERINFO_H
-#define FGPUREGISTERINFO_H
+#ifndef LLVM_LIB_TARGET_Fgpu_FgpuREGISTERINFO_H
+#define LLVM_LIB_TARGET_Fgpu_FgpuREGISTERINFO_H
 
 #include "Fgpu.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include <cstdint>
 
 #define GET_REGINFO_HEADER
 #include "FgpuGenRegisterInfo.inc"
 
 namespace llvm {
-class FgpuSubtarget;
-class TargetInstrInfo;
-class Type;
+
+class TargetRegisterClass;
 
 class FgpuRegisterInfo : public FgpuGenRegisterInfo {
-protected:
-  const FgpuSubtarget &Subtarget;
-
 public:
-  FgpuRegisterInfo(const FgpuSubtarget &Subtarget);
+  enum class FgpuPtrClass {
+    /// The default register class for integer values.
+    Default = 0,
+    /// The subset of registers permitted in certain microFgpu instructions
+    /// such as lw16.
+    GPR16MM = 1,
+    /// The stack pointer only.
+    StackPointer = 2,
+    /// The global pointer only.
+    GlobalPointer = 3,
+  };
 
-  const MCPhysReg *
-  getCalleeSavedRegs(const MachineFunction *MF = nullptr) const override;
+  FgpuRegisterInfo();
+
+  /// Get PIC indirect call register
+  static unsigned getPICCallReg();
+
+  /// Code Generation virtual methods...
+  const TargetRegisterClass *getPointerRegClass(const MachineFunction &MF,
+                                                unsigned Kind) const override;
+
+  unsigned getRegPressureLimit(const TargetRegisterClass *RC,
+                               MachineFunction &MF) const override;
+  const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
   const uint32_t *getCallPreservedMask(const MachineFunction &MF,
                                        CallingConv::ID) const override;
-
+  static const uint32_t *getFgpu16RetHelperMask();
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 
   bool requiresRegisterScavenging(const MachineFunction &MF) const override;
-
-  bool trackLivenessAfterRegAlloc(const MachineFunction &MF) const override;
 
   /// Stack Frame Processing Methods
   void eliminateFrameIndex(MachineBasicBlock::iterator II,
                            int SPAdj, unsigned FIOperandNum,
                            RegScavenger *RS = nullptr) const override;
 
-  /// Debug information queries.
-  unsigned getFrameRegister(const MachineFunction &MF) const override;
+  // Stack realignment queries.
+  bool canRealignStack(const MachineFunction &MF) const override;
 
-  /// \brief Return GPR register class.
+  /// Debug information queries.
+  Register getFrameRegister(const MachineFunction &MF) const override;
+
+  /// Return GPR register class.
   virtual const TargetRegisterClass *intRegClass(unsigned Size) const = 0;
+
+private:
+  virtual void eliminateFI(MachineBasicBlock::iterator II, unsigned OpNo,
+                           int FrameIndex, uint64_t StackSize,
+                           int64_t SPOffset) const = 0;
 };
 
 } // end namespace llvm
 
-#endif
+#endif // LLVM_LIB_TARGET_Fgpu_FgpuREGISTERINFO_H

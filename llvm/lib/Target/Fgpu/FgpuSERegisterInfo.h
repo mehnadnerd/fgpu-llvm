@@ -1,9 +1,8 @@
-//===-- FgpuSERegisterInfo.h - Fgpu32 Register Information ------*- C++ -*-===//
+//===-- FgpuSERegisterInfo.h - Fgpu32/64 Register Information ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,19 +11,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FGPUSEREGISTERINFO_H
-#define FGPUSEREGISTERINFO_H
+#ifndef LLVM_LIB_TARGET_Fgpu_FgpuSEREGISTERINFO_H
+#define LLVM_LIB_TARGET_Fgpu_FgpuSEREGISTERINFO_H
 
 #include "FgpuRegisterInfo.h"
 
 namespace llvm {
-class FgpuSEInstrInfo;
 
 class FgpuSERegisterInfo : public FgpuRegisterInfo {
 public:
-  FgpuSERegisterInfo(const FgpuSubtarget &Subtarget);
+  FgpuSERegisterInfo();
+
+  bool requiresRegisterScavenging(const MachineFunction &MF) const override;
+
+  bool requiresFrameIndexScavenging(const MachineFunction &MF) const override;
 
   const TargetRegisterClass *intRegClass(unsigned Size) const override;
+
+private:
+  void eliminateFI(MachineBasicBlock::iterator II, unsigned OpNo,
+                   int FrameIndex, uint64_t StackSize,
+                   int64_t SPOffset) const override;
 };
 
 } // end namespace llvm

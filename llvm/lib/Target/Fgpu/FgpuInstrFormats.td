@@ -110,7 +110,7 @@ class FI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern,
   let Inst{9-5} = rs;
   let Inst{4-0}  = rd;
 }
-  
+
 class FRRI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> :
   FgpuInst<outs, ins, asmstr, pattern, itin, FrmRRI> {
   bits<5>  rs;
@@ -169,7 +169,7 @@ class FRRR<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern,
   let Inst{4-0}   = rd;
 }
 
-class FPU_VVV<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> : 
+class FPU_VVV<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> :
       FgpuInst<outs, ins, asmstr, pattern, itin, FrmFPU> {
   bits<4>  rs;
   bits<4>  rt;
@@ -182,7 +182,7 @@ class FPU_VVV<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, I
   let Inst{3-0}  = rd;
 }
 
-class FPU_VVVI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> : 
+class FPU_VVVI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> :
       FgpuInst<outs, ins, asmstr, pattern, itin, FrmFPU> {
   bits<4>  rs;
   bits<4>  rt;
@@ -197,7 +197,7 @@ class FPU_VVVI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, 
   let Inst{3-0}  = rd;
 }
 
-class FPU_VVRI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> : 
+class FPU_VVRI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> :
       FgpuInst<outs, ins, asmstr, pattern, itin, FrmFPU> {
   bits<4>  rs;
   bits<4>  rt;
@@ -212,7 +212,7 @@ class FPU_VVRI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, 
   let Inst{4-0}  = rd;
 }
 
-class FPU_VRRR<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> : 
+class FPU_VRRR<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> :
       FgpuInst<outs, ins, asmstr, pattern, itin, FrmFPU> {
   bits<5>  rx;
   bits<5>  rs;
@@ -227,7 +227,7 @@ class FPU_VRRR<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, 
   let Inst{3-0}  = rd;
 }
 
-class FPU_VVVR<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> : 
+class FPU_VVVR<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> :
       FgpuInst<outs, ins, asmstr, pattern, itin, FrmFPU> {
   bits<5>  rx;
   bits<4>  rs;
@@ -242,45 +242,45 @@ class FPU_VVVR<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, 
   let Inst{3-0}  = rd;
 }
 
-class FPU_RVI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> : 
+class FPU_RVI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> :
       FgpuInst<outs, ins, asmstr, pattern, itin, FrmFPU> {
   bits<5>  rt;
   bits<5>  rs;
   bits<4>  rd;
   bits<9>  imm9;
-  
+
   let Opcode = op;
-  
+
   let Inst{23-15} = imm9;
   let Inst{14-10} = rt;
   let Inst{9-5}   = rs;
   let Inst{3-0}   = rd;
 }
 
-class FPU_VRVI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> : 
+class FPU_VRVI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> :
       FgpuInst<outs, ins, asmstr, pattern, itin, FrmFPU> {
   bits<5>  rt;
   bits<4>  rs;
   bits<4>  rd;
   bits<9>  imm9;
-  
+
   let Opcode = op;
-  
+
   let Inst{23-15} = imm9;
   let Inst{14-10} = rt;
   let Inst{8-5}   = rs;
   let Inst{3-0}   = rd;
 }
 
-class FPU_RVRI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> : 
+class FPU_RVRI<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin> :
       FgpuInst<outs, ins, asmstr, pattern, itin, FrmFPU> {
   bits<5>  rt;
   bits<4>  rs;
   bits<5>  rd;
   bits<9>  imm9;
-  
+
   let Opcode = op;
-  
+
   let Inst{23-15} = imm9;
   let Inst{14-10} = rt;
   let Inst{8-5}   = rs;
@@ -294,9 +294,9 @@ class FPU_MEM<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, I
   bits<5>  rt;
   bits<4>  rd;
   bits<9>  imm9;
-  
+
   let Opcode = op;
-  
+
   let Inst{23-15} = imm9;
   let Inst{14-10} = rt;
   let Inst{9-5}   = rs;
@@ -324,9 +324,9 @@ class FPU_SMEMC<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern,
   bits<5>  rt;
   bits<4>  rd;
   bits<9>  imm9;
-  
+
   let Opcode = op;
-    
+
   let Inst{23-15} = imm9;
   let Inst{14-10} = rt;
   let Inst{9-5}   = rs;
@@ -339,9 +339,9 @@ class FPU_SMEM<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern, 
   bits<5>  rt;
   bits<5>  rd;
   bits<9>  imm9;
-  
+
   let Opcode = op;
-    
+
   let Inst{23-15} = imm9;
   let Inst{14-10} = rt;
   let Inst{9-5} = rs;

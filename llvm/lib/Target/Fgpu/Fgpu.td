@@ -1,45 +1,83 @@
 //===-- Fgpu.td - Describe the Fgpu Target Machine ---------*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-//
+//===----------------------------------------------------------------------===//
+// This is the top level entry point for the Fgpu target.
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
-// Calling Conv, Instruction Descriptions
+// Target-independent interfaces
 //===----------------------------------------------------------------------===//
 
 include "llvm/Target/Target.td"
 
-def FeatureHardFloat   : SubtargetFeature<"fgpu-hard-float", "HardFloatUnits", "true",
-                                "fadd, fmul, fdiv, fsub">;
+// The overall idea of the PredicateControl class is to chop the Predicates list
+// into subsets that are usually overridden independently. This allows
+// subclasses to partially override the predicates of their superclasses without
+// having to re-add all the existing predicates.
+class PredicateControl {
+  // Predicates for the encoding scheme in use such as HasStdEnc
+  list<Predicate> EncodingPredicates = [];
+  // Predicates for the GPR size such as IsGP64bit
+  list<Predicate> GPRPredicates = [];
+  // Predicates for the PTR size such as IsPTR64bit
+  list<Predicate> PTRPredicates = [];
+  // Predicates for a symbol's size such as hasSym32.
+  list<Predicate> SYMPredicates = [];
+  // Predicates for the FGR size and layout such as IsFP64bit
+  list<Predicate> FGRPredicates = [];
+  // Predicates for the instruction group membership such as ISA's.
+  list<Predicate> InsnPredicates = [];
+  // Predicate for the ASE that an instruction belongs to.
+  list<Predicate> ASEPredicate = [];
+  // Predicate for marking the instruction as usable in hard-float mode only.
+  list<Predicate> HardFloatPredicate = [];
+  // Predicates for anything else
+  list<Predicate> AdditionalPredicates = [];
+  list<Predicate> Predicates = !listconcat(EncodingPredicates,
+                                           GPRPredicates,
+                                           PTRPredicates,
+                                           SYMPredicates,
+                                           FGRPredicates,
+                                           InsnPredicates,
+                                           HardFloatPredicate,
+                                           ASEPredicate,
+                                           AdditionalPredicates);
+}
 
-include "FgpuSchedule.td"
-include "FgpuInstrInfo.td"
-include "FgpuCallingConv.td"
+// Like Requires<> but for the AdditionalPredicates list
+class AdditionalRequires<list<Predicate> preds> {
+  list<Predicate> AdditionalPredicates = preds;
+}
 
-def FgpuInstrInfo : InstrInfo;
-
-// Without this will have error: 'fgpu32' is not a recognized processor for 
-//  this target (ignoring processor)
 //===----------------------------------------------------------------------===//
 // Fgpu Subtarget features                                                    //
 //===----------------------------------------------------------------------===//
 
-def FeatureSoftFloat   : SubtargetFeature<"soft-float", "IsSoftFloat", "true",
-                                "Does not support floating point instructions">;
 
+//===----------------------------------------------------------------------===//
+// Register File, Calling Conv, Instruction Descriptions
+//===----------------------------------------------------------------------===//
+
+include "FgpuRegisterInfo.td"
+include "FgpuSchedule.td"
+include "FgpuInstrInfo.td"
+include "FgpuCallingConv.td"
+
+include "FgpuScheduleGeneric.td"
+
+def FgpuInstrInfo : InstrInfo;
 
 //===----------------------------------------------------------------------===//
 // Fgpu processors supported.
 //===----------------------------------------------------------------------===//
 
-class Proc<string Name, list<SubtargetFeature> Features>
- : Processor<Name, FgpuGenericItineraries, Features>;
 
-def : Proc<"fgpu32",  []>;
+class Proc<string Name, list<SubtargetFeature> Features>
+ : ProcessorModel<Name, FgpuGenericModel, Features>;
 
 def FgpuAsmParser : AsmParser {
   let ShouldEmitMatchRegisterName = 0;
@@ -52,13 +90,15 @@ def FgpuAsmParserVariant : AsmParserVariant {
   string RegisterPrefix = "r";
 }
 
-// Will generate FgpuGenAsmWrite.inc included by FgpuInstPrinter.cpp, contents 
-//  as follows,
-// void FgpuInstPrinter::printInstruction(const MCInst *MI, raw_ostream &O) {...}
-// const char *FgpuInstPrinter::getRegisterName(unsigned RegNo) {...}
 def Fgpu : Target {
-// def FgpuInstrInfo : InstrInfo as before.
   let InstructionSet = FgpuInstrInfo;
   let AssemblyParsers = [FgpuAsmParser];
   let AssemblyParserVariants = [FgpuAsmParserVariant];
+  let AllowRegisterRenaming = 1;
 }
+
+//===----------------------------------------------------------------------===//
+// Pfm Counters
+//===----------------------------------------------------------------------===//
+
+include "FgpuPfmCounters.td"

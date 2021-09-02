@@ -16,7 +16,7 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/Debug.h"
@@ -77,7 +77,7 @@ namespace {
       AU.addRequired<MachinePostDominatorTree>();
       AU.addPreserved<MachinePostDominatorTree>();
     }
-    const char *getPassName() const override {
+    const llvm::StringRef getPassName() const override {
       return "Fgpu : augment CFG with post-dominator control flow instructions ";
     }
     bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
