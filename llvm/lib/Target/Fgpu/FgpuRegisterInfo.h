@@ -16,6 +16,7 @@
 #include "Fgpu.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include <cstdint>
+#include <llvm/CodeGen/RegisterScavenging.h>
 
 #define GET_REGINFO_HEADER
 #include "FgpuGenRegisterInfo.inc"

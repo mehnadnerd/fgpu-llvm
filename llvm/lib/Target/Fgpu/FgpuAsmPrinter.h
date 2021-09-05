@@ -13,7 +13,6 @@
 #ifndef LLVM_LIB_TARGET_Fgpu_FgpuASMPRINTER_H
 #define LLVM_LIB_TARGET_Fgpu_FgpuASMPRINTER_H
 
-#include "Fgpu16HardFloatInfo.h"
 #include "FgpuMCInstLower.h"
 #include "FgpuSubtarget.h"
 #include "llvm/CodeGen/AsmPrinter.h"

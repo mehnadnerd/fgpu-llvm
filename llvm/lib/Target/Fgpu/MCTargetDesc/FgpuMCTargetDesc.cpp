@@ -16,7 +16,6 @@
 #include "FgpuMCAsmInfo.h"
 #include "FgpuTargetStreamer.h"
 #include "llvm/MC/MachineLocation.h"
-#include "llvm/MC/MCCodeGenInfo.h"
 #include "llvm/MC/MCELFStreamer.h"
 #include "llvm/MC/MCInstPrinter.h"
 #include "llvm/MC/MCInstrInfo.h"
@@ -44,15 +43,15 @@ using namespace llvm;
 // Select the Fgpu Architecture Feature for the given triple and cpu name.
 // The function will be called at command 'llvm-objdump -d' for Fgpu elf input.
 static StringRef selectFgpuArchFeature(const Triple &TT, StringRef CPU) {
-  std::string FgpuArchFeature;
-  if (CPU.empty() || CPU == "generic") {
-    if (TT.getArch() == Triple::fgpu) {
-       // if (CPU == "fgpu32") {
-          // FgpuArchFeature = "+fgpu32";
-        // }
-    }
-  }
-  return FgpuArchFeature;
+//  std::string FgpuArchFeature;
+//  if (CPU.empty() || CPU == "generic") {
+//    if (TT.getArch() == Triple::fgpu) {
+//       // if (CPU == "fgpu32") {
+//          // FgpuArchFeature = "+fgpu32";
+//        // }
+//    }
+//  }
+  return CPU;
 }
 
 static MCInstrInfo *createFgpuMCInstrInfo() {
@@ -69,7 +68,7 @@ static MCRegisterInfo *createFgpuMCRegisterInfo(const Triple &TT) {
 
 static MCSubtargetInfo *createFgpuMCSubtargetInfo(const Triple &TT,
                                                   StringRef CPU, StringRef FS) {
-  std::string ArchFS = selectFgpuArchFeature(TT,CPU);
+  StringRef ArchFS = selectFgpuArchFeature(TT,CPU);
   if (!FS.empty()) {
     if (!ArchFS.empty())
       ArchFS = ArchFS + "," + FS.str();
@@ -85,27 +84,28 @@ static MCSubtargetInfo *createFgpuMCSubtargetInfo(const Triple &TT,
 }
 
 static MCAsmInfo *createFgpuMCAsmInfo(const MCRegisterInfo &MRI,
-                                      const Triple &TT) {
+                                      const Triple &TT,
+                                      const MCTargetOptions &Options) {
   MCAsmInfo *MAI = new FgpuMCAsmInfo(TT);
 
   unsigned SP = MRI.getDwarfRegNum(Fgpu::SP, true);
-  MCCFIInstruction Inst = MCCFIInstruction::createDefCfa(0, SP, 0);
+  MCCFIInstruction Inst = MCCFIInstruction::createDefCfaRegister(nullptr, SP);
   MAI->addInitialFrameState(Inst);
 
   return MAI;
 }
 
-static MCCodeGenInfo *createFgpuMCCodeGenInfo(const Triple &TT, Reloc::Model RM,
-                                              CodeModel::Model CM,
-                                              CodeGenOpt::Level OL) {
-  MCCodeGenInfo *X = new MCCodeGenInfo();
-  // if (CM == CodeModel::JITDefault)
-    RM = Reloc::Static;
-  // else if (RM == Reloc::Default)
-    // RM = Reloc::PIC_;
-  X->initMCCodeGenInfo(RM, CM, OL); // defined in lib/MC/MCCodeGenInfo.cpp
-  return X;
-}
+//static MCCodeGenInfo *createFgpuMCCodeGenInfo(const Triple &TT, Reloc::Model RM,
+//                                              CodeModel::Model CM,
+//                                              CodeGenOpt::Level OL) {
+//  MCCodeGenInfo *X = new MCCodeGenInfo();
+//  // if (CM == CodeModel::JITDefault)
+//    RM = Reloc::Static;
+//  // else if (RM == Reloc::Default)
+//    // RM = Reloc::PIC_;
+//  X->initMCCodeGenInfo(RM, CM, OL); // defined in lib/MC/MCCodeGenInfo.cpp
+//  return X;
+//}
 
 static MCInstPrinter *createFgpuMCInstPrinter(const Triple &T,
                                               unsigned SyntaxVariant,
@@ -115,10 +115,12 @@ static MCInstPrinter *createFgpuMCInstPrinter(const Triple &T,
   return new FgpuInstPrinter(MAI, MII, MRI);
 }
 
-static MCStreamer *createMCStreamer(const Triple &TT, MCContext &Context, 
-                                    MCAsmBackend &MAB, raw_pwrite_stream &OS, 
-                                    MCCodeEmitter *Emitter, bool RelaxAll) {
-  return createELFStreamer(Context, MAB, OS, Emitter, RelaxAll);
+static MCStreamer *createMCStreamer(const Triple &T, MCContext &Context,
+                                    std::unique_ptr<MCAsmBackend> &&MAB,
+                                    std::unique_ptr<MCObjectWriter> &&OW,
+                                    std::unique_ptr<MCCodeEmitter> &&Emitter,
+                                    bool RelaxAll) {
+  return createELFStreamer(Context, std::move(MAB), std::move(OW), std::move(Emitter), RelaxAll);
 }
 
 static MCTargetStreamer *createFgpuAsmTargetStreamer(MCStreamer &S,
@@ -133,9 +135,9 @@ extern "C" void LLVMInitializeFgpuTargetMC() {
   // Register the MC asm info.
   RegisterMCAsmInfoFn X(*T, createFgpuMCAsmInfo);
   
-  // Register the MC codegen info.
-  TargetRegistry::RegisterMCCodeGenInfo(*T,
-                                     createFgpuMCCodeGenInfo);
+ // // Register the MC codegen info.
+ // TargetRegistry::RegisterMCCodeGenInfo(*T,
+ //                                    createFgpuMCCodeGenInfo);
   
   // Register the MC instruction info.
   TargetRegistry::RegisterMCInstrInfo(*T, createFgpuMCInstrInfo);

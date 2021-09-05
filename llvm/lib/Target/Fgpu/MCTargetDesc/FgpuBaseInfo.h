@@ -109,7 +109,7 @@ namespace FgpuII {
     FrmCtrl = 4,
     FrmMask = 15
   };
-}
+} // namespace FgpuII
 
 //@get register number
 /// getFgpuRegisterNumbering - Given the enum value for some register,

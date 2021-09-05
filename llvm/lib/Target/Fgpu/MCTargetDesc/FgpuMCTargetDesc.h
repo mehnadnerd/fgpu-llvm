@@ -15,13 +15,16 @@
 #define FGPUMCTARGETDESC_H
 
 #include "llvm/Support/DataTypes.h"
+#include "llvm/MC/MCTargetOptions.h"
+#include <memory>
+
 
 namespace llvm {
 class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
 class MCInstrInfo;
-class MCObjectWriter;
+class MCObjectTargetWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
 class StringRef;
@@ -37,11 +40,11 @@ MCCodeEmitter *createFgpuMCCodeEmitter(const MCInstrInfo &MCII,
                                          MCContext &Ctx);
 
 MCAsmBackend *createFgpuAsmBackend(const Target &T,
-                                       const MCRegisterInfo &MRI,
-                                       const Triple &TT, StringRef CPU);
+                                   const MCSubtargetInfo &STI,
+                                   const MCRegisterInfo &MRI,
+                                   const MCTargetOptions &Options);
 
-MCObjectWriter *createFgpuELFObjectWriter(raw_pwrite_stream &OS,
-                                          uint8_t OSABI,
+std::unique_ptr<MCObjectTargetWriter> createFgpuELFObjectWriter(uint8_t OSABI,
                                           bool IsLittleEndian);
 } // End llvm namespace
 

@@ -534,9 +534,6 @@ class TargetRegisterClass;
 
   /// Create FgpuTargetLowering objects.
   const FgpuTargetLowering *
-  createFgpu16TargetLowering(const FgpuTargetMachine &TM,
-                             const FgpuSubtarget &STI);
-  const FgpuTargetLowering *
   createFgpuSETargetLowering(const FgpuTargetMachine &TM,
                              const FgpuSubtarget &STI);
 

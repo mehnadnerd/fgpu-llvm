@@ -47,17 +47,11 @@ using namespace llvm;
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeFgpuTarget() {
   // Register the target.
-  RegisterTargetMachine<FgpuebTargetMachine> X(getTheFgpuTarget());
-  RegisterTargetMachine<FgpuelTargetMachine> Y(getTheFgpuelTarget());
-  RegisterTargetMachine<FgpuebTargetMachine> A(getTheFgpu64Target());
-  RegisterTargetMachine<FgpuelTargetMachine> B(getTheFgpu64elTarget());
+  RegisterTargetMachine<FgpuTargetMachine> X(getTheFgpuTarget());
 
   PassRegistry *PR = PassRegistry::getPassRegistry();
   initializeGlobalISel(*PR);
-  initializeFgpuDelaySlotFillerPass(*PR);
-  initializeFgpuBranchExpansionPass(*PR);
-  initializeMicroFgpuSizeReducePass(*PR);
-  initializeFgpuPreLegalizerCombinerPass(*PR);
+  //TODO: insert other passes here
 }
 
 static std::string computeDataLayout(const Triple &TT, StringRef CPU,

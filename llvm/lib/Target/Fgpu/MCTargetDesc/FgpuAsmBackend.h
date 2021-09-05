@@ -32,12 +32,16 @@ class FgpuAsmBackend : public MCAsmBackend {
 
 public:
   FgpuAsmBackend(const Target &T, Triple::OSType _OSType, bool _isLittle)
-      : MCAsmBackend(), OSType(_OSType), IsLittle(_isLittle) {}
+      : MCAsmBackend(_isLittle ? support::endianness::little : support::endianness::big),
+        OSType(_OSType), IsLittle(_isLittle) {}
 
-  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override;
+  std::unique_ptr<MCObjectTargetWriter>
+  createObjectTargetWriter() const override;
 
-  void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
-                  uint64_t Value, bool IsPCRel) const override;
+  void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
+                  const MCValue &Target, MutableArrayRef<char> Data,
+                  uint64_t Value, bool IsResolved,
+                  const MCSubtargetInfo *STI) const override;
 
   const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override;
 
@@ -52,7 +56,7 @@ public:
   /// relaxation.
   ///
   /// \param Inst - The instruction to test.
-  bool mayNeedRelaxation(const MCInst &Inst) const override {
+  bool mayNeedRelaxation(const MCInst &Inst, const MCSubtargetInfo &STI) const override {
     return false;
   }
 
@@ -66,17 +70,12 @@ public:
     return false;
   }
 
-  /// RelaxInstruction - Relax the instruction in the given fragment
-  /// to the next wider instruction.
-  ///
-  /// \param Inst - The instruction to relax, which may be the same
-  /// as the output.
-  /// \param [out] Res On return, the relaxed instruction.
-  void relaxInstruction(const MCInst &Inst, MCInst &Res) const override {}
+  void relaxInstruction(MCInst &Inst,
+                        const MCSubtargetInfo &STI) const override {}
 
   /// @}
 
-  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override;
+  bool writeNopData(raw_ostream &OS, uint64_t Count) const override;
 }; // class FgpuAsmBackend
 
 } // namespace

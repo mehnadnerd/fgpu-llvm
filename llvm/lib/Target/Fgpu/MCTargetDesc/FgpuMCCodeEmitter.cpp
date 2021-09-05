@@ -70,14 +70,14 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
 unsigned FgpuMCCodeEmitter::getBranch14TargetOpValue(const MCInst &MI, unsigned OpNo, SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI) const {
   const MCOperand &MO = MI.getOperand(OpNo);
   if (MO.isImm()) 
-    DEBUG(dbgs() << "getBranch14TargetOpValue is immediate = " << MO.getImm() << "\n");
+    LLVM_DEBUG(dbgs() << "getBranch14TargetOpValue is immediate = " << MO.getImm() << "\n");
 
   // If the destination is an immediate, we have nothing to do.
   if (MO.isImm()) return MO.getImm();
   assert(MO.isExpr() && "getBranch14TargetOpValue expects only expressions");
 
   const MCExpr *Expr = MO.getExpr();
-  DEBUG(dbgs() << "getBranch14TargetOpValue  = " << *Expr << "\n");
+  LLVM_DEBUG(dbgs() << "getBranch14TargetOpValue  = " << *Expr << "\n");
   Fixups.push_back(MCFixup::create(0, Expr,
                                    MCFixupKind(Fgpu::fixup_Fgpu_PC14)));
   return 0;
@@ -89,14 +89,14 @@ unsigned FgpuMCCodeEmitter::getBranch14TargetOpValue(const MCInst &MI, unsigned 
 unsigned FgpuMCCodeEmitter::getBranch7TargetOpValue(const MCInst &MI, unsigned OpNo, SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI) const {
   const MCOperand &MO = MI.getOperand(OpNo);
   if (MO.isImm()) 
-    DEBUG(dbgs() << "getBranch7TargetOpValue is immediate = " << MO.getImm() << "\n");
+    LLVM_DEBUG(dbgs() << "getBranch7TargetOpValue is immediate = " << MO.getImm() << "\n");
 
   // If the destination is an immediate, we have nothing to do.
   if (MO.isImm()) return MO.getImm();
   assert(MO.isExpr() && "getBranch7TargetOpValue expects only expressions");
 
   const MCExpr *Expr = MO.getExpr();
-  DEBUG(dbgs() << "getBranch7TargetOpValue  = " << *Expr << "\n");
+  LLVM_DEBUG(dbgs() << "getBranch7TargetOpValue  = " << *Expr << "\n");
   Fixups.push_back(MCFixup::create(0, Expr,
                                    MCFixupKind(Fgpu::fixup_Fgpu_PC7)));
   return 0;
@@ -112,7 +112,7 @@ unsigned FgpuMCCodeEmitter::
 getJumpTargetOpValue(const MCInst &MI, unsigned OpNo,
                      SmallVectorImpl<MCFixup> &Fixups,
                      const MCSubtargetInfo &STI) const {
-  DEBUG(dbgs() << "soubhi: getJumpTargetOpValue entered!\n");
+  LLVM_DEBUG(dbgs() << "soubhi: getJumpTargetOpValue entered!\n");
   unsigned Opcode = MI.getOpcode();
   const MCOperand &MO = MI.getOperand(OpNo);
   // dbgs() << "soubhi: MO.getImm()
@@ -135,7 +135,7 @@ getJumpTargetOpValue(const MCInst &MI, unsigned OpNo,
 unsigned FgpuMCCodeEmitter::
 getExprOpValue(const MCExpr *Expr,SmallVectorImpl<MCFixup> &Fixups,
                const MCSubtargetInfo &STI) const {
-  DEBUG(dbgs() << "soubhi: getExprOpValue entered\n");
+  LLVM_DEBUG(dbgs() << "soubhi: getExprOpValue entered\n");
   // Expr->dump();
   MCExpr::ExprKind Kind = Expr->getKind();
 
@@ -181,9 +181,9 @@ FgpuMCCodeEmitter::getMemEncoding(const MCInst &MI, unsigned OpNo,
   // Base register is encoded in bits 9-5, offset is encoded in bits 23-10.
   unsigned RegBits = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups, STI);
   unsigned OffBits = getMachineOpValue(MI, MI.getOperand(OpNo+1), Fixups, STI)/4;
-  DEBUG(dbgs() << "soubhi : RegBits = " << RegBits << "\n");
-  DEBUG(dbgs() << "soubhi : OffBits = " << OffBits << "\n");
-  DEBUG(dbgs() << "soubhi : res = " << (((OffBits & 0x3FFF)<<5) | (RegBits & 0x1F)) << "\n");
+  LLVM_DEBUG(dbgs() << "soubhi : RegBits = " << RegBits << "\n");
+  LLVM_DEBUG(dbgs() << "soubhi : OffBits = " << OffBits << "\n");
+  LLVM_DEBUG(dbgs() << "soubhi : res = " << (((OffBits & 0x3FFF)<<5) | (RegBits & 0x1F)) << "\n");
 
   return ((OffBits & 0x3FFF)<<5) | (RegBits & 0x1F);
 }

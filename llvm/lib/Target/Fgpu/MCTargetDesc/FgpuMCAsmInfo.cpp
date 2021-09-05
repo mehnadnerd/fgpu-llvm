@@ -21,7 +21,7 @@ void FgpuMCAsmInfo::anchor() { }
 
 FgpuMCAsmInfo::FgpuMCAsmInfo(const Triple &TheTriple) {
   if ((TheTriple.getArch() == Triple::fgpu))
-    IsLittleEndian = false;
+    IsLittleEndian = false;  // TODO: ???? I thought it was little endian???
 
   AlignmentIsInBytes          = false;
   Data16bitsDirective         = "\t.2byte\t";

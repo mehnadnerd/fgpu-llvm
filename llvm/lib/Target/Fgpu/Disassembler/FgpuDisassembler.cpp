@@ -15,12 +15,13 @@
 
 #include "FgpuRegisterInfo.h"
 #include "FgpuSubtarget.h"
-#include "llvm/MC/MCDisassembler.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCDisassembler/MCDisassembler.h"
 #include "llvm/MC/MCFixedLenDisassembler.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/MemoryObject.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/Debug.h"
 
@@ -62,7 +63,6 @@ public:
   /// getInstruction - See MCDisassembler.
   DecodeStatus getInstruction(MCInst &Instr, uint64_t &Size,
                               ArrayRef<uint8_t> Bytes, uint64_t Address,
-                              raw_ostream &VStream,
                               raw_ostream &CStream) const override;
 };
 
@@ -171,10 +171,8 @@ static DecodeStatus readInstruction32(ArrayRef<uint8_t> Bytes, uint64_t Address,
 
 DecodeStatus
 FgpuDisassembler::getInstruction(MCInst &Instr, uint64_t &Size,
-                                              ArrayRef<uint8_t> Bytes,
-                                              uint64_t Address,
-                                              raw_ostream &VStream,
-                                              raw_ostream &CStream) const {
+                                 ArrayRef<uint8_t> Bytes, uint64_t Address,
+                                 raw_ostream &CStream) const {
   uint32_t Insn;
 
   DecodeStatus Result;
@@ -286,7 +284,7 @@ static DecodeStatus DecodeUimm14(MCInst &Inst, unsigned Insn, uint64_t Address, 
 }
 
 static DecodeStatus DecodeUimm16(MCInst &Inst, unsigned Insn, uint64_t Address, const void *Decoder) {
-  DEBUG(dbgs() << "DecodeUimm16 entered, Insn  = " << Insn << "\n");
+  LLVM_DEBUG(dbgs() << "DecodeUimm16 entered, Insn  = " << Insn << "\n");
   Inst.addOperand(MCOperand::createImm(SignExtend32<16>(Insn)));
   return MCDisassembler::Success;
 }

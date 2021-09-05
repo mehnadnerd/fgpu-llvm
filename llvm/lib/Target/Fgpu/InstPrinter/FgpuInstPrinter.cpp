@@ -40,7 +40,8 @@ void FgpuInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
 }
 
 //@1 {
-void FgpuInstPrinter::printInst(const MCInst *MI, raw_ostream &O, StringRef Annot, const MCSubtargetInfo &STI) {
+void FgpuInstPrinter::printInst(const MCInst *MI, uint64_t Address, StringRef Annot,
+                                const MCSubtargetInfo &STI, raw_ostream &O) {
   // Try to print any aliases first.
   if (not(printAliasInstr(MI, O)))
     printInstruction(MI, O);
@@ -120,7 +121,7 @@ void FgpuInstPrinter::printUnsignedImm(const MCInst *MI, int opNum, raw_ostream 
 
 void FgpuInstPrinter::
 printMemOperandEA(const MCInst *MI, int opNum, raw_ostream &O) {
-  DEBUG(dbgs() << "soubhi: printMemOperand entered\n");
+  LLVM_DEBUG(dbgs() << "soubhi: printMemOperand entered\n");
   printOperand(MI, opNum, O);
   O << ", ";
   printOperand(MI, opNum+1, O);
@@ -128,7 +129,7 @@ printMemOperandEA(const MCInst *MI, int opNum, raw_ostream &O) {
 
 void FgpuInstPrinter::
 printMemOperand(const MCInst *MI, int opNum, raw_ostream &O) {
-  DEBUG(dbgs() << "soubhi: printMemOperand entered\n");
+  LLVM_DEBUG(dbgs() << "soubhi: printMemOperand entered\n");
   printOperand(MI, opNum, O);
   O << "[";
   printOperand(MI, opNum+1, O);

@@ -24,11 +24,58 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
-#include "llvm/MC/MCTargetAsmParser.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "MCTargetDesc/FgpuABIInfo.h"
+#include "MCTargetDesc/FgpuBaseInfo.h"
+#include "MCTargetDesc/FgpuMCTargetDesc.h"
+#include "FgpuTargetStreamer.h"
+#include "TargetInfo/FgpuTargetInfo.h"
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/Triple.h"
+#include "llvm/ADT/Twine.h"
+#include "llvm/BinaryFormat/ELF.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCExpr.h"
+#include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MCObjectFileInfo.h"
+#include "llvm/MC/MCParser/MCAsmLexer.h"
+#include "llvm/MC/MCParser/MCAsmParser.h"
+#include "llvm/MC/MCParser/MCAsmParserExtension.h"
+#include "llvm/MC/MCParser/MCAsmParserUtils.h"
+#include "llvm/MC/MCParser/MCParsedAsmOperand.h"
+#include "llvm/MC/MCParser/MCTargetAsmParser.h"
+#include "llvm/MC/MCSectionELF.h"
+#include "llvm/MC/MCStreamer.h"
+#include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCSymbol.h"
+#include "llvm/MC/MCSymbolELF.h"
+#include "llvm/MC/MCValue.h"
+#include "llvm/MC/SubtargetFeature.h"
+#include "llvm/Support/Alignment.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/LLVM_DEBUG.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MathExtras.h"
+#include "llvm/Support/SMLoc.h"
+#include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/raw_ostream.h"
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <utility>
 
 using namespace llvm;
 
@@ -113,9 +160,9 @@ class FgpuAsmParser : public MCTargetAsmParser {
 public:
   FgpuAsmParser(MCSubtargetInfo &sti, MCAsmParser &parser,
                 const MCInstrInfo &MII, const MCTargetOptions &Options)
-    : MCTargetAsmParser(), STI(sti), Parser(parser) {
+    : MCTargetAsmParser(Options, sti, MII), STI(sti), Parser(parser) {
     // Initialize the set of available features.
-    setAvailableFeatures(ComputeAvailableFeatures(STI.getFeatureBits()));
+    setAvailableFeatures(STI.getFeatureBits());
   }
 
   MCAsmParser &getParser() const { return Parser; }
@@ -226,7 +273,7 @@ public:
   }
 
   static std::unique_ptr<FgpuOperand> CreateToken(StringRef Str, SMLoc S) {
-    auto Op = make_unique<FgpuOperand>(k_Token);
+    auto Op = std::make_unique<FgpuOperand>(k_Token);
     Op->Tok.Data = Str.data();
     Op->Tok.Length = Str.size();
     Op->StartLoc = S;
@@ -237,7 +284,7 @@ public:
   /// Internal constructor for register kinds
   static std::unique_ptr<FgpuOperand> CreateReg(unsigned RegNum, SMLoc S, 
                                                 SMLoc E) {
-    auto Op = make_unique<FgpuOperand>(k_Register);
+    auto Op = std::make_unique<FgpuOperand>(k_Register);
     Op->Reg.RegNum = RegNum;
     Op->StartLoc = S;
     Op->EndLoc = E;
@@ -245,7 +292,7 @@ public:
   }
 
   static std::unique_ptr<FgpuOperand> CreateImm(const MCExpr *Val, SMLoc S, SMLoc E) {
-    auto Op = make_unique<FgpuOperand>(k_Immediate);
+    auto Op = std::make_unique<FgpuOperand>(k_Immediate);
     Op->Imm.Val = Val;
     Op->StartLoc = S;
     Op->EndLoc = E;
@@ -254,7 +301,7 @@ public:
   
   static std::unique_ptr<FgpuOperand>
   CreateMem(unsigned Base, const MCExpr *Off, SMLoc S, SMLoc E) {
-    auto Op = make_unique<FgpuOperand>(k_Memory);
+    auto Op = std::make_unique<FgpuOperand>(k_Memory);
     Op->Mem.Base = Base;
     Op->Mem.Off = Off;
     Op->StartLoc = S;
@@ -283,7 +330,7 @@ FgpuAsmParser::MatchAndEmitInstruction(SMLoc IDLoc,
 				       bool MatchingInlineAsm) {
   MCInst Inst;
 
-  DEBUG(dbgs() << "trying to match with " << Operands.size() << " operands\n");
+  LLVM_DEBUG(dbgs() << "trying to match with " << Operands.size() << " operands\n");
   
   unsigned MatchResult = MatchInstructionImpl(Operands, Inst,
 					      ErrorInfo,
@@ -309,7 +356,7 @@ FgpuAsmParser::MatchAndEmitInstruction(SMLoc IDLoc,
 	ErrorLoc = ((FgpuOperand &)*Operands[ErrorInfo]).getStartLoc();
 	if (ErrorLoc == SMLoc()) ErrorLoc = IDLoc;
       }
-      DEBUG(dbgs() << "ErrorInfo = " << ErrorInfo << "\n");
+      LLVM_DEBUG(dbgs() << "ErrorInfo = " << ErrorInfo << "\n");
       return Error(ErrorLoc, "invalid operand for instruction");
     }
     case Match_MnemonicFail:
@@ -418,12 +465,12 @@ bool FgpuAsmParser::tryParseRegisterOperand(OperandVector &Operands, StringRef M
       return true;
     E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
     Operands.push_back(FgpuOperand::CreateMem(RegNo,IdVal, S, E));
-    DEBUG(dbgs() << "memory created, Value = " << *IdVal << "\n");
+    LLVM_DEBUG(dbgs() << "memory created, Value = " << *IdVal << "\n");
 
   }
   else {
     Operands.push_back(FgpuOperand::CreateReg(RegNo, S, E));
-    DEBUG(dbgs() << "register created, Reg = " << RegNo << "\n");
+    LLVM_DEBUG(dbgs() << "register created, Reg = " << RegNo << "\n");
   }
   //Parser.Lex(); // Eat register token.
   return false;
@@ -431,13 +478,13 @@ bool FgpuAsmParser::tryParseRegisterOperand(OperandVector &Operands, StringRef M
 
 
 bool FgpuAsmParser::ParseOperand(OperandVector &Operands, StringRef Mnemonic) {
-  DEBUG(dbgs() << ".. Generic Parser\n");
+  LLVM_DEBUG(dbgs() << ".. Generic Parser\n");
 
   const auto &tokenType = getLexer().getKind();
   switch (tokenType)
     {
     default:
-      DEBUG(dbgs() << "don't know how to eat : " << tokenType << "\n");
+      LLVM_DEBUG(dbgs() << "don't know how to eat : " << tokenType << "\n");
       Error(Parser.getTok().getLoc(), "unexpected token in operand");
       return true;
       
@@ -449,23 +496,23 @@ bool FgpuAsmParser::ParseOperand(OperandVector &Operands, StringRef Mnemonic) {
 
       Operands.push_back(FgpuOperand::CreateToken("[", S));
       Parser.Lex(); // eat [
-      DEBUG(dbgs() << "got [\n");
+      LLVM_DEBUG(dbgs() << "got [\n");
       int breg=-1,ireg = -1;
 
       breg = tryParseRegister(Mnemonic);
       E = Parser.getTok().getLoc();
       if (breg==-1) {
-	DEBUG(dbgs() << "did not get a register, expected base reg\n");
+	LLVM_DEBUG(dbgs() << "did not get a register, expected base reg\n");
 	return true;
       }
       Operands.push_back(FgpuOperand::CreateReg(breg, S, E));
       Parser.Lex();
       S = Parser.getTok().getLoc();
       if(getLexer().isNot(AsmToken::Plus)) {
-	DEBUG(dbgs() << "got " << getLexer().getKind() << ", expected +\n");
+	LLVM_DEBUG(dbgs() << "got " << getLexer().getKind() << ", expected +\n");
 	return true;
       }
-      DEBUG(dbgs() << "got +\n");
+      LLVM_DEBUG(dbgs() << "got +\n");
       Operands.push_back(FgpuOperand::CreateToken("+", S));
       Parser.Lex(); // eat +
       S = Parser.getTok().getLoc();
@@ -478,19 +525,19 @@ bool FgpuAsmParser::ParseOperand(OperandVector &Operands, StringRef Mnemonic) {
 	  return true;
 	Operands.push_back(FgpuOperand::CreateImm(IdVal, S, E));
 
-	DEBUG(dbgs() << "got immediate\n");
+	LLVM_DEBUG(dbgs() << "got immediate\n");
 	
 	S = Parser.getTok().getLoc();
 	if(getLexer().isNot(AsmToken::RBrac)) {
-	  DEBUG(dbgs() << "expected ], didn't get it\n");
+	  LLVM_DEBUG(dbgs() << "expected ], didn't get it\n");
 	  return true;
 	}
 	Operands.push_back(FgpuOperand::CreateToken("]", S));
 
-	DEBUG(dbgs() << "got ]\n");
+	LLVM_DEBUG(dbgs() << "got ]\n");
 	
 	Parser.Lex(); // eat ]
-	DEBUG(dbgs() << "got " <<  Operands.size() << " operands\n");
+	LLVM_DEBUG(dbgs() << "got " <<  Operands.size() << " operands\n");
 	/* false means no error? */
 	return false;
       }
@@ -498,7 +545,7 @@ bool FgpuAsmParser::ParseOperand(OperandVector &Operands, StringRef Mnemonic) {
       ireg = tryParseRegister(Mnemonic);
       E = Parser.getTok().getLoc();
       if (ireg==-1) {
-	DEBUG(dbgs() << "did not get a register, expected index reg\n");
+	LLVM_DEBUG(dbgs() << "did not get a register, expected index reg\n");
 	return true;
       }
       Operands.push_back(FgpuOperand::CreateReg(ireg, S, E));
@@ -508,21 +555,21 @@ bool FgpuAsmParser::ParseOperand(OperandVector &Operands, StringRef Mnemonic) {
       /* ahsu - cubic hackery? */
       if(getLexer().is(AsmToken::RBrac)) {
         Operands.push_back(FgpuOperand::CreateToken("]", S));
-        DEBUG(dbgs() << "got ]\n");
+        LLVM_DEBUG(dbgs() << "got ]\n");
         Parser.Lex(); // eat ]
-        DEBUG(dbgs() << "got " <<  Operands.size() << " operands\n");
+        LLVM_DEBUG(dbgs() << "got " <<  Operands.size() << " operands\n");
         /* false means no error? */
         return false;
       }
 
       if(getLexer().isNot(AsmToken::Plus)) {
-	DEBUG(dbgs() << "got " << getLexer().getKind() << ", expected +\n");
+	LLVM_DEBUG(dbgs() << "got " << getLexer().getKind() << ", expected +\n");
 	return true;
       }
       Operands.push_back(FgpuOperand::CreateToken("+", S));
       Parser.Lex(); // eat +
       if(getLexer().isNot(AsmToken::Integer)) {
-	DEBUG(dbgs() << "got " << getLexer().getKind() << ", expected Integer\n");
+	LLVM_DEBUG(dbgs() << "got " << getLexer().getKind() << ", expected Integer\n");
 	return true;
       }
       const MCExpr *IdVal;
@@ -532,14 +579,14 @@ bool FgpuAsmParser::ParseOperand(OperandVector &Operands, StringRef Mnemonic) {
 
       S = Parser.getTok().getLoc();
       if(getLexer().isNot(AsmToken::RBrac)) {
-	DEBUG(dbgs() << "expected ], didn't get it\n");
+	LLVM_DEBUG(dbgs() << "expected ], didn't get it\n");
 	return true;
       }
       Operands.push_back(FgpuOperand::CreateToken("]", S));
 
 
       Parser.Lex(); // eat dollar
-      DEBUG(dbgs() << "got " <<  Operands.size() << " operands\n");
+      LLVM_DEBUG(dbgs() << "got " <<  Operands.size() << " operands\n");
       /* false means no error? */
       return false;
     }
@@ -592,7 +639,7 @@ bool FgpuAsmParser::ParseOperand(OperandVector &Operands, StringRef Mnemonic) {
     case AsmToken::Plus:
     case AsmToken::Integer:
     case AsmToken::String: {
-      DEBUG(dbgs() << "AsmToken::String\n");
+      LLVM_DEBUG(dbgs() << "AsmToken::String\n");
       // quoted label names
       const MCExpr *IdVal;
       SMLoc S = Parser.getTok().getLoc();
@@ -600,7 +647,7 @@ bool FgpuAsmParser::ParseOperand(OperandVector &Operands, StringRef Mnemonic) {
 	return true;
       SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
       Operands.push_back(FgpuOperand::CreateImm(IdVal, S, E));
-      DEBUG(dbgs() << "Immediate created, Value = " << *IdVal << "\n");
+      LLVM_DEBUG(dbgs() << "Immediate created, Value = " << *IdVal << "\n");
       return false;
     }
     case AsmToken::Percent: {
@@ -613,7 +660,7 @@ bool FgpuAsmParser::ParseOperand(OperandVector &Operands, StringRef Mnemonic) {
       SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
       
       Operands.push_back(FgpuOperand::CreateImm(IdVal, S, E));
-      DEBUG(dbgs() << "Immediate created, Value = " << *IdVal << "\n");
+      LLVM_DEBUG(dbgs() << "Immediate created, Value = " << *IdVal << "\n");
       return false;
     } // case AsmToken::Percent
     } // switch(getLexer().getKind())
@@ -701,7 +748,7 @@ MCSymbolRefExpr::VariantKind FgpuAsmParser::getVariantKind(StringRef Symbol) {
 bool FgpuAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name, SMLoc NameLoc, OperandVector &Operands) {
 
   // Create the leading tokens for the mnemonic, split by '.' characters.
-  DEBUG(dbgs() << "ParseInstruction (" << Name.str() << ")\n");
+  LLVM_DEBUG(dbgs() << "ParseInstruction (" << Name.str() << ")\n");
   size_t Start = 0, Next = Name.find('.');
   StringRef Mnemonic = Name.slice(Start, Next);
 
@@ -710,7 +757,7 @@ bool FgpuAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
   // Read the remaining operands.
   if (getLexer().isNot(AsmToken::EndOfStatement)) {
     // Read the first operand.
-    DEBUG(dbgs() << "Parse first operand\n");
+    LLVM_DEBUG(dbgs() << "Parse first operand\n");
     if (ParseOperand(Operands, Name)) {
       SMLoc Loc = getLexer().getLoc();
       Parser.eatToEndOfStatement();
@@ -720,7 +767,7 @@ bool FgpuAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
     while (getLexer().is(AsmToken::Comma) ) {
       Parser.Lex();  // Eat the comma.
 
-      DEBUG(dbgs() << "Parse another operand\n");
+      LLVM_DEBUG(dbgs() << "Parse another operand\n");
       // Parse and remember the operand.
       if (ParseOperand(Operands, Name)) {
         SMLoc Loc = getLexer().getLoc();
@@ -729,12 +776,12 @@ bool FgpuAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
       }
     }
   }
-  DEBUG(dbgs() << "Operands parsed\n");
+  LLVM_DEBUG(dbgs() << "Operands parsed\n");
 
   if (getLexer().isNot(AsmToken::EndOfStatement)) {
     SMLoc Loc = getLexer().getLoc();
     Parser.eatToEndOfStatement();
-    DEBUG(dbgs() << "early end of the statement\n");
+    LLVM_DEBUG(dbgs() << "early end of the statement\n");
     return Error(Loc, "unexpected token in argument list");
   }
 

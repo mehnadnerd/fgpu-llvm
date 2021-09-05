@@ -13,7 +13,6 @@
 #ifndef LLVM_LIB_TARGET_Fgpu_FgpuMACHINEFUNCTION_H
 #define LLVM_LIB_TARGET_Fgpu_FgpuMACHINEFUNCTION_H
 
-#include "Fgpu16HardFloatInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include <map>
@@ -78,8 +77,6 @@ public:
 
   int getMoveF64ViaSpillFI(MachineFunction &MF, const TargetRegisterClass *RC);
 
-  std::map<const char *, const Fgpu16HardFloatInfo::FuncSignature *>
-  StubsNeeded;
 
 private:
   virtual void anchor();

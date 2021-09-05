@@ -10,11 +10,15 @@
 #include "Fgpu.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "FgpuTargetInfo.h"
 using namespace llvm;
 
 Target llvm::TheFgpuTarget;
+Target &getTheFgpuTarget() {
+  return llvm::TheFgpuTarget;
+}
 
 extern "C" void LLVMInitializeFgpuTargetInfo() {
   RegisterTarget<Triple::fgpu,
-        /*HasJIT=*/false> X(TheFgpuTarget, "fgpu", "FGPU Soft GPU");
+        /*HasJIT=*/false> X(TheFgpuTarget, "fgpu", "FGPU Soft GPU", "Fgpu");
 }

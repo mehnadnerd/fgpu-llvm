@@ -31,8 +31,6 @@ class FgpuTargetMachine : public LLVMTargetMachine {
   FgpuABIInfo ABI;
   const FgpuSubtarget *Subtarget;
   FgpuSubtarget DefaultSubtarget;
-  FgpuSubtarget NoFgpu16Subtarget;
-  FgpuSubtarget Fgpu16Subtarget;
 
   mutable StringMap<std::unique_ptr<FgpuSubtarget>> SubtargetMap;
 
@@ -73,30 +71,6 @@ public:
 
   bool isLittleEndian() const { return isLittle; }
   const FgpuABIInfo &getABI() const { return ABI; }
-};
-
-/// Fgpu32/64 big endian target machine.
-///
-class FgpuebTargetMachine : public FgpuTargetMachine {
-  virtual void anchor();
-
-public:
-  FgpuebTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
-                      StringRef FS, const TargetOptions &Options,
-                      Optional<Reloc::Model> RM, Optional<CodeModel::Model> CM,
-                      CodeGenOpt::Level OL, bool JIT);
-};
-
-/// Fgpu32/64 little endian target machine.
-///
-class FgpuelTargetMachine : public FgpuTargetMachine {
-  virtual void anchor();
-
-public:
-  FgpuelTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
-                      StringRef FS, const TargetOptions &Options,
-                      Optional<Reloc::Model> RM, Optional<CodeModel::Model> CM,
-                      CodeGenOpt::Level OL, bool JIT);
 };
 
 } // end namespace llvm

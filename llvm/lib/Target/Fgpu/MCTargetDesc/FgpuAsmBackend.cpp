@@ -23,6 +23,7 @@
 #include "llvm/MC/MCFixupKindInfo.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Debug.h"
@@ -53,12 +54,15 @@ static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value, MCContext
   return Value;
 }
 
-MCObjectWriter *FgpuAsmBackend::createObjectWriter(raw_pwrite_stream &OS) const {
-  return createFgpuELFObjectWriter(OS,
-    MCELFObjectTargetWriter::getOSABI(OSType), IsLittle);
+std::unique_ptr<MCObjectTargetWriter>
+FgpuAsmBackend::createObjectTargetWriter() const {
+  return createFgpuELFObjectWriter(MCELFObjectTargetWriter::getOSABI(OSType), IsLittle);
 }
 
-void FgpuAsmBackend::applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize, uint64_t Value, bool IsPCRel) const {
+void FgpuAsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
+                                const MCValue &Target, MutableArrayRef<char> Data,
+                                uint64_t Value, bool IsResolved,
+                                const MCSubtargetInfo *STI) const {
   // ApplyFixup - Apply the \arg Value for given \arg Fixup into the provided
   // data fragment, at the offset specified by the fixup and following the
   // fixup kind as appropriate.
@@ -70,22 +74,22 @@ void FgpuAsmBackend::applyFixup(const MCFixup &Fixup, char *Data, unsigned DataS
   unsigned Offset = Fixup.getOffset();
   if (!Value)
     return; // Doesn't change encoding.
-  DEBUG(dbgs() << "soubhi: applyFixup entered\n");
-  DEBUG(dbgs() << "soubhi: Value = " << (int)Value << "\n");
-  DEBUG(dbgs() << "soubhi: applyFixup Offset = " << Offset << "\n");
+  LLVM_DEBUG(dbgs() << "soubhi: applyFixup entered\n");
+  LLVM_DEBUG(dbgs() << "soubhi: Value = " << (int)Value << "\n");
+  LLVM_DEBUG(dbgs() << "soubhi: applyFixup Offset = " << Offset << "\n");
   // Where do we start in the object
 
   // for(unsigned i = 0; i < 8; i++)
   //   DEBUG(dbgs() << "soubhi: applyFixup Data[" << i << "] = " << StringRef(utohexstr(Data[i])) << "\n");
 
   uint64_t Mask = ((uint64_t)(-1) >> (64 - getFixupKindInfo(Kind).TargetSize));
-  DEBUG(dbgs() << "soubhi: applyFixup TargetSize = " << getFixupKindInfo(Kind).TargetSize  << "\n");
-  DEBUG(dbgs() << " applyFixup Mask = 0x" << StringRef(utohexstr(Mask)) << "\n");
+  LLVM_DEBUG(dbgs() << "soubhi: applyFixup TargetSize = " << getFixupKindInfo(Kind).TargetSize  << "\n");
+  LLVM_DEBUG(dbgs() << " applyFixup Mask = 0x" << StringRef(utohexstr(Mask)) << "\n");
   assert(IsLittle);
-  uint32_t *Dst32 = (uint32_t*)(Data + Offset);
-  DEBUG(dbgs() << " old Dst32 = 0x" << StringRef(utohexstr(*Dst32)) << "\n");
+  uint32_t *Dst32 = (uint32_t*)(Data.data() + Offset); // TODO: check this
+  LLVM_DEBUG(dbgs() << " old Dst32 = 0x" << StringRef(utohexstr(*Dst32)) << "\n");
   *Dst32 |= ((Value/4) & Mask) << 10; // old branch offset is captured
-  DEBUG(dbgs() << " new Dst32 = 0x" << StringRef(utohexstr(*Dst32)) << "\n");
+  LLVM_DEBUG(dbgs() << " new Dst32 = 0x" << StringRef(utohexstr(*Dst32)) << "\n");
 
 }
 
@@ -113,13 +117,17 @@ const MCFixupKindInfo &FgpuAsmBackend::getFixupKindInfo(MCFixupKind Kind) const 
 /// it should return an error.
 ///
 /// \return - True on success.
-bool FgpuAsmBackend::writeNopData(uint64_t Count, MCObjectWriter *OW) const {
+bool FgpuAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count) const {
+  // TODO: uhh shouldn't this do something???
   return true;
 }
 
 // MCAsmBackend
-MCAsmBackend *llvm::createFgpuAsmBackend(const Target &T, const MCRegisterInfo &MRI, const Triple &TT, StringRef CPU) {
-  return new FgpuAsmBackend(T, TT.getOS(), /*IsLittle*/true);
+MCAsmBackend *llvm::createFgpuAsmBackend(const Target &T,
+                                         const MCSubtargetInfo &STI,
+                                         const MCRegisterInfo &MRI,
+                                         const MCTargetOptions &Options) {
+  return new FgpuAsmBackend(T, STI.getTargetTriple().getOS(), /*IsLittle*/true);
 }
 
 

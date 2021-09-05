@@ -5,6 +5,7 @@ add_llvm_component_library(LLVMFgpuDesc
   FgpuMCAsmInfo.cpp
   FgpuAsmBackend.cpp
   FgpuMCCodeEmitter.cpp
+  FgpuMCExpr.cpp
   FgpuELFObjectWriter.cpp
   FgpuTargetStreamer.cpp
 

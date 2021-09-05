@@ -19,13 +19,10 @@ tablegen(LLVM FgpuGenExegesis.inc -gen-exegesis)
 add_public_tablegen_target(FgpuCommonTableGen)
 
 add_llvm_target(FgpuCodeGen
-  FgpuAddIPDOM.cpp
   FgpuAnalyzeImmediate.cpp
   FgpuAsmPrinter.cpp
   FgpuCallLowering.cpp
   FgpuCCState.cpp
-  FgpuConstantIslandPass.cpp
-  FgpuDelaySlotFiller.cpp
   FgpuExpandPseudo.cpp
   FgpuFastISel.cpp
   FgpuInstrInfo.cpp
@@ -38,15 +35,8 @@ add_llvm_target(FgpuCodeGen
   FgpuMCInstLower.cpp
   FgpuMachineFunction.cpp
   FgpuModuleISelDAGToDAG.cpp
-  FgpuOptimizePICCall.cpp
-  FgpuOs16.cpp
   FgpuPreLegalizerCombiner.cpp
   FgpuRegisterInfo.cpp
-  FgpuSEFrameLowering.cpp
-  FgpuSEInstrInfo.cpp
-  FgpuSEISelDAGToDAG.cpp
-  FgpuSEISelLowering.cpp
-  FgpuSERegisterInfo.cpp
   FgpuSubtarget.cpp
   FgpuTargetMachine.cpp
   FgpuTargetObjectFile.cpp

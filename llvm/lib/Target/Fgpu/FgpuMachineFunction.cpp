@@ -29,17 +29,8 @@ bool FgpuFunctionInfo::globalBaseRegSet() const {
 }
 
 static const TargetRegisterClass &getGlobalBaseRegClass(MachineFunction &MF) {
-  auto &STI = static_cast<const FgpuSubtarget &>(MF.getSubtarget());
-  auto &TM = static_cast<const FgpuTargetMachine &>(MF.getTarget());
-
-  if (STI.inFgpu16Mode())
-    return Fgpu::CPU16RegsRegClass;
-
-  if (STI.inMicroFgpuMode())
-    return Fgpu::GPRMM16RegClass;
-
-  if (TM.getABI().IsN64())
-    return Fgpu::GPR64RegClass;
+  //auto &STI = static_cast<const FgpuSubtarget &>(MF.getSubtarget());
+  //auto &TM = static_cast<const FgpuTargetMachine &>(MF.getTarget());
 
   return Fgpu::GPR32RegClass;
 }
