@@ -42,8 +42,6 @@ FgpuInstrInfo::FgpuInstrInfo(const FgpuSubtarget &STI, unsigned UncondBr)
       Subtarget(STI), UncondBrOpc(UncondBr) {}
 
 const FgpuInstrInfo *FgpuInstrInfo::create(FgpuSubtarget &STI) {
-  if (STI.inFgpu16Mode())
-    return createFgpu16InstrInfo(STI);
 
   return createFgpuSEInstrInfo(STI);
 }

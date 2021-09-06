@@ -54,6 +54,8 @@ public:
   void emitEmptyDelaySlot(bool hasShortDelaySlot, SMLoc IDLoc,
                           const MCSubtargetInfo *STI);
   void emitNop(SMLoc IDLoc, const MCSubtargetInfo *STI);
+  void emitMask(unsigned CPUBitmask, int CPUTopSavedRegOff) override;
+  void emitFMask(unsigned FPUBitmask, int FPUTopSavedRegOff) override;
 
   /// Emit a store instruction with an offset. If the offset is out of range
   /// then it will be synthesized using the assembler temporary.
@@ -114,8 +116,6 @@ class FgpuTargetAsmStreamer : public FgpuTargetStreamer {
 
 public:
   FgpuTargetAsmStreamer(MCStreamer &S, formatted_raw_ostream &OS);
-  void emitFrame(unsigned StackReg, unsigned StackSize,
-                 unsigned ReturnReg) override;
   void emitMask(unsigned CPUBitmask, int CPUTopSavedRegOff) override;
   void emitFMask(unsigned FPUBitmask, int FPUTopSavedRegOff) override;
 };

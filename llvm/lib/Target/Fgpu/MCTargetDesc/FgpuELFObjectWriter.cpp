@@ -38,7 +38,7 @@ FgpuELFObjectWriter::FgpuELFObjectWriter(uint8_t OSABI)
                             /*HasRelocationAddend*/ false) {}
 
 
-std::unique_ptr<MCObjectTargetWriter> llvm::createFgpuELFObjectWriter(raw_pwrite_stream &OS,
+std::unique_ptr<MCObjectTargetWriter> llvm::createFgpuELFObjectWriter(
                                                 uint8_t OSABI,
                                                 bool IsLittleEndian) {
   //MCELFObjectTargetWriter *MOTW = new FgpuELFObjectWriter(OSABI);
