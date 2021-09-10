@@ -1,22 +1,23 @@
-# MCTargetDesc/CMakeLists.txt
 add_llvm_component_library(LLVMFgpuDesc
-  FgpuMCTargetDesc.cpp
   FgpuABIInfo.cpp
-  FgpuMCAsmInfo.cpp
+  FgpuABIFlagsSection.cpp
   FgpuAsmBackend.cpp
+  FgpuELFObjectWriter.cpp
+  FgpuELFStreamer.cpp
+  FgpuInstPrinter.cpp
+  FgpuMCAsmInfo.cpp
   FgpuMCCodeEmitter.cpp
   FgpuMCExpr.cpp
-  FgpuELFObjectWriter.cpp
+  FgpuMCTargetDesc.cpp
+  FgpuNaClELFStreamer.cpp
+  FgpuOptionRecord.cpp
   FgpuTargetStreamer.cpp
 
   LINK_COMPONENTS
   MC
+  FgpuInfo
   Support
 
   ADD_TO_COMPONENT
   Fgpu
   )
-
-
-
-

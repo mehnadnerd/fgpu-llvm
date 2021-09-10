@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines an instruction selector for the Fgpu target.
+// This file defines an instruction selector for the FGPU target.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuISELDAGTODAG_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuISELDAGTODAG_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUISELDAGTODAG_H
+#define LLVM_LIB_TARGET_FGPU_FGPUISELDAGTODAG_H
 
 #include "Fgpu.h"
 #include "FgpuSubtarget.h"
@@ -23,7 +23,7 @@
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
-// FgpuDAGToDAGISel - Fgpu specific code to select Fgpu machine
+// FgpuDAGToDAGISel - FGPU specific code to select FGPU machine
 // instructions for SelectionDAG operations.
 //===----------------------------------------------------------------------===//
 namespace llvm {
@@ -35,7 +35,7 @@ public:
 
   // Pass Name
   StringRef getPassName() const override {
-    return "Fgpu DAG->DAG Pattern Instruction Selection";
+    return "FGPU DAG->DAG Pattern Instruction Selection";
   }
 
   bool runOnMachineFunction(MachineFunction &MF) override;

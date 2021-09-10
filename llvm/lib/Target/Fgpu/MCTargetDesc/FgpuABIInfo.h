@@ -1,30 +1,27 @@
 //===---- FgpuABIInfo.h - Information about FGPU ABI's --------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_FGPU_MCTARGETDESC_FGPUABIINFO_H
 #define LLVM_LIB_TARGET_FGPU_MCTARGETDESC_FGPUABIINFO_H
 
-
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/MC/MCRegisterInfo.h"
 
 namespace llvm {
 
+template <typename T> class ArrayRef;
 class MCTargetOptions;
 class StringRef;
-class TargetRegisterClass;
 
 class FgpuABIInfo {
 public:
-  enum class ABI { Unknown, CC_Fgpu};
+  enum class ABI { Unknown, O32, N32, N64 };
 
 protected:
   ABI ThisABI;
@@ -33,14 +30,26 @@ public:
   FgpuABIInfo(ABI ThisABI) : ThisABI(ThisABI) {}
 
   static FgpuABIInfo Unknown() { return FgpuABIInfo(ABI::Unknown); }
-  static FgpuABIInfo CC_Fgpu() { return FgpuABIInfo(ABI::CC_Fgpu); }
-  static FgpuABIInfo computeTargetABI();
+  static FgpuABIInfo O32() { return FgpuABIInfo(ABI::O32); }
+  static FgpuABIInfo N32() { return FgpuABIInfo(ABI::N32); }
+  static FgpuABIInfo N64() { return FgpuABIInfo(ABI::N64); }
+  static FgpuABIInfo computeTargetABI(const Triple &TT, StringRef CPU,
+                                      const MCTargetOptions &Options);
 
   bool IsKnown() const { return ThisABI != ABI::Unknown; }
+  bool IsO32() const { return ThisABI == ABI::O32; }
+  bool IsN32() const { return ThisABI == ABI::N32; }
+  bool IsN64() const { return ThisABI == ABI::N64; }
   ABI GetEnumValue() const { return ThisABI; }
 
+  /// The registers to use for byval arguments.
+  ArrayRef<MCPhysReg> GetByValArgRegs() const;
+
+  /// The registers to use for the variable argument list.
+  ArrayRef<MCPhysReg> GetVarArgRegs() const;
+
   /// Obtain the size of the area allocated by the callee for arguments.
-  /// CallingConv::FastCall affects the value for CC_Fgpu.
+  /// CallingConv::FastCall affects the value for O32.
   unsigned GetCalleeAllocdArgSizeInBytes(CallingConv::ID CC) const;
 
   /// Ordering of ABI's
@@ -52,9 +61,20 @@ public:
 
   unsigned GetStackPtr() const;
   unsigned GetFramePtr() const;
+  unsigned GetBasePtr() const;
+  unsigned GetGlobalPtr() const;
   unsigned GetNullPtr() const;
+  unsigned GetZeroReg() const;
+  unsigned GetPtrAdduOp() const;
+  unsigned GetPtrAddiuOp() const;
+  unsigned GetPtrSubuOp() const;
+  unsigned GetPtrAndOp() const;
+  unsigned GetGPRMoveOp() const;
+  inline bool ArePtrs64bit() const { return IsN64(); }
+  inline bool AreGprs64bit() const { return IsN32() || IsN64(); }
 
   unsigned GetEhDataReg(unsigned I) const;
 };
 }
+
 #endif

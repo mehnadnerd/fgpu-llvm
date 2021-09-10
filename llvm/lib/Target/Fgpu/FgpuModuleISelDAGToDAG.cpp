@@ -10,14 +10,14 @@
 
 #include "Fgpu.h"
 #include "FgpuTargetMachine.h"
-#include "llvm/CodeGen/StackProtector.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/CodeGen/StackProtector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
-#define DEBUG_TYPE "Fgpu-isel"
+#define DEBUG_TYPE "fgpu-isel"
 
 namespace {
   class FgpuModuleDAGToDAGISel : public MachineFunctionPass {
@@ -28,7 +28,7 @@ namespace {
 
     // Pass Name
     StringRef getPassName() const override {
-      return "Fgpu DAG->DAG Pattern Instruction Selection";
+      return "FGPU DAG->DAG Pattern Instruction Selection";
     }
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {

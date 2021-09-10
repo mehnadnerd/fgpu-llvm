@@ -13,7 +13,7 @@
 
 #include "FgpuISelLowering.h"
 #include "MCTargetDesc/FgpuBaseInfo.h"
-#include "InstPrinter/FgpuInstPrinter.h"
+#include "MCTargetDesc/FgpuInstPrinter.h"
 #include "MCTargetDesc/FgpuMCTargetDesc.h"
 #include "FgpuCCState.h"
 #include "FgpuInstrInfo.h"
@@ -78,13 +78,13 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "Fgpu-lower"
+#define DEBUG_TYPE "fgpu-lower"
 
 STATISTIC(NumTailCalls, "Number of tail calls");
 
 static cl::opt<bool>
 NoZeroDivCheck("mno-check-zero-division", cl::Hidden,
-               cl::desc("Fgpu: Don't trap on integer division by zero."),
+               cl::desc("FGPU: Don't trap on integer division by zero."),
                cl::init(false));
 
 extern cl::opt<bool> EmitJalrReloc;
@@ -106,7 +106,7 @@ static bool isShiftedMask(uint64_t I, uint64_t &Pos, uint64_t &Size) {
   return true;
 }
 
-// The Fgpu MSA ABI passes vector arguments in the integer register set.
+// The FGPU MSA ABI passes vector arguments in the integer register set.
 // The number of integer registers used is dependant on the ABI used.
 MVT FgpuTargetLowering::getRegisterTypeForCallingConv(LLVMContext &Context,
                                                       CallingConv::ID CC,
@@ -302,7 +302,7 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
   // setcc operations results (slt, sgt, ...).
   setBooleanContents(ZeroOrOneBooleanContent);
   setBooleanVectorContents(ZeroOrNegativeOneBooleanContent);
-  // The cmp.cond.fmt instruction in Fgpu32r6/Fgpu64r6 uses 0 and -1 like MSA
+  // The cmp.cond.fmt instruction in FGPU32r6/FGPU64r6 uses 0 and -1 like MSA
   // does. Integer booleans still use 0 and 1.
   if (Subtarget.hasFgpu32r6())
     setBooleanContents(ZeroOrOneBooleanContent,
@@ -315,7 +315,7 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1,  Promote);
   }
 
-  // Fgpu doesn't have extending float->double load/store.  Set LoadExtAction
+  // FGPU doesn't have extending float->double load/store.  Set LoadExtAction
   // for f32, f16
   for (MVT VT : MVT::fp_valuetypes()) {
     setLoadExtAction(ISD::EXTLOAD, VT, MVT::f32, Expand);
@@ -474,7 +474,7 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
     setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Expand);
   }
 
-  // Fgpu16 lacks Fgpu32's clz and clo instructions.
+  // FGPU16 lacks FGPU32's clz and clo instructions.
   if (!Subtarget.hasFgpu32() || Subtarget.inFgpu16Mode())
     setOperationAction(ISD::CTLZ, MVT::i32, Expand);
   if (!Subtarget.hasFgpu64())
@@ -543,7 +543,7 @@ FgpuTargetLowering::createFastISel(FunctionLoweringInfo &funcInfo,
   const FgpuTargetMachine &TM =
       static_cast<const FgpuTargetMachine &>(funcInfo.MF->getTarget());
 
-  // We support only the standard encoding [Fgpu32,Fgpu32R5] ISAs.
+  // We support only the standard encoding [FGPU32,FGPU32R5] ISAs.
   bool UseFastISel = TM.Options.EnableFastISel && Subtarget.hasFgpu32() &&
                      !Subtarget.hasFgpu32r6() && !Subtarget.inFgpu16Mode() &&
                      !Subtarget.inMicroFgpuMode();
@@ -973,25 +973,25 @@ static SDValue performMADD_MSUBCombine(SDNode *ROOTNode, SelectionDAG &CurDAG,
   if (ROOTNode->getValueType(0).isVector())
     return SDValue();
 
-  // For Fgpu64, madd / msub instructions are inefficent to use with 64 bit
+  // For FGPU64, madd / msub instructions are inefficent to use with 64 bit
   // arithmetic. E.g.
   // (add (mul a b) c) =>
   //   let res = (madd (mthi (drotr c 32))x(mtlo c) a b) in
-  //   Fgpu64:   (or (dsll (mfhi res) 32) (dsrl (dsll (mflo res) 32) 32)
+  //   FGPU64:   (or (dsll (mfhi res) 32) (dsrl (dsll (mflo res) 32) 32)
   //   or
-  //   Fgpu64R2: (dins (mflo res) (mfhi res) 32 32)
+  //   FGPU64R2: (dins (mflo res) (mfhi res) 32 32)
   //
   // The overhead of setting up the Hi/Lo registers and reassembling the
-  // result makes this a dubious optimzation for Fgpu64. The core of the
+  // result makes this a dubious optimzation for FGPU64. The core of the
   // problem is that Hi/Lo contain the upper and lower 32 bits of the
   // operand and result.
   //
-  // It requires a chain of 4 add/mul for Fgpu64R2 to get better code
-  // density than doing it naively, 5 for Fgpu64. Additionally, using
-  // madd/msub on Fgpu64 requires the operands actually be 32 bit sign
+  // It requires a chain of 4 add/mul for FGPU64R2 to get better code
+  // density than doing it naively, 5 for FGPU64. Additionally, using
+  // madd/msub on FGPU64 requires the operands actually be 32 bit sign
   // extended operands, not true 64 bit values.
   //
-  // FIXME: For the moment, disable this completely for Fgpu64.
+  // FIXME: For the moment, disable this completely for FGPU64.
   if (Subtarget.hasFgpu64())
     return SDValue();
 
@@ -1008,8 +1008,8 @@ static SDValue performMADD_MSUBCombine(SDNode *ROOTNode, SelectionDAG &CurDAG,
   if (!Mult.hasOneUse())
     return SDValue();
 
-  // maddu and madd are unusual instructions in that on Fgpu64 bits 63..31
-  // must be in canonical form, i.e. sign extended. For Fgpu32, the operands
+  // maddu and madd are unusual instructions in that on FGPU64 bits 63..31
+  // must be in canonical form, i.e. sign extended. For FGPU32, the operands
   // of the multiply must have 32 or more sign bits, otherwise we cannot
   // perform this optimization. We have to check this here as we're performing
   // this optimization pre-legalization.
@@ -2087,8 +2087,8 @@ SDValue FgpuTargetLowering::lowerGlobalAddress(SDValue Op,
   }
 
   // Every other architecture would use shouldAssumeDSOLocal in here, but
-  // Fgpu is special.
-  // * In PIC code Fgpu requires got loads even for local statics!
+  // fgpu is special.
+  // * In PIC code fgpu requires got loads even for local statics!
   // * To save on got entries, for local statics the got entry contains the
   //   page and an additional add instruction takes care of the low bits.
   // * It is legal to access a hidden symbol with a non hidden undefined,
@@ -2447,7 +2447,7 @@ static SDValue lowerFABS32(SDValue Op, SelectionDAG &DAG,
   if (Op.getValueType() == MVT::f32)
     return DAG.getNode(ISD::BITCAST, DL, MVT::f32, Res);
 
-  // FIXME: For Fgpu32r2, the sequence of (BuildPairF64 (ins (ExtractElementF64
+  // FIXME: For fgpu32r2, the sequence of (BuildPairF64 (ins (ExtractElementF64
   // Op 1), $zero, 31 1) (ExtractElementF64 Op 0)) and the Op has one use, we
   // should be able to drop the usage of mfc1/mtc1 and rewrite the register in
   // place.
@@ -2902,7 +2902,7 @@ static bool CC_FgpuO32(unsigned ValNo, MVT ValVT, MVT LocVT,
   bool isI64 = (ValVT == MVT::i32 && OrigAlign == Align(8));
   bool isVectorFloat = FgpuState->WasOriginalArgVectorFloat(ValNo);
 
-  // The Fgpu vector ABI for floats passes them in a pair of registers
+  // The FGPU vector ABI for floats passes them in a pair of registers
   if (ValVT == MVT::i32 && isVectorFloat) {
     // This is the start of an vector that was scalarized into an unknown number
     // of components. It doesn't matter how many there are. Allocate one of the
@@ -3030,12 +3030,12 @@ getOpndList(SmallVectorImpl<SDValue> &Ops,
             SDValue Chain) const {
   // Insert node "GP copy globalreg" before call to function.
   //
-  // R_Fgpu_CALL* operators (emitted when non-internal functions are called
+  // R_FGPU_CALL* operators (emitted when non-internal functions are called
   // in PIC mode) allow symbols to be resolved via lazy binding.
   // The lazy binding stub requires GP to point to the GOT.
   // Note that we don't need GP to point to the GOT for indirect calls
-  // (when R_Fgpu_CALL* is not used for the call) because Fgpu linker generates
-  // lazy binding stub for a function only when R_Fgpu_CALL* are the only relocs
+  // (when R_FGPU_CALL* is not used for the call) because Fgpu linker generates
+  // lazy binding stub for a function only when R_FGPU_CALL* are the only relocs
   // used for the function (that is, Fgpu linker doesn't generate lazy binding
   // stub for a function whose address is taken in the program).
   if (IsPICCall && !InternalLinkage && IsCallReloc) {
@@ -3107,17 +3107,17 @@ void FgpuTargetLowering::AdjustInstrPostInstrSelection(MachineInstr &MI,
         return;
       }
       // We are after the callee address, set by LowerCall().
-      // If added to MI, asm printer will emit .reloc R_Fgpu_JALR for the
+      // If added to MI, asm printer will emit .reloc R_FGPU_JALR for the
       // symbol.
       const SDValue TargetAddr = Node->getOperand(0).getOperand(1);
       StringRef Sym;
       if (const GlobalAddressSDNode *G =
               dyn_cast_or_null<const GlobalAddressSDNode>(TargetAddr)) {
-        // We must not emit the R_Fgpu_JALR relocation against data symbols
+        // We must not emit the R_FGPU_JALR relocation against data symbols
         // since this will cause run-time crashes if the linker replaces the
         // call instruction with a relative branch to the data symbol.
         if (!isa<Function>(G->getGlobal())) {
-          LLVM_DEBUG(dbgs() << "Not adding R_Fgpu_JALR against data symbol "
+          LLVM_DEBUG(dbgs() << "Not adding R_FGPU_JALR against data symbol "
                             << G->getGlobal()->getName() << "\n");
           return;
         }
@@ -3133,7 +3133,7 @@ void FgpuTargetLowering::AdjustInstrPostInstrSelection(MachineInstr &MI,
 
       MachineFunction *MF = MI.getParent()->getParent();
       MCSymbol *S = MF->getContext().getOrCreateSymbol(Sym);
-      LLVM_DEBUG(dbgs() << "Adding R_Fgpu_JALR against " << Sym << "\n");
+      LLVM_DEBUG(dbgs() << "Adding R_FGPU_JALR against " << Sym << "\n");
       MI.addOperand(MachineOperand::CreateMCSymbol(S, FgpuII::MO_JALR));
     }
   }
@@ -3744,7 +3744,7 @@ SDValue FgpuTargetLowering::LowerFormalArguments(
       continue;
     }
 
-    // The Fgpu ABIs for returning structs by value requires that we copy
+    // The fgpu ABIs for returning structs by value requires that we copy
     // the sret argument into $v0 for the return. Save the argument into
     // a virtual register so that we can access it from the return points.
     if (Ins[InsIdx].Flags.isSRet()) {
@@ -3877,7 +3877,7 @@ FgpuTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
   }
 
-  // The Fgpu ABIs for returning structs by value requires that we copy
+  // The fgpu ABIs for returning structs by value requires that we copy
   // the sret argument into $v0 for the return. We saved the argument into
   // a virtual register in the entry block, so now we copy the value out
   // and into $v0.
@@ -3919,10 +3919,10 @@ FgpuTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 FgpuTargetLowering::ConstraintType
 FgpuTargetLowering::getConstraintType(StringRef Constraint) const {
   // Fgpu specific constraints
-  // GCC config/Fgpu/constraints.md
+  // GCC config/fgpu/constraints.md
   //
   // 'd' : An address register. Equivalent to r
-  //       unless generating Fgpu16 code.
+  //       unless generating FGPU16 code.
   // 'y' : Equivalent to r; retained for
   //       backwards compatibility.
   // 'c' : A register suitable for use in an indirect
@@ -4117,7 +4117,7 @@ FgpuTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                                  MVT VT) const {
   if (Constraint.size() == 1) {
     switch (Constraint[0]) {
-    case 'd': // Address register. Same as 'r' unless generating Fgpu16 code.
+    case 'd': // Address register. Same as 'r' unless generating FGPU16 code.
     case 'y': // Same as 'r'. Exists for compatibility.
     case 'r':
       if (VT == MVT::i32 || VT == MVT::i16 || VT == MVT::i8) {

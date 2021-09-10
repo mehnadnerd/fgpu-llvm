@@ -19,7 +19,7 @@
 using namespace llvm;
 
 static cl::opt<bool>
-FixGlobalBaseReg("Fgpu-fix-global-base-reg", cl::Hidden, cl::init(true),
+FixGlobalBaseReg("fgpu-fix-global-base-reg", cl::Hidden, cl::init(true),
                  cl::desc("Always use $gp as the global base register."));
 
 FgpuFunctionInfo::~FgpuFunctionInfo() = default;
@@ -29,8 +29,11 @@ bool FgpuFunctionInfo::globalBaseRegSet() const {
 }
 
 static const TargetRegisterClass &getGlobalBaseRegClass(MachineFunction &MF) {
-  //auto &STI = static_cast<const FgpuSubtarget &>(MF.getSubtarget());
-  //auto &TM = static_cast<const FgpuTargetMachine &>(MF.getTarget());
+  auto &STI = static_cast<const FgpuSubtarget &>(MF.getSubtarget());
+  auto &TM = static_cast<const FgpuTargetMachine &>(MF.getTarget());
+
+  if (TM.getABI().IsN64())
+    return Fgpu::GPR64RegClass;
 
   return Fgpu::GPR32RegClass;
 }

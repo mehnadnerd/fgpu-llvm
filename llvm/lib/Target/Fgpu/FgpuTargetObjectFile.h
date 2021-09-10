@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuTARGETOBJECTFILE_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuTARGETOBJECTFILE_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUTARGETOBJECTFILE_H
+#define LLVM_LIB_TARGET_FGPU_FGPUTARGETOBJECTFILE_H
 
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 

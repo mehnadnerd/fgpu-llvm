@@ -14,6 +14,9 @@ namespace llvm {
 class Target;
 
 Target &getTheFgpuTarget();
+Target &getTheFgpuelTarget();
+Target &getTheFgpu64Target();
+Target &getTheFgpu64elTarget();
 
 } // namespace llvm
 

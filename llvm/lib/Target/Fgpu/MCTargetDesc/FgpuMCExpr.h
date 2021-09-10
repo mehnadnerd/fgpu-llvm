@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_MCTARGETDESC_FgpuMCEXPR_H
-#define LLVM_LIB_TARGET_Fgpu_MCTARGETDESC_FgpuMCEXPR_H
+#ifndef LLVM_LIB_TARGET_FGPU_MCTARGETDESC_FGPUMCEXPR_H
+#define LLVM_LIB_TARGET_FGPU_MCTARGETDESC_FGPUMCEXPR_H
 
 #include "llvm/MC/MCAsmLayout.h"
 #include "llvm/MC/MCExpr.h"
@@ -90,4 +90,4 @@ public:
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_Fgpu_MCTARGETDESC_FgpuMCEXPR_H
+#endif // LLVM_LIB_TARGET_FGPU_MCTARGETDESC_FGPUMCEXPR_H

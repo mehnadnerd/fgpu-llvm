@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FgpuCCSTATE_H
-#define FgpuCCSTATE_H
+#ifndef FGPUCCSTATE_H
+#define FGPUCCSTATE_H
 
 #include "FgpuISelLowering.h"
 #include "llvm/ADT/SmallVector.h"
@@ -90,7 +90,7 @@ private:
   /// See ISD::OutputArg::IsFixed,
   SmallVector<bool, 4> CallOperandIsFixed;
 
-  // Used to handle Fgpu16-specific calling convention tweaks.
+  // Used to handle FGPU16-specific calling convention tweaks.
   // FIXME: This should probably be a fully fledged calling convention.
   SpecialCallingConvType SpecialCallingConv;
 

@@ -19,7 +19,7 @@
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/InitializePasses.h"
 
-#define DEBUG_TYPE "Fgpu-prelegalizer-combiner"
+#define DEBUG_TYPE "fgpu-prelegalizer-combiner"
 
 using namespace llvm;
 

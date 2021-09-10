@@ -280,7 +280,6 @@ bool FgpuInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
   case Fgpu::B:
   case Fgpu::BAL:
   case Fgpu::BAL_BR:
-  case Fgpu::BAL_BR_MM:
   case Fgpu::BC1F:
   case Fgpu::BC1FL:
   case Fgpu::BC1T:
@@ -303,31 +302,8 @@ bool FgpuInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
   case Fgpu::BNEL:
     return isInt<18>(BrOffset);
 
-  // microFgpur3 branches
-  case Fgpu::B_MM:
-  case Fgpu::BC1F_MM:
-  case Fgpu::BC1T_MM:
-  case Fgpu::BEQ_MM:
-  case Fgpu::BGEZ_MM:
-  case Fgpu::BGEZAL_MM:
-  case Fgpu::BGTZ_MM:
-  case Fgpu::BLEZ_MM:
-  case Fgpu::BLTZ_MM:
-  case Fgpu::BLTZAL_MM:
-  case Fgpu::BNE_MM:
-  case Fgpu::BEQZC_MM:
-  case Fgpu::BNEZC_MM:
-    return isInt<17>(BrOffset);
 
-  // microFgpuR3 short branches.
-  case Fgpu::B16_MM:
-    return isInt<11>(BrOffset);
-
-  case Fgpu::BEQZ16_MM:
-  case Fgpu::BNEZ16_MM:
-    return isInt<8>(BrOffset);
-
-  // FgpuR6 branches.
+  // FGPUR6 branches.
   case Fgpu::BALC:
   case Fgpu::BC:
     return isInt<28>(BrOffset);
@@ -360,56 +336,11 @@ bool FgpuInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
   case Fgpu::BNEZC:  case Fgpu::BNEZC64:
     return isInt<23>(BrOffset);
 
-  // microFgpuR6 branches
-  case Fgpu::BC16_MMR6:
-    return isInt<11>(BrOffset);
-
-  case Fgpu::BEQZC16_MMR6:
-  case Fgpu::BNEZC16_MMR6:
-    return isInt<8>(BrOffset);
-
-  case Fgpu::BALC_MMR6:
-  case Fgpu::BC_MMR6:
-    return isInt<27>(BrOffset);
-
-  case Fgpu::BC1EQZC_MMR6:
-  case Fgpu::BC1NEZC_MMR6:
-  case Fgpu::BC2EQZC_MMR6:
-  case Fgpu::BC2NEZC_MMR6:
-  case Fgpu::BGEZALC_MMR6:
-  case Fgpu::BEQZALC_MMR6:
-  case Fgpu::BGTZALC_MMR6:
-  case Fgpu::BLEZALC_MMR6:
-  case Fgpu::BLTZALC_MMR6:
-  case Fgpu::BNEZALC_MMR6:
-  case Fgpu::BNVC_MMR6:
-  case Fgpu::BOVC_MMR6:
-    return isInt<17>(BrOffset);
-
-  case Fgpu::BEQC_MMR6:
-  case Fgpu::BNEC_MMR6:
-  case Fgpu::BGEC_MMR6:
-  case Fgpu::BGEUC_MMR6:
-  case Fgpu::BGEZC_MMR6:
-  case Fgpu::BGTZC_MMR6:
-  case Fgpu::BLEZC_MMR6:
-  case Fgpu::BLTC_MMR6:
-  case Fgpu::BLTUC_MMR6:
-  case Fgpu::BLTZC_MMR6:
-    return isInt<18>(BrOffset);
-
-  case Fgpu::BEQZC_MMR6:
-  case Fgpu::BNEZC_MMR6:
-    return isInt<23>(BrOffset);
-
   // DSP branches.
   case Fgpu::BPOSGE32:
     return isInt<18>(BrOffset);
-  case Fgpu::BPOSGE32_MM:
-  case Fgpu::BPOSGE32C_MMR3:
-    return isInt<17>(BrOffset);
 
-  // cnFgpu branches.
+  // cnFGPU branches.
   case Fgpu::BBIT0:
   case Fgpu::BBIT032:
   case Fgpu::BBIT1:
@@ -437,30 +368,8 @@ bool FgpuInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
 unsigned FgpuInstrInfo::getEquivalentCompactForm(
     const MachineBasicBlock::iterator I) const {
   unsigned Opcode = I->getOpcode();
-  bool canUseShortMicroFgpuCTI = false;
 
-  if (Subtarget.inMicroFgpuMode()) {
-    switch (Opcode) {
-    case Fgpu::BNE:
-    case Fgpu::BNE_MM:
-    case Fgpu::BEQ:
-    case Fgpu::BEQ_MM:
-    // microFgpu has NE,EQ branches that do not have delay slots provided one
-    // of the operands is zero.
-      if (I->getOperand(1).getReg() == Subtarget.getABI().GetZeroReg())
-        canUseShortMicroFgpuCTI = true;
-      break;
-    // For microFgpu the PseudoReturn and PseudoIndirectBranch are always
-    // expanded to JR_MM, so they can be replaced with JRC16_MM.
-    case Fgpu::JR:
-    case Fgpu::PseudoReturn:
-    case Fgpu::PseudoIndirectBranch:
-      canUseShortMicroFgpuCTI = true;
-      break;
-    }
-  }
-
-  // FgpuR6 forbids both operands being the zero register.
+  // FGPUR6 forbids both operands being the zero register.
   if (Subtarget.hasFgpu32r6() && (I->getNumOperands() > 1) &&
       (I->getOperand(0).isReg() &&
        (I->getOperand(0).getReg() == Fgpu::ZERO ||
@@ -470,24 +379,18 @@ unsigned FgpuInstrInfo::getEquivalentCompactForm(
         I->getOperand(1).getReg() == Fgpu::ZERO_64)))
     return 0;
 
-  if (Subtarget.hasFgpu32r6() || canUseShortMicroFgpuCTI) {
+  if (Subtarget.hasFgpu32r6()) {
     switch (Opcode) {
     case Fgpu::B:
       return Fgpu::BC;
     case Fgpu::BAL:
       return Fgpu::BALC;
     case Fgpu::BEQ:
-    case Fgpu::BEQ_MM:
-      if (canUseShortMicroFgpuCTI)
-        return Fgpu::BEQZC_MM;
-      else if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
+      if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
         return 0;
       return Fgpu::BEQC;
     case Fgpu::BNE:
-    case Fgpu::BNE_MM:
-      if (canUseShortMicroFgpuCTI)
-        return Fgpu::BNEZC_MM;
-      else if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
+      if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
         return 0;
       return Fgpu::BNEC;
     case Fgpu::BGE:
@@ -530,14 +433,12 @@ unsigned FgpuInstrInfo::getEquivalentCompactForm(
       return Fgpu::BLTZC64;
     case Fgpu::BLEZ64:
       return Fgpu::BLEZC64;
-    // For FgpuR6, the instruction 'jic' can be used for these cases. Some
+    // For FGPUR6, the instruction 'jic' can be used for these cases. Some
     // tools will accept 'jrc reg' as an alias for 'jic 0, $reg'.
     case Fgpu::JR:
     case Fgpu::PseudoIndirectBranchR6:
     case Fgpu::PseudoReturn:
     case Fgpu::TAILCALLR6REG:
-      if (canUseShortMicroFgpuCTI)
-        return Fgpu::JRC16_MM;
       return Fgpu::JIC;
     case Fgpu::JALRPseudo:
       return Fgpu::JIALC;
@@ -582,10 +483,6 @@ unsigned FgpuInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
     const char *AsmStr = MI.getOperand(0).getSymbolName();
     return getInlineAsmLength(AsmStr, *MF->getTarget().getMCAsmInfo());
   }
-  case Fgpu::CONSTPOOL_ENTRY:
-    // If this machine instr is a constant pool entry, its size is recorded as
-    // operand #2.
-    return MI.getOperand(2).getImm();
   }
 }
 
@@ -596,10 +493,10 @@ FgpuInstrInfo::genInstrWithNewOpc(unsigned NewOpc,
 
   // Certain branches have two forms: e.g beq $1, $zero, dest vs beqz $1, dest
   // Pick the zero form of the branch for readable assembly and for greater
-  // branch distance in non-microFgpu mode.
-  // Additional FgpuR6 does not permit the use of register $zero for compact
+  // branch distance in non-microFGPU mode.
+  // Additional FGPUR6 does not permit the use of register $zero for compact
   // branches.
-  // FIXME: Certain atomic sequences on Fgpu64 generate 32bit references to
+  // FIXME: Certain atomic sequences on fgpu64 generate 32bit references to
   // Fgpu::ZERO, which is incorrect. This test should be updated to use
   // Subtarget.getABI().GetZeroReg() when those atomic sequences and others
   // are fixed.
@@ -636,7 +533,7 @@ FgpuInstrInfo::genInstrWithNewOpc(unsigned NewOpc,
 
   MIB = BuildMI(*I->getParent(), I, I->getDebugLoc(), get(NewOpc));
 
-  // For FgpuR6 JI*C requires an immediate 0 as an operand, JIALC(64) an
+  // For FGPUR6 JI*C requires an immediate 0 as an operand, JIALC(64) an
   // immediate 0 as an operand and requires the removal of it's implicit-def %ra
   // implicit operand as copying the implicit operations of the instructio we're
   // looking at will give us the correct flags.
@@ -652,7 +549,7 @@ FgpuInstrInfo::genInstrWithNewOpc(unsigned NewOpc,
 
     MIB.addImm(0);
 
-    // If I has an MCSymbol operand (used by asm printer, to emit R_Fgpu_JALR),
+    // If I has an MCSymbol operand (used by asm printer, to emit R_FGPU_JALR),
     // add it to the new instruction.
     for (unsigned J = I->getDesc().getNumOperands(), E = I->getNumOperands();
          J < E; ++J) {
@@ -760,9 +657,7 @@ bool FgpuInstrInfo::verifyInstruction(const MachineInstr &MI,
   // Verify that ins and ext instructions are well formed.
   switch (MI.getOpcode()) {
     case Fgpu::EXT:
-    case Fgpu::EXT_MM:
     case Fgpu::INS:
-    case Fgpu::INS_MM:
     case Fgpu::DINS:
       return verifyInsExtInstruction(MI, ErrInfo, 0, 32, 0, 32, 0, 32);
     case Fgpu::DINSM:
@@ -813,30 +708,30 @@ FgpuInstrInfo::getSerializableDirectMachineOperandTargetFlags() const {
  using namespace FgpuII;
 
  static const std::pair<unsigned, const char*> Flags[] = {
-    {MO_GOT,          "Fgpu-got"},
-    {MO_GOT_CALL,     "Fgpu-got-call"},
-    {MO_GPREL,        "Fgpu-gprel"},
-    {MO_ABS_HI,       "Fgpu-abs-hi"},
-    {MO_ABS_LO,       "Fgpu-abs-lo"},
-    {MO_TLSGD,        "Fgpu-tlsgd"},
-    {MO_TLSLDM,       "Fgpu-tlsldm"},
-    {MO_DTPREL_HI,    "Fgpu-dtprel-hi"},
-    {MO_DTPREL_LO,    "Fgpu-dtprel-lo"},
-    {MO_GOTTPREL,     "Fgpu-gottprel"},
-    {MO_TPREL_HI,     "Fgpu-tprel-hi"},
-    {MO_TPREL_LO,     "Fgpu-tprel-lo"},
-    {MO_GPOFF_HI,     "Fgpu-gpoff-hi"},
-    {MO_GPOFF_LO,     "Fgpu-gpoff-lo"},
-    {MO_GOT_DISP,     "Fgpu-got-disp"},
-    {MO_GOT_PAGE,     "Fgpu-got-page"},
-    {MO_GOT_OFST,     "Fgpu-got-ofst"},
-    {MO_HIGHER,       "Fgpu-higher"},
-    {MO_HIGHEST,      "Fgpu-highest"},
-    {MO_GOT_HI16,     "Fgpu-got-hi16"},
-    {MO_GOT_LO16,     "Fgpu-got-lo16"},
-    {MO_CALL_HI16,    "Fgpu-call-hi16"},
-    {MO_CALL_LO16,    "Fgpu-call-lo16"},
-    {MO_JALR,         "Fgpu-jalr"}
+    {MO_GOT,          "fgpu-got"},
+    {MO_GOT_CALL,     "fgpu-got-call"},
+    {MO_GPREL,        "fgpu-gprel"},
+    {MO_ABS_HI,       "fgpu-abs-hi"},
+    {MO_ABS_LO,       "fgpu-abs-lo"},
+    {MO_TLSGD,        "fgpu-tlsgd"},
+    {MO_TLSLDM,       "fgpu-tlsldm"},
+    {MO_DTPREL_HI,    "fgpu-dtprel-hi"},
+    {MO_DTPREL_LO,    "fgpu-dtprel-lo"},
+    {MO_GOTTPREL,     "fgpu-gottprel"},
+    {MO_TPREL_HI,     "fgpu-tprel-hi"},
+    {MO_TPREL_LO,     "fgpu-tprel-lo"},
+    {MO_GPOFF_HI,     "fgpu-gpoff-hi"},
+    {MO_GPOFF_LO,     "fgpu-gpoff-lo"},
+    {MO_GOT_DISP,     "fgpu-got-disp"},
+    {MO_GOT_PAGE,     "fgpu-got-page"},
+    {MO_GOT_OFST,     "fgpu-got-ofst"},
+    {MO_HIGHER,       "fgpu-higher"},
+    {MO_HIGHEST,      "fgpu-highest"},
+    {MO_GOT_HI16,     "fgpu-got-hi16"},
+    {MO_GOT_LO16,     "fgpu-got-lo16"},
+    {MO_CALL_HI16,    "fgpu-call-hi16"},
+    {MO_CALL_LO16,    "fgpu-call-lo16"},
+    {MO_JALR,         "fgpu-jalr"}
   };
   return makeArrayRef(Flags);
 }
@@ -846,7 +741,7 @@ FgpuInstrInfo::describeLoadedValue(const MachineInstr &MI, Register Reg) const {
   DIExpression *Expr =
       DIExpression::get(MI.getMF()->getFunction().getContext(), {});
 
-  // TODO: Special Fgpu instructions that need to be described separately.
+  // TODO: Special FGPU instructions that need to be described separately.
   if (auto RegImm = isAddImmediate(MI, Reg)) {
     Register SrcReg = RegImm->Reg;
     int64_t Offset = RegImm->Imm;

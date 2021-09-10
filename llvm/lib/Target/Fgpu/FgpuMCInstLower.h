@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuMCINSTLOWER_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuMCINSTLOWER_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUMCINSTLOWER_H
+#define LLVM_LIB_TARGET_FGPU_FGPUMCINSTLOWER_H
 
 #include "MCTargetDesc/FgpuMCExpr.h"
 #include "llvm/CodeGen/MachineOperand.h"
@@ -50,4 +50,4 @@ private:
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_Fgpu_FgpuMCINSTLOWER_H
+#endif // LLVM_LIB_TARGET_FGPU_FGPUMCINSTLOWER_H

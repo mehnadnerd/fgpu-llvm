@@ -1,4 +1,4 @@
-add_llvm_component_group(Fgpu)
+add_llvm_component_group(Fgpu HAS_JIT)
 
 set(LLVM_TARGET_DEFINITIONS Fgpu.td)
 
@@ -12,6 +12,7 @@ tablegen(LLVM FgpuGenGlobalISel.inc -gen-global-isel)
 tablegen(LLVM FgpuGenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM FgpuGenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM FgpuGenMCPseudoLowering.inc -gen-pseudo-lowering)
+tablegen(LLVM FgpuGenRegisterBank.inc -gen-register-bank)
 tablegen(LLVM FgpuGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM FgpuGenSubtargetInfo.inc -gen-subtarget)
 tablegen(LLVM FgpuGenExegesis.inc -gen-exegesis)
@@ -23,6 +24,8 @@ add_llvm_target(FgpuCodeGen
   FgpuAsmPrinter.cpp
   FgpuCallLowering.cpp
   FgpuCCState.cpp
+  FgpuConstantIslandPass.cpp
+  FgpuDelaySlotFiller.cpp
   FgpuExpandPseudo.cpp
   FgpuFastISel.cpp
   FgpuInstrInfo.cpp
@@ -35,8 +38,15 @@ add_llvm_target(FgpuCodeGen
   FgpuMCInstLower.cpp
   FgpuMachineFunction.cpp
   FgpuModuleISelDAGToDAG.cpp
+  FgpuOptimizePICCall.cpp
   FgpuPreLegalizerCombiner.cpp
+  FgpuRegisterBankInfo.cpp
   FgpuRegisterInfo.cpp
+  FgpuSEFrameLowering.cpp
+  FgpuSEInstrInfo.cpp
+  FgpuSEISelDAGToDAG.cpp
+  FgpuSEISelLowering.cpp
+  FgpuSERegisterInfo.cpp
   FgpuSubtarget.cpp
   FgpuTargetMachine.cpp
   FgpuTargetObjectFile.cpp
@@ -60,6 +70,5 @@ add_llvm_target(FgpuCodeGen
 
 add_subdirectory(AsmParser)
 add_subdirectory(Disassembler)
-add_subdirectory(InstPrinter)
 add_subdirectory(MCTargetDesc)
 add_subdirectory(TargetInfo)

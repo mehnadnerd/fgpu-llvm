@@ -10,13 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuREGISTERINFO_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuREGISTERINFO_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUREGISTERINFO_H
+#define LLVM_LIB_TARGET_FGPU_FGPUREGISTERINFO_H
 
 #include "Fgpu.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include <cstdint>
-#include <llvm/CodeGen/RegisterScavenging.h>
 
 #define GET_REGINFO_HEADER
 #include "FgpuGenRegisterInfo.inc"
@@ -30,7 +29,7 @@ public:
   enum class FgpuPtrClass {
     /// The default register class for integer values.
     Default = 0,
-    /// The subset of registers permitted in certain microFgpu instructions
+    /// The subset of registers permitted in certain microFGPU instructions
     /// such as lw16.
     GPR16MM = 1,
     /// The stack pointer only.
@@ -81,4 +80,4 @@ private:
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_Fgpu_FgpuREGISTERINFO_H
+#endif // LLVM_LIB_TARGET_FGPU_FGPUREGISTERINFO_H

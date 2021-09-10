@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_Fgpu_H
-#define LLVM_LIB_TARGET_Fgpu_Fgpu_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPU_H
+#define LLVM_LIB_TARGET_FGPU_FGPU_H
 
 #include "MCTargetDesc/FgpuMCTargetDesc.h"
 #include "llvm/Target/TargetMachine.h"
@@ -27,12 +27,26 @@ namespace llvm {
   class InstructionSelector;
   class PassRegistry;
 
-  FunctionPass *createFgpuDelBranchPass(FgpuTargetMachine &TM);
-  FunctionPass *createFgpuIPDOMPass(FgpuTargetMachine &TM);
+  ModulePass *createFgpuOs16Pass();
+  ModulePass *createFgpu16HardFloatPass();
+
+  FunctionPass *createFgpuModuleISelDagPass();
+  FunctionPass *createFgpuOptimizePICCallPass();
+  FunctionPass *createFgpuDelaySlotFillerPass();
+  FunctionPass *createFgpuBranchExpansion();
+  FunctionPass *createFgpuConstantIslandPass();
+  FunctionPass *createMicroFgpuSizeReducePass();
+  FunctionPass *createFgpuExpandPseudoPass();
+  FunctionPass *createFgpuPreLegalizeCombiner();
 
   InstructionSelector *createFgpuInstructionSelector(const FgpuTargetMachine &,
                                                      FgpuSubtarget &,
                                                      FgpuRegisterBankInfo &);
+
+  void initializeFgpuDelaySlotFillerPass(PassRegistry &);
+  void initializeFgpuBranchExpansionPass(PassRegistry &);
+  void initializeMicroFgpuSizeReducePass(PassRegistry &);
+  void initializeFgpuPreLegalizerCombinerPass(PassRegistry&);
 } // end namespace llvm;
 
 #endif

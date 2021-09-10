@@ -11,13 +11,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuISELLOWERING_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuISELLOWERING_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUISELLOWERING_H
+#define LLVM_LIB_TARGET_FGPU_FGPUISELLOWERING_H
 
-#include "Fgpu.h"
 #include "MCTargetDesc/FgpuABIInfo.h"
 #include "MCTargetDesc/FgpuBaseInfo.h"
 #include "MCTargetDesc/FgpuMCTargetDesc.h"
+#include "Fgpu.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
@@ -64,12 +64,25 @@ class TargetRegisterClass;
       // Tail call
       TailCall,
 
-      // Get the Higher 16 bits from a 32-bit immediate
+      // Get the Highest (63-48) 16 bits from a 64-bit immediate
+      Highest,
+
+      // Get the Higher (47-32) 16 bits from a 64-bit immediate
+      Higher,
+
+      // Get the High 16 bits from a 32/64-bit immediate
       // No relation with Fgpu Hi register
-      LUi,
-      // Get the Lower 16 bits from a 32-bit immediate
+      Hi,
+
+      // Get the Lower 16 bits from a 32/64-bit immediate
       // No relation with Fgpu Lo register
-      Li,
+      Lo,
+
+      // Get the High 16 bits from a 32 bit immediate for accessing the GOT.
+      GotHi,
+
+      // Get the High 16 bits from a 32-bit immediate for accessing TLS.
+      TlsHi,
 
       // Handle gp_rel (small data/bss sections) relocation.
       GPRel,
@@ -77,25 +90,166 @@ class TargetRegisterClass;
       // Thread Pointer
       ThreadPointer,
 
-      // FGPU special instructions
-      RET,
-      LP,
-      WGOFF,
-      WGID,
-      LID,
-      WGSIZE,
-      SIZE,
-      DOT,
-      AADD,
-      AMAX,
-      RELU,
-      SLW,
-      SLWC,
-      SSW,
-      SSWC,
+      // Vector Floating Point Multiply and Subtract
+      FMS,
+
+      // Floating Point Branch Conditional
+      FPBrcond,
+
+      // Floating Point Compare
+      FPCmp,
+
+      // Floating point select
+      FSELECT,
+
+      // Node used to generate an MTC1 i32 to f64 instruction
+      MTC1_D64,
+
+      // Floating Point Conditional Moves
+      CMovFP_T,
+      CMovFP_F,
+
+      // FP-to-int truncation node.
+      TruncIntFP,
+
+      // Return
+      Ret,
+
+      // Interrupt, exception, error trap Return
+      ERet,
+
+      // Software Exception Return.
+      EH_RETURN,
+
+      // Node used to extract integer from accumulator.
+      MFHI,
+      MFLO,
+
+      // Node used to insert integers to accumulator.
+      MTLOHI,
+
+      // Mult nodes.
+      Mult,
+      Multu,
+
+      // MAdd/Sub nodes
+      MAdd,
+      MAddu,
+      MSub,
+      MSubu,
+
+      // DivRem(u)
+      DivRem,
+      DivRemU,
+      DivRem16,
+      DivRemU16,
+
+      BuildPairF64,
+      ExtractElementF64,
+
       Wrapper,
+
       DynAlloc,
-      Sync
+
+      Sync,
+
+      Ext,
+      Ins,
+      CIns,
+
+      // EXTR.W instrinsic nodes.
+      EXTP,
+      EXTPDP,
+      EXTR_S_H,
+      EXTR_W,
+      EXTR_R_W,
+      EXTR_RS_W,
+      SHILO,
+      MTHLIP,
+
+      // DPA.W intrinsic nodes.
+      MULSAQ_S_W_PH,
+      MAQ_S_W_PHL,
+      MAQ_S_W_PHR,
+      MAQ_SA_W_PHL,
+      MAQ_SA_W_PHR,
+      DPAU_H_QBL,
+      DPAU_H_QBR,
+      DPSU_H_QBL,
+      DPSU_H_QBR,
+      DPAQ_S_W_PH,
+      DPSQ_S_W_PH,
+      DPAQ_SA_L_W,
+      DPSQ_SA_L_W,
+      DPA_W_PH,
+      DPS_W_PH,
+      DPAQX_S_W_PH,
+      DPAQX_SA_W_PH,
+      DPAX_W_PH,
+      DPSX_W_PH,
+      DPSQX_S_W_PH,
+      DPSQX_SA_W_PH,
+      MULSA_W_PH,
+
+      MULT,
+      MULTU,
+      MADD_DSP,
+      MADDU_DSP,
+      MSUB_DSP,
+      MSUBU_DSP,
+
+      // DSP shift nodes.
+      SHLL_DSP,
+      SHRA_DSP,
+      SHRL_DSP,
+
+      // DSP setcc and select_cc nodes.
+      SETCC_DSP,
+      SELECT_CC_DSP,
+
+      // Vector comparisons.
+      // These take a vector and return a boolean.
+      VALL_ZERO,
+      VANY_ZERO,
+      VALL_NONZERO,
+      VANY_NONZERO,
+
+      // These take a vector and return a vector bitmask.
+      VCEQ,
+      VCLE_S,
+      VCLE_U,
+      VCLT_S,
+      VCLT_U,
+
+      // Vector Shuffle with mask as an operand
+      VSHF,  // Generic shuffle
+      SHF,   // 4-element set shuffle.
+      ILVEV, // Interleave even elements
+      ILVOD, // Interleave odd elements
+      ILVL,  // Interleave left elements
+      ILVR,  // Interleave right elements
+      PCKEV, // Pack even elements
+      PCKOD, // Pack odd elements
+
+      // Vector Lane Copy
+      INSVE, // Copy element from one vector to another
+
+      // Combined (XOR (OR $a, $b), -1)
+      VNOR,
+
+      // Extended vector element extraction
+      VEXTRACT_SEXT_ELT,
+      VEXTRACT_ZEXT_ELT,
+
+      // Load/Store Left/Right nodes.
+      LWL = ISD::FIRST_TARGET_MEMORY_OPCODE,
+      LWR,
+      SWL,
+      SWR,
+      LDL,
+      LDR,
+      SDL,
+      SDR
     };
 
   } // ene namespace FgpuISD
@@ -103,9 +257,6 @@ class TargetRegisterClass;
   //===--------------------------------------------------------------------===//
   // TargetLowering Implementation
   //===--------------------------------------------------------------------===//
-  namespace FGPU {
-    bool isKernelFunction(const Function &F);
-  } // namespace FGPU
 
   class FgpuTargetLowering : public TargetLowering  {
 
@@ -193,6 +344,20 @@ class TargetRegisterClass;
     Register getRegisterByName(const char* RegName, LLT VT,
                                const MachineFunction &MF) const override;
 
+    /// If a physical register, this returns the register that receives the
+    /// exception address on entry to an EH pad.
+    Register
+    getExceptionPointerRegister(const Constant *PersonalityFn) const override {
+      return ABI.IsN64() ? Fgpu::A0_64 : Fgpu::A0;
+    }
+
+    /// If a physical register, this returns the register that receives the
+    /// exception typeid on entry to a landing pad.
+    Register
+    getExceptionSelectorRegister(const Constant *PersonalityFn) const override {
+      return ABI.IsN64() ? Fgpu::A1_64 : Fgpu::A1;
+    }
+
     bool isJumpTableRelative() const override {
       return getTargetMachine().isPositionIndependent();
     }
@@ -203,6 +368,115 @@ class TargetRegisterClass;
 
   protected:
     SDValue getGlobalReg(SelectionDAG &DAG, EVT Ty) const;
+
+    // This method creates the following nodes, which are necessary for
+    // computing a local symbol's address:
+    //
+    // (add (load (wrapper $gp, %got(sym)), %lo(sym))
+    template <class NodeTy>
+    SDValue getAddrLocal(NodeTy *N, const SDLoc &DL, EVT Ty, SelectionDAG &DAG,
+                         bool IsN32OrN64) const {
+      unsigned GOTFlag = IsN32OrN64 ? FgpuII::MO_GOT_PAGE : FgpuII::MO_GOT;
+      SDValue GOT = DAG.getNode(FgpuISD::Wrapper, DL, Ty, getGlobalReg(DAG, Ty),
+                                getTargetNode(N, Ty, DAG, GOTFlag));
+      SDValue Load =
+          DAG.getLoad(Ty, DL, DAG.getEntryNode(), GOT,
+                      MachinePointerInfo::getGOT(DAG.getMachineFunction()));
+      unsigned LoFlag = IsN32OrN64 ? FgpuII::MO_GOT_OFST : FgpuII::MO_ABS_LO;
+      SDValue Lo = DAG.getNode(FgpuISD::Lo, DL, Ty,
+                               getTargetNode(N, Ty, DAG, LoFlag));
+      return DAG.getNode(ISD::ADD, DL, Ty, Load, Lo);
+    }
+
+    // This method creates the following nodes, which are necessary for
+    // computing a global symbol's address:
+    //
+    // (load (wrapper $gp, %got(sym)))
+    template <class NodeTy>
+    SDValue getAddrGlobal(NodeTy *N, const SDLoc &DL, EVT Ty, SelectionDAG &DAG,
+                          unsigned Flag, SDValue Chain,
+                          const MachinePointerInfo &PtrInfo) const {
+      SDValue Tgt = DAG.getNode(FgpuISD::Wrapper, DL, Ty, getGlobalReg(DAG, Ty),
+                                getTargetNode(N, Ty, DAG, Flag));
+      return DAG.getLoad(Ty, DL, Chain, Tgt, PtrInfo);
+    }
+
+    // This method creates the following nodes, which are necessary for
+    // computing a global symbol's address in large-GOT mode:
+    //
+    // (load (wrapper (add %hi(sym), $gp), %lo(sym)))
+    template <class NodeTy>
+    SDValue getAddrGlobalLargeGOT(NodeTy *N, const SDLoc &DL, EVT Ty,
+                                  SelectionDAG &DAG, unsigned HiFlag,
+                                  unsigned LoFlag, SDValue Chain,
+                                  const MachinePointerInfo &PtrInfo) const {
+      SDValue Hi = DAG.getNode(FgpuISD::GotHi, DL, Ty,
+                               getTargetNode(N, Ty, DAG, HiFlag));
+      Hi = DAG.getNode(ISD::ADD, DL, Ty, Hi, getGlobalReg(DAG, Ty));
+      SDValue Wrapper = DAG.getNode(FgpuISD::Wrapper, DL, Ty, Hi,
+                                    getTargetNode(N, Ty, DAG, LoFlag));
+      return DAG.getLoad(Ty, DL, Chain, Wrapper, PtrInfo);
+    }
+
+    // This method creates the following nodes, which are necessary for
+    // computing a symbol's address in non-PIC mode:
+    //
+    // (add %hi(sym), %lo(sym))
+    //
+    // This method covers O32, N32 and N64 in sym32 mode.
+    template <class NodeTy>
+    SDValue getAddrNonPIC(NodeTy *N, const SDLoc &DL, EVT Ty,
+                          SelectionDAG &DAG) const {
+      SDValue Hi = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_HI);
+      SDValue Lo = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_LO);
+      return DAG.getNode(ISD::ADD, DL, Ty,
+                         DAG.getNode(FgpuISD::Hi, DL, Ty, Hi),
+                         DAG.getNode(FgpuISD::Lo, DL, Ty, Lo));
+   }
+
+   // This method creates the following nodes, which are necessary for
+   // computing a symbol's address in non-PIC mode for N64.
+   //
+   // (add (shl (add (shl (add %highest(sym), %higher(sim)), 16), %high(sym)),
+   //            16), %lo(%sym))
+   //
+   // FIXME: This method is not efficent for (micro)FGPU64R6.
+   template <class NodeTy>
+   SDValue getAddrNonPICSym64(NodeTy *N, const SDLoc &DL, EVT Ty,
+                          SelectionDAG &DAG) const {
+      SDValue Hi = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_HI);
+      SDValue Lo = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_LO);
+
+      SDValue Highest =
+          DAG.getNode(FgpuISD::Highest, DL, Ty,
+                      getTargetNode(N, Ty, DAG, FgpuII::MO_HIGHEST));
+      SDValue Higher = getTargetNode(N, Ty, DAG, FgpuII::MO_HIGHER);
+      SDValue HigherPart =
+          DAG.getNode(ISD::ADD, DL, Ty, Highest,
+                      DAG.getNode(FgpuISD::Higher, DL, Ty, Higher));
+      SDValue Cst = DAG.getConstant(16, DL, MVT::i32);
+      SDValue Shift = DAG.getNode(ISD::SHL, DL, Ty, HigherPart, Cst);
+      SDValue Add = DAG.getNode(ISD::ADD, DL, Ty, Shift,
+                                DAG.getNode(FgpuISD::Hi, DL, Ty, Hi));
+      SDValue Shift2 = DAG.getNode(ISD::SHL, DL, Ty, Add, Cst);
+
+      return DAG.getNode(ISD::ADD, DL, Ty, Shift2,
+                         DAG.getNode(FgpuISD::Lo, DL, Ty, Lo));
+   }
+
+    // This method creates the following nodes, which are necessary for
+    // computing a symbol's address using gp-relative addressing:
+    //
+    // (add $gp, %gp_rel(sym))
+    template <class NodeTy>
+    SDValue getAddrGPRel(NodeTy *N, const SDLoc &DL, EVT Ty,
+                         SelectionDAG &DAG, bool IsN64) const {
+      SDValue GPRel = getTargetNode(N, Ty, DAG, FgpuII::MO_GPREL);
+      return DAG.getNode(
+          ISD::ADD, DL, Ty,
+          DAG.getRegister(IsN64 ? Fgpu::GP_64 : Fgpu::GP, Ty),
+          DAG.getNode(FgpuISD::GPRel, DL, DAG.getVTList(Ty), GPRel));
+    }
 
     /// This function fills Ops, which is the list of operands that will later
     /// be used when a function call node is created. It also generates
@@ -425,6 +699,9 @@ class TargetRegisterClass;
 
   /// Create FgpuTargetLowering objects.
   const FgpuTargetLowering *
+  createFgpu16TargetLowering(const FgpuTargetMachine &TM,
+                             const FgpuSubtarget &STI);
+  const FgpuTargetLowering *
   createFgpuSETargetLowering(const FgpuTargetMachine &TM,
                              const FgpuSubtarget &STI);
 
@@ -437,4 +714,4 @@ FastISel *createFastISel(FunctionLoweringInfo &funcInfo,
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_Fgpu_FgpuISELLOWERING_H
+#endif // LLVM_LIB_TARGET_FGPU_FGPUISELLOWERING_H

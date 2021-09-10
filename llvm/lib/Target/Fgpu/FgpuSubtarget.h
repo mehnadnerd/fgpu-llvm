@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuSUBTARGET_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuSUBTARGET_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUSUBTARGET_H
+#define LLVM_LIB_TARGET_FGPU_FGPUSUBTARGET_H
 
 #include "MCTargetDesc/FgpuABIInfo.h"
 #include "FgpuFrameLowering.h"
@@ -80,7 +80,7 @@ class FgpuSubtarget : public FgpuGenSubtargetInfo {
   // floating point registers instead of only using even ones.
   bool IsSingleFloat;
 
-  // IsFPXX - Fgpu O32 modeless ABI.
+  // IsFPXX - FGPU O32 modeless ABI.
   bool IsFPXX;
 
   // NoABICalls - Disable SVR4-style position-independent code.
@@ -108,10 +108,10 @@ class FgpuSubtarget : public FgpuGenSubtargetInfo {
   // HasVFPU - Processor has a vector floating point unit.
   bool HasVFPU;
 
-  // CPU supports cnFgpu (Cavium Networks Octeon CPU).
+  // CPU supports cnFGPU (Cavium Networks Octeon CPU).
   bool HasCnFgpu;
 
-  // CPU supports cnFgpuP (Cavium Networks Octeon+ CPU).
+  // CPU supports cnFGPUP (Cavium Networks Octeon+ CPU).
   bool HasCnFgpuP;
 
   // isLinux - Target system is Linux. Is false we consider ELFOS for now.
@@ -122,19 +122,19 @@ class FgpuSubtarget : public FgpuGenSubtargetInfo {
 
   /// Features related to the presence of specific instructions.
 
-  // HasFgpu3_32 - The subset of Fgpu-III instructions added to Fgpu32
+  // HasFgpu3_32 - The subset of FGPU-III instructions added to FGPU32
   bool HasFgpu3_32;
 
-  // HasFgpu3_32r2 - The subset of Fgpu-III instructions added to Fgpu32r2
+  // HasFgpu3_32r2 - The subset of FGPU-III instructions added to FGPU32r2
   bool HasFgpu3_32r2;
 
-  // HasFgpu4_32 - Has the subset of Fgpu-IV present in Fgpu32
+  // HasFgpu4_32 - Has the subset of FGPU-IV present in FGPU32
   bool HasFgpu4_32;
 
-  // HasFgpu4_32r2 - Has the subset of Fgpu-IV present in Fgpu32r2
+  // HasFgpu4_32r2 - Has the subset of FGPU-IV present in FGPU32r2
   bool HasFgpu4_32r2;
 
-  // HasFgpu5_32r2 - Has the subset of Fgpu-V present in Fgpu32r2
+  // HasFgpu5_32r2 - Has the subset of FGPU-V present in FGPU32r2
   bool HasFgpu5_32r2;
 
   // InFgpu16 -- can process Fgpu16 instructions
@@ -207,7 +207,7 @@ class FgpuSubtarget : public FgpuGenSubtargetInfo {
 
   InstrItineraryData InstrItins;
 
-  // We can override the determination of whether we are in Fgpu16 mode
+  // We can override the determination of whether we are in fgpu16 mode
   // as from the command line
   enum {NoOverride, Fgpu16Override, NoFgpu16Override} OverrideMode;
 
@@ -297,21 +297,7 @@ public:
   bool isSingleFloat() const { return IsSingleFloat; }
   bool isTargetELF() const { return TargetTriple.isOSBinFormatELF(); }
   bool hasVFPU() const { return HasVFPU; }
-  bool inFgpu16Mode() const { return InFgpu16Mode; }
-  bool inFgpu16ModeDefault() const {
-    return InFgpu16Mode;
-  }
-  // Hard float for Fgpu16 means essentially to compile as soft float
-  // but to use a runtime library for soft float that is written with
-  // native Fgpu32 floating point instructions (those runtime routines
-  // run in Fgpu32 hard float mode).
-  bool inFgpu16HardFloat() const {
-    return inFgpu16Mode() && InFgpu16HardFloat;
-  }
-  bool inMicroFgpuMode() const { return InMicroFgpuMode && !InFgpu16Mode; }
-  bool inMicroFgpu32r6Mode() const {
-    return inMicroFgpuMode() && hasFgpu32r6();
-  }
+
   bool hasDSP() const { return HasDSP; }
   bool hasDSPR2() const { return HasDSPR2; }
   bool hasDSPR3() const { return HasDSPR3; }
@@ -337,24 +323,19 @@ public:
   bool useXGOT() const { return UseXGOT; }
 
   bool enableLongBranchPass() const {
-    return hasStandardEncoding() || inMicroFgpuMode() || allowMixed16_32();
+    return hasStandardEncoding();
   }
 
   /// Features related to the presence of specific instructions.
-  bool hasExtractInsert() const { return !inFgpu16Mode() && hasFgpu32r2(); }
+  bool hasExtractInsert() const { return hasFgpu32r2(); }
   bool hasMTHC1() const { return hasFgpu32r2(); }
-
-  bool allowMixed16_32() const { return inFgpu16ModeDefault() |
-                                        AllowMixed16_32; }
-
-  bool os16() const { return Os16; }
 
   bool isTargetNaCl() const { return TargetTriple.isOSNaCl(); }
 
   bool isXRaySupported() const override { return true; }
 
   // for now constant islands are on for the whole compilation unit but we only
-  // really use them if in addition we are in Fgpu16 mode
+  // really use them if in addition we are in fgpu16 mode
   static bool useConstantIslands();
 
   Align getStackAlignment() const { return stackAlignment; }
@@ -367,7 +348,7 @@ public:
 
   /// Does the system support unaligned memory access.
   ///
-  /// Fgpu32r6/Fgpu64r6 require full unaligned access support but does not
+  /// FGPU32r6/FGPU64r6 require full unaligned access support but does not
   /// specify which component of the system provides it. Hardware, software, and
   /// hybrid implementations are all valid.
   bool systemSupportsUnalignedAccess() const { return hasFgpu32r6(); }

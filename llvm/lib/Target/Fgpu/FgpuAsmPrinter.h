@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuASMPRINTER_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuASMPRINTER_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUASMPRINTER_H
+#define LLVM_LIB_TARGET_FGPU_FGPUASMPRINTER_H
 
 #include "FgpuMCInstLower.h"
 #include "FgpuSubtarget.h"
@@ -43,6 +43,16 @@ class LLVM_LIBRARY_VISIBILITY FgpuAsmPrinter : public AsmPrinter {
 
   void EmitInstrWithMacroNoAT(const MachineInstr *MI);
 
+  //===------------------------------------------------------------------===//
+  // XRay implementation
+  //===------------------------------------------------------------------===//
+
+public:
+  // XRay-specific lowering for Fgpu.
+  void LowerPATCHABLE_FUNCTION_ENTER(const MachineInstr &MI);
+  void LowerPATCHABLE_FUNCTION_EXIT(const MachineInstr &MI);
+  void LowerPATCHABLE_TAIL_CALL(const MachineInstr &MI);
+
 private:
   /// MCP - Keep a pointer to constantpool entries of the current
   /// MachineFunction.
@@ -52,9 +62,20 @@ private:
   /// pool entries so we can properly mark them as data regions.
   bool InConstantPool = false;
 
+  std::map<const char *, const Fgpu16HardFloatInfo::FuncSignature *>
+      StubsNeeded;
+
+  void EmitSled(const MachineInstr &MI, SledKind Kind);
+
   // tblgen'erated function.
   bool emitPseudoExpansionLowering(MCStreamer &OutStreamer,
                                    const MachineInstr *MI);
+
+  // Emit PseudoReturn, PseudoReturn64, PseudoIndirectBranch,
+  // and PseudoIndirectBranch64 as a JR, JR_MM, JALR, or JALR64 as appropriate
+  // for the target.
+  void emitPseudoIndirectBranch(MCStreamer &OutStreamer,
+                                const MachineInstr *MI);
 
   // lowerOperand - Convert a MachineOperand into the equivalent MCOperand.
   bool lowerOperand(const MachineOperand &MO, MCOperand &MCOp);
@@ -64,6 +85,32 @@ private:
   void emitInlineAsmEnd(const MCSubtargetInfo &StartInfo,
                         const MCSubtargetInfo *EndInfo) const override;
 
+  void EmitJal(const MCSubtargetInfo &STI, MCSymbol *Symbol);
+
+  void EmitInstrReg(const MCSubtargetInfo &STI, unsigned Opcode, unsigned Reg);
+
+  void EmitInstrRegReg(const MCSubtargetInfo &STI, unsigned Opcode,
+                       unsigned Reg1, unsigned Reg2);
+
+  void EmitInstrRegRegReg(const MCSubtargetInfo &STI, unsigned Opcode,
+                          unsigned Reg1, unsigned Reg2, unsigned Reg3);
+
+  void EmitMovFPIntPair(const MCSubtargetInfo &STI, unsigned MovOpc,
+                        unsigned Reg1, unsigned Reg2, unsigned FPReg1,
+                        unsigned FPReg2, bool LE);
+
+  void EmitSwapFPIntParams(const MCSubtargetInfo &STI,
+                           Fgpu16HardFloatInfo::FPParamVariant, bool LE,
+                           bool ToFP);
+
+  void EmitSwapFPIntRetval(const MCSubtargetInfo &STI,
+                           Fgpu16HardFloatInfo::FPReturnVariant, bool LE);
+
+  void EmitFPCallStub(const char *, const Fgpu16HardFloatInfo::FuncSignature *);
+
+  void NaClAlignIndirectJumpTargets(MachineFunction &MF);
+
+  bool isLongBranchPseudo(int Opcode) const;
 
 public:
   const FgpuSubtarget *Subtarget;
@@ -114,4 +161,4 @@ public:
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_Fgpu_FgpuASMPRINTER_H
+#endif // LLVM_LIB_TARGET_FGPU_FGPUASMPRINTER_H

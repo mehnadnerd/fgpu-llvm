@@ -14,11 +14,11 @@
 // size in bytes; FgpuLongBranch only expects it to be the correct upper bound.
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuINSTRINFO_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuINSTRINFO_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUINSTRINFO_H
+#define LLVM_LIB_TARGET_FGPU_FGPUINSTRINFO_H
 
-#include "Fgpu.h"
 #include "MCTargetDesc/FgpuMCTargetDesc.h"
+#include "Fgpu.h"
 #include "FgpuRegisterInfo.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -194,4 +194,4 @@ const FgpuInstrInfo *createFgpuSEInstrInfo(const FgpuSubtarget &STI);
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_Fgpu_FgpuINSTRINFO_H
+#endif // LLVM_LIB_TARGET_FGPU_FGPUINSTRINFO_H

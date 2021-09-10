@@ -13,7 +13,7 @@
 //
 // This is currently only used for expanding atomic pseudos after register
 // allocation. We do this to avoid the fast register allocator introducing
-// spills between ll and sc. These stores cause some Fgpu implementations to
+// spills between ll and sc. These stores cause some FGPU implementations to
 // abort the atomic RMW sequence.
 //
 //===----------------------------------------------------------------------===//
@@ -27,7 +27,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "Fgpu-pseudo"
+#define DEBUG_TYPE "fgpu-pseudo"
 
 namespace {
   class FgpuExpandPseudo : public MachineFunctionPass {
@@ -87,17 +87,10 @@ bool FgpuExpandPseudo::expandAtomicCmpSwapSubword(
   unsigned SEOp =
       I->getOpcode() == Fgpu::ATOMIC_CMP_SWAP_I8_POSTRA ? Fgpu::SEB : Fgpu::SEH;
 
-  if (STI->inMicroFgpuMode()) {
-      LL = STI->hasFgpu32r6() ? Fgpu::LL_MMR6 : Fgpu::LL_MM;
-      SC = STI->hasFgpu32r6() ? Fgpu::SC_MMR6 : Fgpu::SC_MM;
-      BNE = STI->hasFgpu32r6() ? Fgpu::BNEC_MMR6 : Fgpu::BNE_MM;
-      BEQ = STI->hasFgpu32r6() ? Fgpu::BEQC_MMR6 : Fgpu::BEQ_MM;
-  } else {
-    LL = STI->hasFgpu32r6() ? (ArePtrs64bit ? Fgpu::LL64_R6 : Fgpu::LL_R6)
-                            : (ArePtrs64bit ? Fgpu::LL64 : Fgpu::LL);
-    SC = STI->hasFgpu32r6() ? (ArePtrs64bit ? Fgpu::SC64_R6 : Fgpu::SC_R6)
-                            : (ArePtrs64bit ? Fgpu::SC64 : Fgpu::SC);
-  }
+  LL = STI->hasFgpu32r6() ? (ArePtrs64bit ? Fgpu::LL64_R6 : Fgpu::LL_R6)
+                          : (ArePtrs64bit ? Fgpu::LL64 : Fgpu::LL);
+  SC = STI->hasFgpu32r6() ? (ArePtrs64bit ? Fgpu::SC64_R6 : Fgpu::SC_R6)
+                          : (ArePtrs64bit ? Fgpu::SC64 : Fgpu::SC);
 
   Register Dest = I->getOperand(0).getReg();
   Register Ptr = I->getOperand(1).getReg();
@@ -213,21 +206,14 @@ bool FgpuExpandPseudo::expandAtomicCmpSwap(MachineBasicBlock &BB,
   unsigned LL, SC, ZERO, BNE, BEQ, MOVE;
 
   if (Size == 4) {
-    if (STI->inMicroFgpuMode()) {
-      LL = STI->hasFgpu32r6() ? Fgpu::LL_MMR6 : Fgpu::LL_MM;
-      SC = STI->hasFgpu32r6() ? Fgpu::SC_MMR6 : Fgpu::SC_MM;
-      BNE = STI->hasFgpu32r6() ? Fgpu::BNEC_MMR6 : Fgpu::BNE_MM;
-      BEQ = STI->hasFgpu32r6() ? Fgpu::BEQC_MMR6 : Fgpu::BEQ_MM;
-    } else {
-      LL = STI->hasFgpu32r6()
-               ? (ArePtrs64bit ? Fgpu::LL64_R6 : Fgpu::LL_R6)
-               : (ArePtrs64bit ? Fgpu::LL64 : Fgpu::LL);
-      SC = STI->hasFgpu32r6()
-               ? (ArePtrs64bit ? Fgpu::SC64_R6 : Fgpu::SC_R6)
-               : (ArePtrs64bit ? Fgpu::SC64 : Fgpu::SC);
-      BNE = Fgpu::BNE;
-      BEQ = Fgpu::BEQ;
-    }
+    LL = STI->hasFgpu32r6()
+             ? (ArePtrs64bit ? Fgpu::LL64_R6 : Fgpu::LL_R6)
+             : (ArePtrs64bit ? Fgpu::LL64 : Fgpu::LL);
+    SC = STI->hasFgpu32r6()
+             ? (ArePtrs64bit ? Fgpu::SC64_R6 : Fgpu::SC_R6)
+             : (ArePtrs64bit ? Fgpu::SC64 : Fgpu::SC);
+    BNE = Fgpu::BNE;
+    BEQ = Fgpu::BEQ;
 
     ZERO = Fgpu::ZERO;
     MOVE = Fgpu::OR;
@@ -312,30 +298,17 @@ bool FgpuExpandPseudo::expandAtomicBinOpSubword(
   unsigned BEQ = Fgpu::BEQ;
   unsigned SEOp = Fgpu::SEH;
 
-  if (STI->inMicroFgpuMode()) {
-      LL = STI->hasFgpu32r6() ? Fgpu::LL_MMR6 : Fgpu::LL_MM;
-      SC = STI->hasFgpu32r6() ? Fgpu::SC_MMR6 : Fgpu::SC_MM;
-      BEQ = STI->hasFgpu32r6() ? Fgpu::BEQC_MMR6 : Fgpu::BEQ_MM;
-      SLT = Fgpu::SLT_MM;
-      SLTu = Fgpu::SLTu_MM;
-      OR = STI->hasFgpu32r6() ? Fgpu::OR_MMR6 : Fgpu::OR_MM;
-      MOVN = Fgpu::MOVN_I_MM;
-      MOVZ = Fgpu::MOVZ_I_MM;
-      SELNEZ = STI->hasFgpu32r6() ? Fgpu::SELNEZ_MMR6 : Fgpu::SELNEZ;
-      SELEQZ = STI->hasFgpu32r6() ? Fgpu::SELEQZ_MMR6 : Fgpu::SELEQZ;
-  } else {
-    LL = STI->hasFgpu32r6() ? (ArePtrs64bit ? Fgpu::LL64_R6 : Fgpu::LL_R6)
-                            : (ArePtrs64bit ? Fgpu::LL64 : Fgpu::LL);
-    SC = STI->hasFgpu32r6() ? (ArePtrs64bit ? Fgpu::SC64_R6 : Fgpu::SC_R6)
-                            : (ArePtrs64bit ? Fgpu::SC64 : Fgpu::SC);
-    SLT = Fgpu::SLT;
-    SLTu = Fgpu::SLTu;
-    OR = Fgpu::OR;
-    MOVN = Fgpu::MOVN_I_I;
-    MOVZ = Fgpu::MOVZ_I_I;
-    SELNEZ = Fgpu::SELNEZ;
-    SELEQZ = Fgpu::SELEQZ;
-  }
+  LL = STI->hasFgpu32r6() ? (ArePtrs64bit ? Fgpu::LL64_R6 : Fgpu::LL_R6)
+                          : (ArePtrs64bit ? Fgpu::LL64 : Fgpu::LL);
+  SC = STI->hasFgpu32r6() ? (ArePtrs64bit ? Fgpu::SC64_R6 : Fgpu::SC_R6)
+                          : (ArePtrs64bit ? Fgpu::SC64 : Fgpu::SC);
+  SLT = Fgpu::SLT;
+  SLTu = Fgpu::SLTu;
+  OR = Fgpu::OR;
+  MOVN = Fgpu::MOVN_I_I;
+  MOVZ = Fgpu::MOVZ_I_I;
+  SELNEZ = Fgpu::SELNEZ;
+  SELEQZ = Fgpu::SELEQZ;
 
   bool IsSwap = false;
   bool IsNand = false;
@@ -586,33 +559,20 @@ bool FgpuExpandPseudo::expandAtomicBinOp(MachineBasicBlock &BB,
   unsigned LL, SC, ZERO, BEQ, SLT, SLTu, OR, MOVN, MOVZ, SELNEZ, SELEQZ;
 
   if (Size == 4) {
-    if (STI->inMicroFgpuMode()) {
-      LL = STI->hasFgpu32r6() ? Fgpu::LL_MMR6 : Fgpu::LL_MM;
-      SC = STI->hasFgpu32r6() ? Fgpu::SC_MMR6 : Fgpu::SC_MM;
-      BEQ = STI->hasFgpu32r6() ? Fgpu::BEQC_MMR6 : Fgpu::BEQ_MM;
-      SLT = Fgpu::SLT_MM;
-      SLTu = Fgpu::SLTu_MM;
-      OR = STI->hasFgpu32r6() ? Fgpu::OR_MMR6 : Fgpu::OR_MM;
-      MOVN = Fgpu::MOVN_I_MM;
-      MOVZ = Fgpu::MOVZ_I_MM;
-      SELNEZ = STI->hasFgpu32r6() ? Fgpu::SELNEZ_MMR6 : Fgpu::SELNEZ;
-      SELEQZ = STI->hasFgpu32r6() ? Fgpu::SELEQZ_MMR6 : Fgpu::SELEQZ;
-    } else {
-      LL = STI->hasFgpu32r6()
-               ? (ArePtrs64bit ? Fgpu::LL64_R6 : Fgpu::LL_R6)
-               : (ArePtrs64bit ? Fgpu::LL64 : Fgpu::LL);
-      SC = STI->hasFgpu32r6()
-               ? (ArePtrs64bit ? Fgpu::SC64_R6 : Fgpu::SC_R6)
-               : (ArePtrs64bit ? Fgpu::SC64 : Fgpu::SC);
-      BEQ = Fgpu::BEQ;
-      SLT = Fgpu::SLT;
-      SLTu = Fgpu::SLTu;
-      OR = Fgpu::OR;
-      MOVN = Fgpu::MOVN_I_I;
-      MOVZ = Fgpu::MOVZ_I_I;
-      SELNEZ = Fgpu::SELNEZ;
-      SELEQZ = Fgpu::SELEQZ;
-    }
+    LL = STI->hasFgpu32r6()
+             ? (ArePtrs64bit ? Fgpu::LL64_R6 : Fgpu::LL_R6)
+             : (ArePtrs64bit ? Fgpu::LL64 : Fgpu::LL);
+    SC = STI->hasFgpu32r6()
+             ? (ArePtrs64bit ? Fgpu::SC64_R6 : Fgpu::SC_R6)
+             : (ArePtrs64bit ? Fgpu::SC64 : Fgpu::SC);
+    BEQ = Fgpu::BEQ;
+    SLT = Fgpu::SLT;
+    SLTu = Fgpu::SLTu;
+    OR = Fgpu::OR;
+    MOVN = Fgpu::MOVN_I_I;
+    MOVZ = Fgpu::MOVZ_I_I;
+    SELNEZ = Fgpu::SELNEZ;
+    SELEQZ = Fgpu::SELEQZ;
 
     ZERO = Fgpu::ZERO;
   } else {

@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuFRAMELOWERING_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuFRAMELOWERING_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUFRAMELOWERING_H
+#define LLVM_LIB_TARGET_FGPU_FGPUFRAMELOWERING_H
 
 #include "Fgpu.h"
 #include "llvm/CodeGen/TargetFrameLowering.h"
@@ -50,7 +50,6 @@ protected:
 };
 
 /// Create FgpuFrameLowering objects.
-const FgpuFrameLowering *createFgpu16FrameLowering(const FgpuSubtarget &ST);
 const FgpuFrameLowering *createFgpuSEFrameLowering(const FgpuSubtarget &ST);
 
 } // End llvm namespace

@@ -21,24 +21,24 @@
 using namespace llvm;
 
 static cl::opt<unsigned>
-SSThreshold("Fgpu-ssection-threshold", cl::Hidden,
+SSThreshold("fgpu-ssection-threshold", cl::Hidden,
             cl::desc("Small data and bss section threshold size (default=8)"),
             cl::init(8));
 
 static cl::opt<bool>
 LocalSData("mlocal-sdata", cl::Hidden,
-           cl::desc("Fgpu: Use gp_rel for object-local data."),
+           cl::desc("FGPU: Use gp_rel for object-local data."),
            cl::init(true));
 
 static cl::opt<bool>
 ExternSData("mextern-sdata", cl::Hidden,
-            cl::desc("Fgpu: Use gp_rel for data that is not defined by the "
+            cl::desc("FGPU: Use gp_rel for data that is not defined by the "
                      "current object."),
             cl::init(true));
 
 static cl::opt<bool>
 EmbeddedData("membedded-data", cl::Hidden,
-             cl::desc("Fgpu: Try to allocate variables in the following"
+             cl::desc("FGPU: Try to allocate variables in the following"
                       " sections if possible: .rodata, .sdata, .data ."),
              cl::init(false));
 
@@ -47,11 +47,11 @@ void FgpuTargetObjectFile::Initialize(MCContext &Ctx, const TargetMachine &TM){
 
   SmallDataSection = getContext().getELFSection(
       ".sdata", ELF::SHT_PROGBITS,
-      ELF::SHF_WRITE | ELF::SHF_ALLOC | ELF::SHF_Fgpu_GPREL);
+      ELF::SHF_WRITE | ELF::SHF_ALLOC | ELF::SHF_MIPS_GPREL);
 
   SmallBSSSection = getContext().getELFSection(".sbss", ELF::SHT_NOBITS,
                                                ELF::SHF_WRITE | ELF::SHF_ALLOC |
-                                                   ELF::SHF_Fgpu_GPREL);
+                                                   ELF::SHF_MIPS_GPREL);
   this->TM = &static_cast<const FgpuTargetMachine &>(TM);
 }
 

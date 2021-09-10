@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuMACHINEFUNCTION_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuMACHINEFUNCTION_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUMACHINEFUNCTION_H
+#define LLVM_LIB_TARGET_FGPU_FGPUMACHINEFUNCTION_H
 
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
@@ -122,4 +122,4 @@ private:
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_Fgpu_FgpuMACHINEFUNCTION_H
+#endif // LLVM_LIB_TARGET_FGPU_FGPUMACHINEFUNCTION_H

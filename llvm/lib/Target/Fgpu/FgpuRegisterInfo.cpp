@@ -1,4 +1,4 @@
-//===- FgpuRegisterInfo.cpp - Fgpu Register Information -------------------===//
+//===- FgpuRegisterInfo.cpp - FGPU Register Information -------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains the Fgpu implementation of the TargetRegisterInfo class.
+// This file contains the FGPU implementation of the TargetRegisterInfo class.
 //
 //===----------------------------------------------------------------------===//
 
 #include "FgpuRegisterInfo.h"
-#include "Fgpu.h"
 #include "MCTargetDesc/FgpuABIInfo.h"
+#include "Fgpu.h"
 #include "FgpuMachineFunction.h"
 #include "FgpuSubtarget.h"
 #include "FgpuTargetMachine.h"
@@ -34,7 +34,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "Fgpu-reg-info"
+#define DEBUG_TYPE "fgpu-reg-info"
 
 #define GET_REGINFO_TARGET_DESC
 #include "FgpuGenRegisterInfo.inc"
@@ -219,7 +219,7 @@ getReservedRegs(const MachineFunction &MF) const {
   for (MCPhysReg Reg : Fgpu::MSACtrlRegClass)
     Reserved.set(Reg);
 
-  // Reserve RA if in Fgpu16 mode.
+  // Reserve RA if in fgpu16 mode.
   if (Subtarget.inFgpu16Mode()) {
     const FgpuFunctionInfo *FgpuFI = MF.getInfo<FgpuFunctionInfo>();
     Reserved.set(Fgpu::RA);

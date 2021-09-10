@@ -1,9 +1,8 @@
 //===-- FgpuMCTargetDesc.h - Fgpu Target Descriptions -----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,13 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FGPUMCTARGETDESC_H
-#define FGPUMCTARGETDESC_H
+#ifndef LLVM_LIB_TARGET_FGPU_MCTARGETDESC_FGPUMCTARGETDESC_H
+#define LLVM_LIB_TARGET_FGPU_MCTARGETDESC_FGPUMCTARGETDESC_H
 
 #include "llvm/Support/DataTypes.h"
-#include "llvm/MC/MCTargetOptions.h"
-#include <memory>
 
+#include <memory>
 
 namespace llvm {
 class MCAsmBackend;
@@ -27,25 +25,29 @@ class MCInstrInfo;
 class MCObjectTargetWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
+class MCTargetOptions;
 class StringRef;
 class Target;
 class Triple;
-class raw_ostream;
-class raw_pwrite_stream;
 
-extern Target TheFgpuTarget;
-
-MCCodeEmitter *createFgpuMCCodeEmitter(const MCInstrInfo &MCII,
+MCCodeEmitter *createFgpuMCCodeEmitterEB(const MCInstrInfo &MCII,
+                                         const MCRegisterInfo &MRI,
+                                         MCContext &Ctx);
+MCCodeEmitter *createFgpuMCCodeEmitterEL(const MCInstrInfo &MCII,
                                          const MCRegisterInfo &MRI,
                                          MCContext &Ctx);
 
-MCAsmBackend *createFgpuAsmBackend(const Target &T,
-                                   const MCSubtargetInfo &STI,
+MCAsmBackend *createFgpuAsmBackend(const Target &T, const MCSubtargetInfo &STI,
                                    const MCRegisterInfo &MRI,
                                    const MCTargetOptions &Options);
 
-std::unique_ptr<MCObjectTargetWriter> createFgpuELFObjectWriter(uint8_t OSABI,
-                                          bool IsLittleEndian);
+std::unique_ptr<MCObjectTargetWriter>
+createFgpuELFObjectWriter(const Triple &TT, bool IsN32);
+
+namespace FGPU_MC {
+StringRef selectFgpuCPU(const Triple &TT, StringRef CPU);
+}
+
 } // End llvm namespace
 
 // Defines symbolic names for Fgpu registers.  This defines a mapping from

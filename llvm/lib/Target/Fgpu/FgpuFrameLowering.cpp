@@ -80,8 +80,6 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 
 const FgpuFrameLowering *FgpuFrameLowering::create(const FgpuSubtarget &ST) {
-  if (ST.inFgpu16Mode())
-    return llvm::createFgpu16FrameLowering(ST);
 
   return llvm::createFgpuSEFrameLowering(ST);
 }

@@ -12,12 +12,12 @@
 
 #include "FgpuSubtarget.h"
 #include "Fgpu.h"
-#include "FgpuCallLowering.h"
-#include "FgpuLegalizerInfo.h"
 #include "FgpuMachineFunction.h"
-#include "FgpuRegisterBankInfo.h"
 #include "FgpuRegisterInfo.h"
 #include "FgpuTargetMachine.h"
+#include "FgpuCallLowering.h"
+#include "FgpuLegalizerInfo.h"
+#include "FgpuRegisterBankInfo.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/CommandLine.h"
@@ -27,7 +27,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "Fgpu-subtarget"
+#define DEBUG_TYPE "fgpu-subtarget"
 
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
@@ -36,28 +36,28 @@ using namespace llvm;
 // FIXME: Maybe this should be on by default when Fgpu16 is specified
 //
 static cl::opt<bool>
-    Mixed16_32("Fgpu-mixed-16-32", cl::init(false),
+    Mixed16_32("fgpu-mixed-16-32", cl::init(false),
                cl::desc("Allow for a mixture of Fgpu16 "
                         "and Fgpu32 code in a single output file"),
                cl::Hidden);
 
-static cl::opt<bool> Fgpu_Os16("Fgpu-os16", cl::init(false),
+static cl::opt<bool> Fgpu_Os16("fgpu-os16", cl::init(false),
                                cl::desc("Compile all functions that don't use "
                                         "floating point as Fgpu 16"),
                                cl::Hidden);
 
-static cl::opt<bool> Fgpu16HardFloat("Fgpu16-hard-float", cl::NotHidden,
-                                     cl::desc("Enable Fgpu16 hard float."),
+static cl::opt<bool> Fgpu16HardFloat("fgpu16-hard-float", cl::NotHidden,
+                                     cl::desc("Enable fgpu16 hard float."),
                                      cl::init(false));
 
 static cl::opt<bool>
-    Fgpu16ConstantIslands("Fgpu16-constant-islands", cl::NotHidden,
-                          cl::desc("Enable Fgpu16 constant islands."),
+    Fgpu16ConstantIslands("fgpu16-constant-islands", cl::NotHidden,
+                          cl::desc("Enable fgpu16 constant islands."),
                           cl::init(true));
 
 static cl::opt<bool>
     GPOpt("mgpopt", cl::Hidden,
-          cl::desc("Enable gp-relative addressing of Fgpu small data items"));
+          cl::desc("Enable gp-relative addressing of fgpu small data items"));
 
 bool FgpuSubtarget::DspWarningPrinted = false;
 bool FgpuSubtarget::MSAWarningPrinted = false;
@@ -91,12 +91,12 @@ FgpuSubtarget::FgpuSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
   if (FgpuArchVersion == FgpuDefault)
     FgpuArchVersion = Fgpu32;
 
-  // Don't even attempt to generate code for Fgpu-I and Fgpu-V. They have not
+  // Don't even attempt to generate code for FGPU-I and FGPU-V. They have not
   // been tested and currently exist for the integrated assembler only.
   if (FgpuArchVersion == Fgpu1)
-    report_fatal_error("Code generation for Fgpu-I is not implemented", false);
+    report_fatal_error("Code generation for FGPU-I is not implemented", false);
   if (FgpuArchVersion == Fgpu5)
-    report_fatal_error("Code generation for Fgpu-V is not implemented", false);
+    report_fatal_error("Code generation for FGPU-V is not implemented", false);
 
   // Check if Architecture and ABI are compatible.
   assert(((!isGP64bit() && isABI_O32()) ||
@@ -110,8 +110,8 @@ FgpuSubtarget::FgpuSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
 
   if (isFP64bit() && !hasFgpu64() && hasFgpu32() && !hasFgpu32r2())
     report_fatal_error(
-        "FPU with 64-bit registers is not available on Fgpu32 pre revision 2. "
-        "Use -mcpu=Fgpu32r2 or greater.");
+        "FPU with 64-bit registers is not available on FGPU32 pre revision 2. "
+        "Use -mcpu=fgpu32r2 or greater.");
 
   if (!isABI_O32() && !useOddSPReg())
     report_fatal_error("-mattr=+nooddspreg requires the O32 ABI.", false);
@@ -120,18 +120,18 @@ FgpuSubtarget::FgpuSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
     report_fatal_error("FPXX is not permitted for the N32/N64 ABI's.", false);
 
   if (hasFgpu64r6() && InMicroFgpuMode)
-    report_fatal_error("microFgpu64R6 is not supported", false);
+    report_fatal_error("microFGPU64R6 is not supported", false);
 
   if (!isABI_O32() && InMicroFgpuMode)
-    report_fatal_error("microFgpu64 is not supported.", false);
+    report_fatal_error("microFGPU64 is not supported.", false);
 
   if (UseIndirectJumpsHazard) {
     if (InMicroFgpuMode)
       report_fatal_error(
-          "cannot combine indirect jumps with hazard barriers and microFgpu");
+          "cannot combine indirect jumps with hazard barriers and microFGPU");
     if (!hasFgpu32r2())
       report_fatal_error(
-          "indirect jumps with hazard barriers requires Fgpu32R2 or later");
+          "indirect jumps with hazard barriers requires FGPU32R2 or later");
   }
   if (inAbs2008Mode() && hasFgpu32() && !hasFgpu32r2()) {
     report_fatal_error("IEEE 754-2008 abs.fmt is not supported for the given "
@@ -140,7 +140,7 @@ FgpuSubtarget::FgpuSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
   }
 
   if (hasFgpu32r6()) {
-    StringRef ISA = hasFgpu64r6() ? "Fgpu64r6" : "Fgpu32r6";
+    StringRef ISA = hasFgpu64r6() ? "FGPU64r6" : "FGPU32r6";
 
     assert(isFP64bit());
     assert(isNaN2008());
@@ -165,27 +165,27 @@ FgpuSubtarget::FgpuSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
 
   if (hasDSPR2() && !DspWarningPrinted) {
     if (hasFgpu64() && !hasFgpu64r2()) {
-      errs() << "warning: the 'dspr2' ASE requires Fgpu64 revision 2 or "
+      errs() << "warning: the 'dspr2' ASE requires FGPU64 revision 2 or "
              << "greater\n";
       DspWarningPrinted = true;
     } else if (hasFgpu32() && !hasFgpu32r2()) {
-      errs() << "warning: the 'dspr2' ASE requires Fgpu32 revision 2 or "
+      errs() << "warning: the 'dspr2' ASE requires FGPU32 revision 2 or "
              << "greater\n";
       DspWarningPrinted = true;
     }
   } else if (hasDSP() && !DspWarningPrinted) {
     if (hasFgpu64() && !hasFgpu64r2()) {
-      errs() << "warning: the 'dsp' ASE requires Fgpu64 revision 2 or "
+      errs() << "warning: the 'dsp' ASE requires FGPU64 revision 2 or "
              << "greater\n";
       DspWarningPrinted = true;
     } else if (hasFgpu32() && !hasFgpu32r2()) {
-      errs() << "warning: the 'dsp' ASE requires Fgpu32 revision 2 or "
+      errs() << "warning: the 'dsp' ASE requires FGPU32 revision 2 or "
              << "greater\n";
       DspWarningPrinted = true;
     }
   }
 
-  StringRef ArchName = hasFgpu64() ? "Fgpu64" : "Fgpu32";
+  StringRef ArchName = hasFgpu64() ? "FGPU64" : "FGPU32";
 
   if (!hasFgpu32r5() && hasMSA() && !MSAWarningPrinted) {
     errs() << "warning: the 'msa' ASE requires " << ArchName
@@ -237,7 +237,7 @@ CodeGenOpt::Level FgpuSubtarget::getOptLevelToEnablePostRAScheduler() const {
 FgpuSubtarget &
 FgpuSubtarget::initializeSubtargetDependencies(StringRef CPU, StringRef FS,
                                                const TargetMachine &TM) {
-  StringRef CPUName = Fgpu_MC::selectFgpuCPU(TM.getTargetTriple(), CPU);
+  StringRef CPUName = FGPU_MC::selectFgpuCPU(TM.getTargetTriple(), CPU);
 
   // Parse features string.
   ParseSubtargetFeatures(CPUName, /*TuneCPU*/ CPUName, FS);

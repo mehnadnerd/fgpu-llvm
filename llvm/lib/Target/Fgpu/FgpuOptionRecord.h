@@ -16,8 +16,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuOPTIONRECORD_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuOPTIONRECORD_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUOPTIONRECORD_H
+#define LLVM_LIB_TARGET_FGPU_FGPUOPTIONRECORD_H
 
 #include "MCTargetDesc/FgpuMCTargetDesc.h"
 #include "llvm/MC/MCContext.h"
@@ -79,4 +79,4 @@ private:
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_Fgpu_FgpuOPTIONRECORD_H
+#endif // LLVM_LIB_TARGET_FGPU_FGPUOPTIONRECORD_H

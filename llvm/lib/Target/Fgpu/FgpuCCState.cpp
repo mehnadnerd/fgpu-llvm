@@ -70,16 +70,6 @@ FgpuCCState::SpecialCallingConvType
 FgpuCCState::getSpecialCallingConvForCallee(const SDNode *Callee,
                                             const FgpuSubtarget &Subtarget) {
   FgpuCCState::SpecialCallingConvType SpecialCallingConv = NoSpecialCallingConv;
-  if (Subtarget.inFgpu16HardFloat()) {
-    if (const GlobalAddressSDNode *G =
-            dyn_cast<const GlobalAddressSDNode>(Callee)) {
-      llvm::StringRef Sym = G->getGlobal()->getName();
-      Function *F = G->getGlobal()->getParent()->getFunction(Sym);
-      if (F && F->hasFnAttribute("__Fgpu16RetHelper")) {
-        SpecialCallingConv = Fgpu16RetHelperConv;
-      }
-    }
-  }
   return SpecialCallingConv;
 }
 
@@ -169,7 +159,7 @@ void FgpuCCState::PreAnalyzeFormalArgument(const Type *ArgTy,
   OriginalArgWasF128.push_back(originalTypeIsF128(ArgTy, nullptr));
   OriginalArgWasFloat.push_back(ArgTy->isFloatingPointTy());
 
-  // The Fgpu vector ABI exhibits a corner case of sorts or quirk; if the
+  // The FGPU vector ABI exhibits a corner case of sorts or quirk; if the
   // first argument is actually an SRet pointer to a vector, then the next
   // argument slot is $a2.
   OriginalArgWasFloatVector.push_back(ArgTy->isVectorTy());
@@ -200,7 +190,7 @@ void FgpuCCState::PreAnalyzeFormalArgumentsForF128(
         originalTypeIsF128(FuncArg->getType(), nullptr));
     OriginalArgWasFloat.push_back(FuncArg->getType()->isFloatingPointTy());
 
-    // The Fgpu vector ABI exhibits a corner case of sorts or quirk; if the
+    // The FGPU vector ABI exhibits a corner case of sorts or quirk; if the
     // first argument is actually an SRet pointer to a vector, then the next
     // argument slot is $a2.
     OriginalArgWasFloatVector.push_back(FuncArg->getType()->isVectorTy());

@@ -11,10 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "FgpuTargetMachine.h"
-#include "Fgpu.h"
 #include "MCTargetDesc/FgpuABIInfo.h"
 #include "MCTargetDesc/FgpuMCTargetDesc.h"
-#include "Fgpu16ISelDAGToDAG.h"
+#include "Fgpu.h"
 #include "FgpuSEISelDAGToDAG.h"
 #include "FgpuSubtarget.h"
 #include "FgpuTargetObjectFile.h"
@@ -43,15 +42,21 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "Fgpu"
+#define DEBUG_TYPE "fgpu"
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeFgpuTarget() {
   // Register the target.
-  RegisterTargetMachine<FgpuTargetMachine> X(getTheFgpuTarget());
+  RegisterTargetMachine<FgpuebTargetMachine> X(getTheFgpuTarget());
+  RegisterTargetMachine<FgpuelTargetMachine> Y(getTheFgpuelTarget());
+  RegisterTargetMachine<FgpuebTargetMachine> A(getTheFgpu64Target());
+  RegisterTargetMachine<FgpuelTargetMachine> B(getTheFgpu64elTarget());
 
   PassRegistry *PR = PassRegistry::getPassRegistry();
   initializeGlobalISel(*PR);
-  //TODO: insert other passes here
+  initializeFgpuDelaySlotFillerPass(*PR);
+  initializeFgpuBranchExpansionPass(*PR);
+  initializeMicroFgpuSizeReducePass(*PR);
+  initializeFgpuPreLegalizerCombinerPass(*PR);
 }
 
 static std::string computeDataLayout(const Triple &TT, StringRef CPU,
@@ -60,7 +65,7 @@ static std::string computeDataLayout(const Triple &TT, StringRef CPU,
   std::string Ret;
   FgpuABIInfo ABI = FgpuABIInfo::computeTargetABI(TT, CPU, Options.MCOptions);
 
-  // There are both little and big endian Fgpu.
+  // There are both little and big endian fgpu.
   if (isLittle)
     Ret += "e";
   else
@@ -115,9 +120,9 @@ FgpuTargetMachine::FgpuTargetMachine(const Target &T, const Triple &TT,
       isLittle(isLittle), TLOF(std::make_unique<FgpuTargetObjectFile>()),
       ABI(FgpuABIInfo::computeTargetABI(TT, CPU, Options.MCOptions)),
       Subtarget(nullptr), DefaultSubtarget(TT, CPU, FS, isLittle, *this, None),
-      NoFgpu16Subtarget(TT, CPU, FS.empty() ? "-Fgpu16" : FS.str() + ",-Fgpu16",
+      NoFgpu16Subtarget(TT, CPU, FS.empty() ? "-fgpu16" : FS.str() + ",-fgpu16",
                         isLittle, *this, None),
-      Fgpu16Subtarget(TT, CPU, FS.empty() ? "+Fgpu16" : FS.str() + ",+Fgpu16",
+      Fgpu16Subtarget(TT, CPU, FS.empty() ? "+fgpu16" : FS.str() + ",+fgpu16",
                       isLittle, *this, None) {
   Subtarget = &DefaultSubtarget;
   initAsmInfo();
@@ -157,11 +162,11 @@ FgpuTargetMachine::getSubtargetImpl(const Function &F) const {
       CPUAttr.isValid() ? CPUAttr.getValueAsString().str() : TargetCPU;
   std::string FS =
       FSAttr.isValid() ? FSAttr.getValueAsString().str() : TargetFS;
-  bool hasFgpu16Attr = F.getFnAttribute("Fgpu16").isValid();
-  bool hasNoFgpu16Attr = F.getFnAttribute("noFgpu16").isValid();
+  bool hasFgpu16Attr = F.getFnAttribute("fgpu16").isValid();
+  bool hasNoFgpu16Attr = F.getFnAttribute("nofgpu16").isValid();
 
-  bool HasMicroFgpuAttr = F.getFnAttribute("microFgpu").isValid();
-  bool HasNoMicroFgpuAttr = F.getFnAttribute("nomicroFgpu").isValid();
+  bool HasMicroFgpuAttr = F.getFnAttribute("microfgpu").isValid();
+  bool HasNoMicroFgpuAttr = F.getFnAttribute("nomicrofgpu").isValid();
 
   // FIXME: This is related to the code below to reset the target options,
   // we need to know whether or not the soft float flag is set on the
@@ -169,13 +174,13 @@ FgpuTargetMachine::getSubtargetImpl(const Function &F) const {
   bool softFloat = F.getFnAttribute("use-soft-float").getValueAsBool();
 
   if (hasFgpu16Attr)
-    FS += FS.empty() ? "+Fgpu16" : ",+Fgpu16";
+    FS += FS.empty() ? "+fgpu16" : ",+fgpu16";
   else if (hasNoFgpu16Attr)
-    FS += FS.empty() ? "-Fgpu16" : ",-Fgpu16";
+    FS += FS.empty() ? "-fgpu16" : ",-fgpu16";
   if (HasMicroFgpuAttr)
-    FS += FS.empty() ? "+microFgpu" : ",+microFgpu";
+    FS += FS.empty() ? "+microfgpu" : ",+microfgpu";
   else if (HasNoMicroFgpuAttr)
-    FS += FS.empty() ? "-microFgpu" : ",-microFgpu";
+    FS += FS.empty() ? "-microfgpu" : ",-microfgpu";
   if (softFloat)
     FS += FS.empty() ? "+soft-float" : ",+soft-float";
 
@@ -282,17 +287,17 @@ void FgpuPassConfig::addPreEmitPass() {
   // Expand pseudo instructions that are sensitive to register allocation.
   addPass(createFgpuExpandPseudoPass());
 
-  // The microFgpu size reduction pass performs instruction reselection for
+  // The microFGPU size reduction pass performs instruction reselection for
   // instructions which can be remapped to a 16 bit instruction.
   addPass(createMicroFgpuSizeReducePass());
 
   // The delay slot filler pass can potientially create forbidden slot hazards
-  // for FgpuR6 and therefore it should go before FgpuBranchExpansion pass.
+  // for FGPUR6 and therefore it should go before FgpuBranchExpansion pass.
   addPass(createFgpuDelaySlotFillerPass());
 
   // This pass expands branches and takes care about the forbidden slot hazards.
   // Expanding branches may potentially create forbidden slot hazards for
-  // FgpuR6, and fixing such hazard may potentially break a branch by extending
+  // FGPUR6, and fixing such hazard may potentially break a branch by extending
   // its offset out of range. That's why this pass combine these two tasks, and
   // runs them alternately until one of them finishes without any changes. Only
   // then we can be sure that all branches are expanded properly and no hazards

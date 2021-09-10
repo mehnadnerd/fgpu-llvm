@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuCALLLOWERING_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuCALLLOWERING_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUCALLLOWERING_H
+#define LLVM_LIB_TARGET_FGPU_FGPUCALLLOWERING_H
 
 #include "llvm/CodeGen/GlobalISel/CallLowering.h"
 
@@ -39,4 +39,4 @@ public:
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_Fgpu_FgpuCALLLOWERING_H
+#endif // LLVM_LIB_TARGET_FGPU_FGPUCALLLOWERING_H

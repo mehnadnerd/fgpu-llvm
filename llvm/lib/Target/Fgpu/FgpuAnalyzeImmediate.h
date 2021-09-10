@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_Fgpu_FgpuANALYZEIMMEDIATE_H
-#define LLVM_LIB_TARGET_Fgpu_FgpuANALYZEIMMEDIATE_H
+#ifndef LLVM_LIB_TARGET_FGPU_FGPUANALYZEIMMEDIATE_H
+#define LLVM_LIB_TARGET_FGPU_FGPUANALYZEIMMEDIATE_H
 
 #include "llvm/ADT/SmallVector.h"
 #include <cstdint>
@@ -34,15 +34,33 @@ namespace llvm {
     /// AddInstr - Add I to all instruction sequences in SeqLs.
     void AddInstr(InstSeqLs &SeqLs, const Inst &I);
 
-    /// GetInstSeqLs - Get instrucion sequences to load immediate Imm.
+    /// GetInstSeqLsADDiu - Get instruction sequences which end with an ADDiu to
+    /// load immediate Imm
+    void GetInstSeqLsADDiu(uint64_t Imm, unsigned RemSize, InstSeqLs &SeqLs);
+
+    /// GetInstSeqLsORi - Get instrutcion sequences which end with an ORi to
+    /// load immediate Imm
+    void GetInstSeqLsORi(uint64_t Imm, unsigned RemSize, InstSeqLs &SeqLs);
+
+    /// GetInstSeqLsSLL - Get instruction sequences which end with a SLL to
+    /// load immediate Imm
+    void GetInstSeqLsSLL(uint64_t Imm, unsigned RemSize, InstSeqLs &SeqLs);
+
+    /// GetInstSeqLs - Get instruction sequences to load immediate Imm.
     void GetInstSeqLs(uint64_t Imm, unsigned RemSize, InstSeqLs &SeqLs);
 
+    /// ReplaceADDiuSLLWithLUi - Replace an ADDiu & SLL pair with a LUi.
+    void ReplaceADDiuSLLWithLUi(InstSeq &Seq);
+
+    /// GetShortestSeq - Find the shortest instruction sequence in SeqLs and
+    /// return it in Insts.
+    void GetShortestSeq(InstSeqLs &SeqLs, InstSeq &Insts);
+
     unsigned Size;
-    //unsigned ADDiu, ORi, SLL, LUi;
-    unsigned Li, LUi;
+    unsigned ADDiu, ORi, SLL, LUi;
     InstSeq Insts;
   };
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_Fgpu_FgpuANALYZEIMMEDIATE_H
+#endif // LLVM_LIB_TARGET_FGPU_FGPUANALYZEIMMEDIATE_H

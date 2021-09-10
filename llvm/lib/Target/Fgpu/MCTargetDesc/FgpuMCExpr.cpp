@@ -22,7 +22,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "Fgpumcexpr"
+#define DEBUG_TYPE "fgpumcexpr"
 
 const FgpuMCExpr *FgpuMCExpr::create(FgpuMCExpr::FgpuExprKind Kind,
                                      const MCExpr *Expr, MCContext &Ctx) {

@@ -6,14 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines an instruction selector for the Fgpu target.
+// This file defines an instruction selector for the FGPU target.
 //
 //===----------------------------------------------------------------------===//
 
 #include "FgpuISelDAGToDAG.h"
-#include "Fgpu.h"
 #include "MCTargetDesc/FgpuBaseInfo.h"
-#include "Fgpu16ISelDAGToDAG.h"
+#include "Fgpu.h"
 #include "FgpuMachineFunction.h"
 #include "FgpuRegisterInfo.h"
 #include "FgpuSEISelDAGToDAG.h"
@@ -35,14 +34,14 @@
 #include "llvm/Target/TargetMachine.h"
 using namespace llvm;
 
-#define DEBUG_TYPE "Fgpu-isel"
+#define DEBUG_TYPE "fgpu-isel"
 
 //===----------------------------------------------------------------------===//
 // Instruction Selector Implementation
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
-// FgpuDAGToDAGISel - Fgpu specific code to select Fgpu machine
+// FgpuDAGToDAGISel - FGPU specific code to select FGPU machine
 // instructions for SelectionDAG operations.
 //===----------------------------------------------------------------------===//
 

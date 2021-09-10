@@ -36,7 +36,7 @@
 ///
 /// Regarding compact branch hazard prevention:
 ///
-/// Hazards handled: forbidden slots for FgpuR6.
+/// Hazards handled: forbidden slots for FGPUR6.
 ///
 /// A forbidden slot hazard occurs when a compact branch instruction is executed
 /// and the adjacent instruction in memory is a control transfer instruction
@@ -62,7 +62,7 @@
 ///    processed instuctions.
 ///
 /// In future this pass can be extended (or new pass can be created) to handle
-/// other pipeline hazards, such as various Fgpu1 hazards, processor errata that
+/// other pipeline hazards, such as various FGPU1 hazards, processor errata that
 /// require instruction reorganization, etc.
 ///
 /// This pass has to run after the delay slot filler as that pass can introduce
@@ -71,11 +71,11 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "Fgpu.h"
 #include "MCTargetDesc/FgpuABIInfo.h"
 #include "MCTargetDesc/FgpuBaseInfo.h"
 #include "MCTargetDesc/FgpuMCNaCl.h"
 #include "MCTargetDesc/FgpuMCTargetDesc.h"
+#include "Fgpu.h"
 #include "FgpuInstrInfo.h"
 #include "FgpuMachineFunction.h"
 #include "FgpuSubtarget.h"
@@ -104,18 +104,18 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "Fgpu-branch-expansion"
+#define DEBUG_TYPE "fgpu-branch-expansion"
 
 STATISTIC(NumInsertedNops, "Number of nops inserted");
 STATISTIC(LongBranches, "Number of long branches.");
 
 static cl::opt<bool>
-    SkipLongBranch("skip-Fgpu-long-branch", cl::init(false),
-                   cl::desc("Fgpu: Skip branch expansion pass."), cl::Hidden);
+    SkipLongBranch("skip-fgpu-long-branch", cl::init(false),
+                   cl::desc("FGPU: Skip branch expansion pass."), cl::Hidden);
 
 static cl::opt<bool>
-    ForceLongBranch("force-Fgpu-long-branch", cl::init(false),
-                    cl::desc("Fgpu: Expand all branches to long format."),
+    ForceLongBranch("force-fgpu-long-branch", cl::init(false),
+                    cl::desc("FGPU: Expand all branches to long format."),
                     cl::Hidden);
 
 namespace {
@@ -388,8 +388,6 @@ bool FgpuBranchExpansion::buildProperJumpMI(MachineBasicBlock *MBB,
   else
     JumpOp = HasR6 ? JIC : JR;
 
-  if (JumpOp == Fgpu::JIC && STI->inMicroFgpuMode())
-    JumpOp = Fgpu::JIC_MMR6;
 
   unsigned ATReg = ABI.IsN64() ? Fgpu::AT_64 : Fgpu::AT;
   MachineInstrBuilder Instr =
@@ -422,13 +420,13 @@ void FgpuBranchExpansion::expandToLongBranch(MBBInfo &I) {
     LongBrMBB->addSuccessor(BalTgtMBB);
     BalTgtMBB->addSuccessor(TgtMBB);
 
-    // We must select between the Fgpu32r6/Fgpu64r6 BALC (which is a normal
-    // instruction) and the pre-Fgpu32r6/Fgpu64r6 definition (which is an
+    // We must select between the FGPU32r6/FGPU64r6 BALC (which is a normal
+    // instruction) and the pre-FGPU32r6/FGPU64r6 definition (which is an
     // pseudo-instruction wrapping BGEZAL).
     const unsigned BalOp =
         STI->hasFgpu32r6()
-            ? STI->inMicroFgpuMode() ? Fgpu::BALC_MMR6 : Fgpu::BALC
-            : STI->inMicroFgpuMode() ? Fgpu::BAL_BR_MM : Fgpu::BAL_BR;
+            ? Fgpu::BALC
+            : Fgpu::BAL_BR;
 
     if (!ABI.IsN64()) {
       // Pre R6:
@@ -516,10 +514,10 @@ void FgpuBranchExpansion::expandToLongBranch(MBBInfo &I) {
           .addImm(0);
       if (STI->isTargetNaCl())
         // Bundle-align the target of indirect branch JR.
-        TgtMBB->setAlignment(Fgpu_NACL_BUNDLE_ALIGN);
+        TgtMBB->setAlignment(FGPU_NACL_BUNDLE_ALIGN);
 
       // In NaCl, modifying the sp is not allowed in branch delay slot.
-      // For Fgpu32R6, we can skip using a delay slot branch.
+      // For FGPU32R6, we can skip using a delay slot branch.
       bool hasDelaySlot = buildProperJumpMI(BalTgtMBB, Pos, DL);
 
       if (STI->isTargetNaCl() || !hasDelaySlot) {
@@ -663,7 +661,7 @@ void FgpuBranchExpansion::expandToLongBranch(MBBInfo &I) {
       // $fallthrough:
       //
       BuildMI(*LongBrMBB, Pos, DL,
-              TII->get(STI->inMicroFgpuMode() ? Fgpu::BC_MMR6 : Fgpu::BC))
+              TII->get(Fgpu::BC))
           .addMBB(TgtMBB);
     } else if (SameSegmentJump) {
       // Pre R6:
@@ -739,8 +737,8 @@ static void emitGPDisp(MachineFunction &F, const FgpuInstrInfo *TII) {
 }
 
 bool FgpuBranchExpansion::handleForbiddenSlot() {
-  // Forbidden slot hazards are only defined for FgpuR6 but not microFgpuR6.
-  if (!STI->hasFgpu32r6() || STI->inMicroFgpuMode())
+  // Forbidden slot hazards are only defined for FGPUR6 but not microFGPUR6.
+  if (!STI->hasFgpu32r6())
     return false;
 
   bool Changed = false;
@@ -779,7 +777,7 @@ bool FgpuBranchExpansion::handleForbiddenSlot() {
 }
 
 bool FgpuBranchExpansion::handlePossibleLongBranch() {
-  if (STI->inFgpu16Mode() || !STI->enableLongBranchPass())
+  if (!STI->enableLongBranchPass())
     return false;
 
   if (SkipLongBranch)
