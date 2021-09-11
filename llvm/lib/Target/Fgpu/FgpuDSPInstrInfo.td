@@ -1214,9 +1214,7 @@ def PICK_PH : DspMMRel, PICK_PH_ENC, PICK_PH_DESC;
 def LWX : DspMMRel, LWX_ENC, LWX_DESC;
 def LHX : DspMMRel, LHX_ENC, LHX_DESC;
 def LBUX : DspMMRel, LBUX_ENC, LBUX_DESC;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def BPOSGE32 : DspMMRel, BPOSGE32_ENC, BPOSGE32_DESC;
-}
 def INSV : DspMMRel, INSV_ENC, INSV_DESC;
 def EXTP : DspMMRel, EXTP_ENC, EXTP_DESC;
 def EXTPV : DspMMRel, EXTPV_ENC, EXTPV_DESC;
@@ -1234,9 +1232,7 @@ def SHILO : DspMMRel, SHILO_ENC, SHILO_DESC;
 def SHILOV : DspMMRel, SHILOV_ENC, SHILOV_DESC;
 def MTHLIP : DspMMRel, MTHLIP_ENC, MTHLIP_DESC;
 def RDDSP : DspMMRel, RDDSP_ENC, RDDSP_DESC;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def WRDSP : WRDSP_ENC, WRDSP_DESC;
-}
 
 // FGPU DSP Rev 2
 def ADDU_PH : DspMMRel, ADDU_PH_ENC, ADDU_PH_DESC, ISA_DSPR2;
@@ -1478,6 +1474,4 @@ let AddedComplexity = 20 in {
 }
 
 // Instruction alias.
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : DSPInstAlias<"wrdsp $rt", (WRDSP GPR32Opnd:$rt, 0x1F), 1>;
-}

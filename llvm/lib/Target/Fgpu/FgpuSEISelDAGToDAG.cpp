@@ -39,8 +39,6 @@ using namespace llvm;
 
 bool FgpuSEDAGToDAGISel::runOnMachineFunction(MachineFunction &MF) {
   Subtarget = &static_cast<const FgpuSubtarget &>(MF.getSubtarget());
-  if (Subtarget->inFgpu16Mode())
-    return false;
   return FgpuDAGToDAGISel::runOnMachineFunction(MF);
 }
 
@@ -179,14 +177,12 @@ void FgpuSEDAGToDAGISel::processFunctionAfterISel(MachineFunction &MF) {
           MI.addOperand(MachineOperand::CreateReg(Fgpu::SP, false, true));
         break;
       case Fgpu::JAL:
-      case Fgpu::JAL_MM:
         if (MI.getOperand(0).isGlobal() &&
             MI.getOperand(0).getGlobal()->getGlobalIdentifier() == "_mcount")
           emitMCountABI(MI, MBB, MF);
         break;
       case Fgpu::JALRPseudo:
       case Fgpu::JALR64Pseudo:
-      case Fgpu::JALR16_MM:
         if (MI.getOperand(2).isMCSymbol() &&
             MI.getOperand(2).getMCSymbol()->getName() == "_mcount")
           emitMCountABI(MI, MBB, MF);
@@ -1382,14 +1378,7 @@ SelectInlineAsmMemoryOperand(const SDValue &Op, unsigned ConstraintID,
   case InlineAsm::Constraint_ZC:
     // ZC matches whatever the pref, ll, and sc instructions can handle for the
     // given subtarget.
-    if (Subtarget->inMicroFgpuMode()) {
-      // On microFGPU, they can handle 12-bit offsets.
-      if (selectAddrRegImm12(Op, Base, Offset)) {
-        OutOps.push_back(Base);
-        OutOps.push_back(Offset);
-        return false;
-      }
-    } else if (Subtarget->hasFgpu32r6()) {
+    if (Subtarget->hasFgpu32r6()) {
       // On FGPU32r6/FGPU64r6, they can only handle 9-bit offsets.
       if (selectAddrRegImm9(Op, Base, Offset)) {
         OutOps.push_back(Base);

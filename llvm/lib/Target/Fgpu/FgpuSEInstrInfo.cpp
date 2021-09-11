@@ -25,8 +25,6 @@
 using namespace llvm;
 
 static unsigned getUnconditionalBranch(const FgpuSubtarget &STI) {
-  if (STI.inMicroFgpuMode())
-    return STI.isPositionIndependent() ? Fgpu::B_MM : Fgpu::J_MM;
   return STI.isPositionIndependent() ? Fgpu::B : Fgpu::J;
 }
 
@@ -85,23 +83,19 @@ void FgpuSEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                   const DebugLoc &DL, MCRegister DestReg,
                                   MCRegister SrcReg, bool KillSrc) const {
   unsigned Opc = 0, ZeroReg = 0;
-  bool isMicroFgpu = Subtarget.inMicroFgpuMode();
 
   if (Fgpu::GPR32RegClass.contains(DestReg)) { // Copy to CPU Reg.
     if (Fgpu::GPR32RegClass.contains(SrcReg)) {
-      if (isMicroFgpu)
-        Opc = Fgpu::MOVE16_MM;
-      else
-        Opc = Fgpu::OR, ZeroReg = Fgpu::ZERO;
+      Opc = Fgpu::OR, ZeroReg = Fgpu::ZERO;
     } else if (Fgpu::CCRRegClass.contains(SrcReg))
       Opc = Fgpu::CFC1;
     else if (Fgpu::FGR32RegClass.contains(SrcReg))
       Opc = Fgpu::MFC1;
     else if (Fgpu::HI32RegClass.contains(SrcReg)) {
-      Opc = isMicroFgpu ? Fgpu::MFHI16_MM : Fgpu::MFHI;
+      Opc = Fgpu::MFHI;
       SrcReg = 0;
     } else if (Fgpu::LO32RegClass.contains(SrcReg)) {
-      Opc = isMicroFgpu ? Fgpu::MFLO16_MM : Fgpu::MFLO;
+      Opc = Fgpu::MFLO;
       SrcReg = 0;
     } else if (Fgpu::HI32DSPRegClass.contains(SrcReg))
       Opc = Fgpu::MFHI_DSP;
@@ -187,7 +181,6 @@ static bool isORCopyInst(const MachineInstr &MI) {
   switch (MI.getOpcode()) {
   default:
     break;
-  case Fgpu::OR_MM:
   case Fgpu::OR:
     if (MI.getOperand(2).getReg() == Fgpu::ZERO)
       return true;
@@ -207,11 +200,9 @@ static bool isReadOrWriteToDSPReg(const MachineInstr &MI, bool &isWrite) {
   default:
    return false;
   case Fgpu::WRDSP:
-  case Fgpu::WRDSP_MM:
     isWrite = true;
     break;
   case Fgpu::RDDSP:
-  case Fgpu::RDDSP_MM:
     isWrite = false;
     break;
   }
@@ -402,7 +393,6 @@ loadRegFromStack(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
 
 bool FgpuSEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   MachineBasicBlock &MBB = *MI.getParent();
-  bool isMicroFgpu = Subtarget.inMicroFgpuMode();
   unsigned Opc;
 
   switch (MI.getDesc().getOpcode()) {
@@ -417,14 +407,8 @@ bool FgpuSEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case Fgpu::PseudoMFHI:
     expandPseudoMFHiLo(MBB, MI, Fgpu::MFHI);
     break;
-  case Fgpu::PseudoMFHI_MM:
-    expandPseudoMFHiLo(MBB, MI, Fgpu::MFHI16_MM);
-    break;
   case Fgpu::PseudoMFLO:
     expandPseudoMFHiLo(MBB, MI, Fgpu::MFLO);
-    break;
-  case Fgpu::PseudoMFLO_MM:
-    expandPseudoMFHiLo(MBB, MI, Fgpu::MFLO16_MM);
     break;
   case Fgpu::PseudoMFHI64:
     expandPseudoMFHiLo(MBB, MI, Fgpu::MFHI64);
@@ -441,37 +425,34 @@ bool FgpuSEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case Fgpu::PseudoMTLOHI_DSP:
     expandPseudoMTLoHi(MBB, MI, Fgpu::MTLO_DSP, Fgpu::MTHI_DSP, true);
     break;
-  case Fgpu::PseudoMTLOHI_MM:
-    expandPseudoMTLoHi(MBB, MI, Fgpu::MTLO_MM, Fgpu::MTHI_MM, false);
-    break;
   case Fgpu::PseudoCVT_S_W:
     expandCvtFPInt(MBB, MI, Fgpu::CVT_S_W, Fgpu::MTC1, false);
     break;
   case Fgpu::PseudoCVT_D32_W:
-    Opc = isMicroFgpu ? Fgpu::CVT_D32_W_MM : Fgpu::CVT_D32_W;
+    Opc = Fgpu::CVT_D32_W;
     expandCvtFPInt(MBB, MI, Opc, Fgpu::MTC1, false);
     break;
   case Fgpu::PseudoCVT_S_L:
     expandCvtFPInt(MBB, MI, Fgpu::CVT_S_L, Fgpu::DMTC1, true);
     break;
   case Fgpu::PseudoCVT_D64_W:
-    Opc = isMicroFgpu ? Fgpu::CVT_D64_W_MM : Fgpu::CVT_D64_W;
+    Opc = Fgpu::CVT_D64_W;
     expandCvtFPInt(MBB, MI, Opc, Fgpu::MTC1, true);
     break;
   case Fgpu::PseudoCVT_D64_L:
     expandCvtFPInt(MBB, MI, Fgpu::CVT_D64_L, Fgpu::DMTC1, true);
     break;
   case Fgpu::BuildPairF64:
-    expandBuildPairF64(MBB, MI, isMicroFgpu, false);
+    expandBuildPairF64(MBB, MI, false);
     break;
   case Fgpu::BuildPairF64_64:
-    expandBuildPairF64(MBB, MI, isMicroFgpu, true);
+    expandBuildPairF64(MBB, MI, true);
     break;
   case Fgpu::ExtractElementF64:
-    expandExtractElementF64(MBB, MI, isMicroFgpu, false);
+    expandExtractElementF64(MBB, MI, false);
     break;
   case Fgpu::ExtractElementF64_64:
-    expandExtractElementF64(MBB, MI, isMicroFgpu, true);
+    expandExtractElementF64(MBB, MI, true);
     break;
   case Fgpu::FGPUeh_return32:
   case Fgpu::FGPUeh_return64:
@@ -503,17 +484,11 @@ unsigned FgpuSEInstrInfo::getOppositeBranchOpc(unsigned Opc) const {
   switch (Opc) {
   default:           llvm_unreachable("Illegal opcode!");
   case Fgpu::BEQ:    return Fgpu::BNE;
-  case Fgpu::BEQ_MM: return Fgpu::BNE_MM;
   case Fgpu::BNE:    return Fgpu::BEQ;
-  case Fgpu::BNE_MM: return Fgpu::BEQ_MM;
   case Fgpu::BGTZ:   return Fgpu::BLEZ;
   case Fgpu::BGEZ:   return Fgpu::BLTZ;
   case Fgpu::BLTZ:   return Fgpu::BGEZ;
   case Fgpu::BLEZ:   return Fgpu::BGTZ;
-  case Fgpu::BGTZ_MM:   return Fgpu::BLEZ_MM;
-  case Fgpu::BGEZ_MM:   return Fgpu::BLTZ_MM;
-  case Fgpu::BLTZ_MM:   return Fgpu::BGEZ_MM;
-  case Fgpu::BLEZ_MM:   return Fgpu::BGTZ_MM;
   case Fgpu::BEQ64:  return Fgpu::BNE64;
   case Fgpu::BNE64:  return Fgpu::BEQ64;
   case Fgpu::BGTZ64: return Fgpu::BLEZ64;
@@ -522,12 +497,6 @@ unsigned FgpuSEInstrInfo::getOppositeBranchOpc(unsigned Opc) const {
   case Fgpu::BLEZ64: return Fgpu::BGTZ64;
   case Fgpu::BC1T:   return Fgpu::BC1F;
   case Fgpu::BC1F:   return Fgpu::BC1T;
-  case Fgpu::BC1T_MM:   return Fgpu::BC1F_MM;
-  case Fgpu::BC1F_MM:   return Fgpu::BC1T_MM;
-  case Fgpu::BEQZ16_MM: return Fgpu::BNEZ16_MM;
-  case Fgpu::BNEZ16_MM: return Fgpu::BEQZ16_MM;
-  case Fgpu::BEQZC_MM:  return Fgpu::BNEZC_MM;
-  case Fgpu::BNEZC_MM:  return Fgpu::BEQZC_MM;
   case Fgpu::BEQZC:  return Fgpu::BNEZC;
   case Fgpu::BNEZC:  return Fgpu::BEQZC;
   case Fgpu::BLEZC:  return Fgpu::BGTZC;
@@ -542,20 +511,6 @@ unsigned FgpuSEInstrInfo::getOppositeBranchOpc(unsigned Opc) const {
   case Fgpu::BNEC:   return Fgpu::BEQC;
   case Fgpu::BC1EQZ: return Fgpu::BC1NEZ;
   case Fgpu::BC1NEZ: return Fgpu::BC1EQZ;
-  case Fgpu::BEQZC_MMR6:  return Fgpu::BNEZC_MMR6;
-  case Fgpu::BNEZC_MMR6:  return Fgpu::BEQZC_MMR6;
-  case Fgpu::BLEZC_MMR6:  return Fgpu::BGTZC_MMR6;
-  case Fgpu::BGEZC_MMR6:  return Fgpu::BLTZC_MMR6;
-  case Fgpu::BGEC_MMR6:   return Fgpu::BLTC_MMR6;
-  case Fgpu::BGTZC_MMR6:  return Fgpu::BLEZC_MMR6;
-  case Fgpu::BLTZC_MMR6:  return Fgpu::BGEZC_MMR6;
-  case Fgpu::BLTC_MMR6:   return Fgpu::BGEC_MMR6;
-  case Fgpu::BGEUC_MMR6:  return Fgpu::BLTUC_MMR6;
-  case Fgpu::BLTUC_MMR6:  return Fgpu::BGEUC_MMR6;
-  case Fgpu::BEQC_MMR6:   return Fgpu::BNEC_MMR6;
-  case Fgpu::BNEC_MMR6:   return Fgpu::BEQC_MMR6;
-  case Fgpu::BC1EQZC_MMR6: return Fgpu::BC1NEZC_MMR6;
-  case Fgpu::BC1NEZC_MMR6: return Fgpu::BC1EQZC_MMR6;
   case Fgpu::BEQZC64:  return Fgpu::BNEZC64;
   case Fgpu::BNEZC64:  return Fgpu::BEQZC64;
   case Fgpu::BEQC64:   return Fgpu::BNEC64;
@@ -657,14 +612,13 @@ unsigned FgpuSEInstrInfo::loadImmediate(int64_t Imm, MachineBasicBlock &MBB,
 }
 
 unsigned FgpuSEInstrInfo::getAnalyzableBrOpc(unsigned Opc) const {
-  return (Opc == Fgpu::BEQ    || Opc == Fgpu::BEQ_MM || Opc == Fgpu::BNE    ||
-          Opc == Fgpu::BNE_MM || Opc == Fgpu::BGTZ   || Opc == Fgpu::BGEZ   ||
+  return (Opc == Fgpu::BEQ    || Opc == Fgpu::BNE    ||
+          Opc == Fgpu::BGTZ   || Opc == Fgpu::BGEZ   ||
           Opc == Fgpu::BLTZ   || Opc == Fgpu::BLEZ   || Opc == Fgpu::BEQ64  ||
           Opc == Fgpu::BNE64  || Opc == Fgpu::BGTZ64 || Opc == Fgpu::BGEZ64 ||
           Opc == Fgpu::BLTZ64 || Opc == Fgpu::BLEZ64 || Opc == Fgpu::BC1T   ||
           Opc == Fgpu::BC1F   || Opc == Fgpu::B      || Opc == Fgpu::J      ||
-          Opc == Fgpu::J_MM   || Opc == Fgpu::B_MM   || Opc == Fgpu::BEQZC_MM ||
-          Opc == Fgpu::BNEZC_MM || Opc == Fgpu::BEQC || Opc == Fgpu::BNEC   ||
+          Opc == Fgpu::BEQC || Opc == Fgpu::BNEC   ||
           Opc == Fgpu::BLTC   || Opc == Fgpu::BGEC   || Opc == Fgpu::BLTUC  ||
           Opc == Fgpu::BGEUC  || Opc == Fgpu::BGTZC  || Opc == Fgpu::BLEZC  ||
           Opc == Fgpu::BGEZC  || Opc == Fgpu::BLTZC  || Opc == Fgpu::BEQZC  ||
@@ -674,13 +628,7 @@ unsigned FgpuSEInstrInfo::getAnalyzableBrOpc(unsigned Opc) const {
           Opc == Fgpu::BGTZC64 || Opc == Fgpu::BGEZC64 ||
           Opc == Fgpu::BLTZC64 || Opc == Fgpu::BLEZC64 || Opc == Fgpu::BC ||
           Opc == Fgpu::BBIT0 || Opc == Fgpu::BBIT1 || Opc == Fgpu::BBIT032 ||
-          Opc == Fgpu::BBIT132 ||  Opc == Fgpu::BC_MMR6 ||
-          Opc == Fgpu::BEQC_MMR6 || Opc == Fgpu::BNEC_MMR6 ||
-          Opc == Fgpu::BLTC_MMR6 || Opc == Fgpu::BGEC_MMR6 ||
-          Opc == Fgpu::BLTUC_MMR6 || Opc == Fgpu::BGEUC_MMR6 ||
-          Opc == Fgpu::BGTZC_MMR6 || Opc == Fgpu::BLEZC_MMR6 ||
-          Opc == Fgpu::BGEZC_MMR6 || Opc == Fgpu::BLTZC_MMR6 ||
-          Opc == Fgpu::BEQZC_MMR6 || Opc == Fgpu::BNEZC_MMR6) ? Opc : 0;
+          Opc == Fgpu::BBIT132) ? Opc : 0;
 }
 
 void FgpuSEInstrInfo::expandRetRA(MachineBasicBlock &MBB,
@@ -780,7 +728,6 @@ void FgpuSEInstrInfo::expandCvtFPInt(MachineBasicBlock &MBB,
 
 void FgpuSEInstrInfo::expandExtractElementF64(MachineBasicBlock &MBB,
                                               MachineBasicBlock::iterator I,
-                                              bool isMicroFgpu,
                                               bool FP64) const {
   Register DstReg = I->getOperand(0).getReg();
   Register SrcReg = I->getOperand(1).getReg();
@@ -813,8 +760,7 @@ void FgpuSEInstrInfo::expandExtractElementF64(MachineBasicBlock &MBB,
     //        artificially create a dependency and prevent the scheduler
     //        changing the behaviour of the code.
     BuildMI(MBB, I, dl,
-            get(isMicroFgpu ? (FP64 ? Fgpu::MFHC1_D64_MM : Fgpu::MFHC1_D32_MM)
-                            : (FP64 ? Fgpu::MFHC1_D64 : Fgpu::MFHC1_D32)),
+            get((FP64 ? Fgpu::MFHC1_D64 : Fgpu::MFHC1_D32)),
             DstReg)
         .addReg(SrcReg);
   } else
@@ -823,7 +769,7 @@ void FgpuSEInstrInfo::expandExtractElementF64(MachineBasicBlock &MBB,
 
 void FgpuSEInstrInfo::expandBuildPairF64(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator I,
-                                         bool isMicroFgpu, bool FP64) const {
+                                         bool FP64) const {
   Register DstReg = I->getOperand(0).getReg();
   unsigned LoReg = I->getOperand(1).getReg(), HiReg = I->getOperand(2).getReg();
   const MCInstrDesc& Mtc1Tdd = get(Fgpu::MTC1);
@@ -869,8 +815,7 @@ void FgpuSEInstrInfo::expandBuildPairF64(MachineBasicBlock &MBB,
     //        artificially create a dependency and prevent the scheduler
     //        changing the behaviour of the code.
     BuildMI(MBB, I, dl,
-            get(isMicroFgpu ? (FP64 ? Fgpu::MTHC1_D64_MM : Fgpu::MTHC1_D32_MM)
-                            : (FP64 ? Fgpu::MTHC1_D64 : Fgpu::MTHC1_D32)),
+            get((FP64 ? Fgpu::MTHC1_D64 : Fgpu::MTHC1_D32)),
             DstReg)
         .addReg(DstReg)
         .addReg(HiReg);

@@ -27,15 +27,11 @@ namespace llvm {
   class InstructionSelector;
   class PassRegistry;
 
-  ModulePass *createFgpuOs16Pass();
-  ModulePass *createFgpu16HardFloatPass();
 
   FunctionPass *createFgpuModuleISelDagPass();
   FunctionPass *createFgpuOptimizePICCallPass();
   FunctionPass *createFgpuDelaySlotFillerPass();
   FunctionPass *createFgpuBranchExpansion();
-  FunctionPass *createFgpuConstantIslandPass();
-  FunctionPass *createMicroFgpuSizeReducePass();
   FunctionPass *createFgpuExpandPseudoPass();
   FunctionPass *createFgpuPreLegalizeCombiner();
 
@@ -45,7 +41,6 @@ namespace llvm {
 
   void initializeFgpuDelaySlotFillerPass(PassRegistry &);
   void initializeFgpuBranchExpansionPass(PassRegistry &);
-  void initializeMicroFgpuSizeReducePass(PassRegistry &);
   void initializeFgpuPreLegalizerCombinerPass(PassRegistry&);
 } // end namespace llvm;
 

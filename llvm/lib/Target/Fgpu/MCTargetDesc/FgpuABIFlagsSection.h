@@ -156,10 +156,6 @@ public:
       ASESet |= Fgpu::AFL_ASE_DSPR2;
     if (P.hasMSA())
       ASESet |= Fgpu::AFL_ASE_MSA;
-    if (P.inMicroFgpuMode())
-      ASESet |= Fgpu::AFL_ASE_MICROFGPU;
-    if (P.inFgpu16Mode())
-      ASESet |= Fgpu::AFL_ASE_FGPU16;
     if (P.hasMT())
       ASESet |= Fgpu::AFL_ASE_MT;
     if (P.hasCRC())

@@ -86,19 +86,12 @@ static inline unsigned getLoadStoreOffsetSizeInBits(const unsigned Opcode,
   case Fgpu::SCD:
   case Fgpu::SCE:
     return 16;
-  case Fgpu::LLE_MM:
-  case Fgpu::LL_MM:
-  case Fgpu::SCE_MM:
-  case Fgpu::SC_MM:
-    return 12;
   case Fgpu::LL64_R6:
   case Fgpu::LL_R6:
   case Fgpu::LLD_R6:
   case Fgpu::SC64_R6:
   case Fgpu::SCD_R6:
   case Fgpu::SC_R6:
-  case Fgpu::LL_MMR6:
-  case Fgpu::SC_MMR6:
     return 9;
   case Fgpu::INLINEASM: {
     unsigned ConstraintID = InlineAsm::getMemoryConstraintID(MO.getImm());
@@ -108,8 +101,6 @@ static inline unsigned getLoadStoreOffsetSizeInBits(const unsigned Opcode,
                                            ->getParent()
                                            ->getParent()
                                            ->getSubtarget<FgpuSubtarget>();
-      if (Subtarget.inMicroFgpuMode())
-        return 12;
 
       if (Subtarget.hasFgpu32r6())
         return 9;

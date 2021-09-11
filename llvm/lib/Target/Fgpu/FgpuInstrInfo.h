@@ -189,7 +189,6 @@ private:
 };
 
 /// Create FgpuInstrInfo objects.
-const FgpuInstrInfo *createFgpu16InstrInfo(const FgpuSubtarget &STI);
 const FgpuInstrInfo *createFgpuSEInstrInfo(const FgpuSubtarget &STI);
 
 } // end namespace llvm

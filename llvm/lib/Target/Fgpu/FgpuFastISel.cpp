@@ -1569,7 +1569,7 @@ bool FgpuFastISel::fastLowerCall(CallLoweringInfo &CLI) {
 
   CLI.Call = MIB;
 
-  if (EmitJalrReloc && !Subtarget->inFgpu16Mode()) {
+  if (EmitJalrReloc) {
     // Attach callee address to the instruction, let asm printer emit
     // .reloc R_FGPU_JALR.
     if (Symbol)

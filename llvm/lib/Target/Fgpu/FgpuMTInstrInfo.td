@@ -92,8 +92,7 @@ class EVPE_DESC : MT_1R_DESC_BASE<"evpe", II_EVPE>;
 //===----------------------------------------------------------------------===//
 // FGPU MT Instruction Definitions
 //===----------------------------------------------------------------------===//
-let hasSideEffects = 1, isNotDuplicable = 1,
-    AdditionalPredicates = [NotInMicroFgpu] in {
+let hasSideEffects = 1, isNotDuplicable = 1 in {
   def DMT : DMT_ENC, DMT_DESC, ASE_MT;
 
   def EMT : EMT_ENC, EMT_DESC, ASE_MT;
@@ -176,7 +175,6 @@ def CTTC1 : FgpuAsmPseudoInst<(outs FGRCCOpnd:$ft), (ins GPR32Opnd:$rt),
 // FGPU MT Instruction Definitions
 //===----------------------------------------------------------------------===//
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuInstAlias<"dmt", (DMT ZERO), 1>, ASE_MT;
 
   def : FgpuInstAlias<"emt", (EMT ZERO), 1>, ASE_MT;
@@ -204,4 +202,4 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuInstAlias<"mtthi $rt", (MTTHI AC0, GPR32Opnd:$rt), 1>, ASE_MT;
 
   def : FgpuInstAlias<"mttacx $rt", (MTTACX AC0, GPR32Opnd:$rt), 1>, ASE_MT;
-}
+

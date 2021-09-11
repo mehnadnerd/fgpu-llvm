@@ -62,8 +62,6 @@ private:
   /// pool entries so we can properly mark them as data regions.
   bool InConstantPool = false;
 
-  std::map<const char *, const Fgpu16HardFloatInfo::FuncSignature *>
-      StubsNeeded;
 
   void EmitSled(const MachineInstr &MI, SledKind Kind);
 
@@ -99,15 +97,6 @@ private:
                         unsigned Reg1, unsigned Reg2, unsigned FPReg1,
                         unsigned FPReg2, bool LE);
 
-  void EmitSwapFPIntParams(const MCSubtargetInfo &STI,
-                           Fgpu16HardFloatInfo::FPParamVariant, bool LE,
-                           bool ToFP);
-
-  void EmitSwapFPIntRetval(const MCSubtargetInfo &STI,
-                           Fgpu16HardFloatInfo::FPReturnVariant, bool LE);
-
-  void EmitFPCallStub(const char *, const Fgpu16HardFloatInfo::FuncSignature *);
-
   void NaClAlignIndirectJumpTargets(MachineFunction &MF);
 
   bool isLongBranchPseudo(int Opcode) const;
@@ -127,7 +116,7 @@ public:
 
   void emitConstantPool() override {
     bool UsingConstantPools =
-      (Subtarget->inFgpu16Mode() && Subtarget->useConstantIslands());
+      false;
     if (!UsingConstantPools)
       AsmPrinter::emitConstantPool();
     // we emit constant pools customly!

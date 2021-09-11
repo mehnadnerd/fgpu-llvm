@@ -220,7 +220,6 @@ class CMP_CONDN_DESC_BASE<string CondStr, string Typestr,
 
 multiclass CMP_CC_M <FIELD_CMP_FORMAT Format, string Typestr,
                      RegisterOperand FGROpnd, InstrItinClass Itin>{
-  let AdditionalPredicates = [NotInMicroFgpu] in {
     def CMP_F_#NAME : R6MMR6Rel, COP1_CMP_CONDN_FM<Format, FIELD_CMP_COND_AF>,
                       CMP_CONDN_DESC_BASE<"af", Typestr, FGROpnd, Itin>,
                       FgpuR6Arch<!strconcat("cmp.af.", Typestr)>,
@@ -302,7 +301,6 @@ multiclass CMP_CC_M <FIELD_CMP_FORMAT Format, string Typestr,
                          CMP_CONDN_DESC_BASE<"sule", Typestr, FGROpnd, Itin>,
                          FgpuR6Arch<!strconcat("cmp.sule.", Typestr)>,
                          ISA_FGPU32R6, HARDFLOAT;
-  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -866,7 +864,6 @@ def AUI : R6MMR6Rel, AUI_ENC, AUI_DESC, ISA_FGPU32R6;
 def AUIPC : R6MMR6Rel, AUIPC_ENC, AUIPC_DESC, ISA_FGPU32R6;
 def BAL : BAL_ENC, BAL_DESC, ISA_FGPU32R6;
 def BALC : R6MMR6Rel, BALC_ENC, BALC_DESC, ISA_FGPU32R6;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def BC1EQZ : BC1EQZ_ENC, BC1EQZ_DESC, ISA_FGPU32R6, HARDFLOAT;
   def BC1NEZ : BC1NEZ_ENC, BC1NEZ_DESC, ISA_FGPU32R6, HARDFLOAT;
   def BC2EQZ : BC2EQZ_ENC, BC2EQZ_DESC, ISA_FGPU32R6;
@@ -881,9 +878,7 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   def BGEZC : R6MMR6Rel, BGEZC_ENC, BGEZC_DESC, ISA_FGPU32R6;
   def BGTZALC : R6MMR6Rel, BGTZALC_ENC, BGTZALC_DESC, ISA_FGPU32R6;
   def BGTZC : R6MMR6Rel, BGTZC_ENC, BGTZC_DESC, ISA_FGPU32R6;
-}
 def BITSWAP : R6MMR6Rel, BITSWAP_ENC, BITSWAP_DESC, ISA_FGPU32R6;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def BLEZALC : R6MMR6Rel, BLEZALC_ENC, BLEZALC_DESC, ISA_FGPU32R6;
   def BLEZC : R6MMR6Rel, BLEZC_ENC, BLEZC_DESC, ISA_FGPU32R6;
   def BLTC : R6MMR6Rel, BLTC_ENC, BLTC_DESC, ISA_FGPU32R6;
@@ -898,15 +893,12 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   def CACHE_R6 : R6MMR6Rel, CACHE_ENC, CACHE_DESC, ISA_FGPU32R6;
   def CLASS_D : CLASS_D_ENC, CLASS_D_DESC, ISA_FGPU32R6, HARDFLOAT;
   def CLASS_S : CLASS_S_ENC, CLASS_S_DESC, ISA_FGPU32R6, HARDFLOAT;
-}
 def CLO_R6 : R6MMR6Rel, CLO_R6_ENC, CLO_R6_DESC, ISA_FGPU32R6;
 def CLZ_R6 : R6MMR6Rel, CLZ_R6_ENC, CLZ_R6_DESC, ISA_FGPU32R6;
 defm S : CMP_CC_M<FIELD_CMP_FORMAT_S, "s", FGR32Opnd, II_CMP_CC_S>;
 defm D : CMP_CC_M<FIELD_CMP_FORMAT_D, "d", FGR64Opnd, II_CMP_CC_D>;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def DIV : R6MMR6Rel, DIV_ENC, DIV_DESC, ISA_FGPU32R6;
   def DIVU : R6MMR6Rel, DIVU_ENC, DIVU_DESC, ISA_FGPU32R6;
-}
 
 def DVP : R6MMR6Rel, DVP_ENC, DVP_DESC, ISA_FGPU32R6;
 def EVP : R6MMR6Rel, EVP_ENC, EVP_DESC, ISA_FGPU32R6;
@@ -914,16 +906,11 @@ def EVP : R6MMR6Rel, EVP_ENC, EVP_DESC, ISA_FGPU32R6;
 def JIALC : R6MMR6Rel, JIALC_ENC, JIALC_DESC, ISA_FGPU32R6;
 def JIC : R6MMR6Rel, JIC_ENC, JIC_DESC, ISA_FGPU32R6;
 def JR_HB_R6 : JR_HB_R6_ENC, JR_HB_R6_DESC, ISA_FGPU32R6;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def LDC2_R6 : LDC2_R6_ENC, LDC2_R6_DESC, ISA_FGPU32R6;
   def LL_R6 : LL_R6_ENC, LL_R6_DESC, PTR_32, ISA_FGPU32R6;
-}
 def LSA_R6 : R6MMR6Rel, LSA_R6_ENC, LSA_R6_DESC, ISA_FGPU32R6;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def LWC2_R6 : LWC2_R6_ENC, LWC2_R6_DESC, ISA_FGPU32R6;
-}
 def LWPC : R6MMR6Rel, LWPC_ENC, LWPC_DESC, ISA_FGPU32R6;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def MADDF_S : MADDF_S_ENC, MADDF_S_DESC, ISA_FGPU32R6, HARDFLOAT;
   def MADDF_D : MADDF_D_ENC, MADDF_D_DESC, ISA_FGPU32R6, HARDFLOAT;
   def MAXA_D : MAXA_D_ENC, MAXA_D_DESC, ISA_FGPU32R6, HARDFLOAT;
@@ -945,9 +932,7 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   def MUHU   : R6MMR6Rel, MUHU_ENC, MUHU_DESC, ISA_FGPU32R6;
   def MUL_R6 : R6MMR6Rel, MUL_R6_ENC, MUL_R6_DESC, ISA_FGPU32R6;
   def MULU   : R6MMR6Rel, MULU_ENC, MULU_DESC, ISA_FGPU32R6;
-}
 def NAL; // BAL with rd=0
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def PREF_R6 : R6MMR6Rel, PREF_ENC, PREF_DESC, ISA_FGPU32R6;
   def RINT_D : RINT_D_ENC, RINT_D_DESC, ISA_FGPU32R6, HARDFLOAT;
   def RINT_S : RINT_S_ENC, RINT_S_DESC, ISA_FGPU32R6, HARDFLOAT;
@@ -968,21 +953,16 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   def SDC2_R6 : SDC2_R6_ENC, SDC2_R6_DESC, ISA_FGPU32R6;
   def SWC2_R6 : SWC2_R6_ENC, SWC2_R6_DESC, ISA_FGPU32R6;
   def SIGRIE : SIGRIE_ENC, SIGRIE_DESC, ISA_FGPU32R6;
-}
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def CRC32B : R6MMR6Rel, CRC32B_ENC, CRC32B_DESC, ISA_FGPU32R6, ASE_CRC;
   def CRC32H : R6MMR6Rel, CRC32H_ENC, CRC32H_DESC, ISA_FGPU32R6, ASE_CRC;
   def CRC32W : R6MMR6Rel, CRC32W_ENC, CRC32W_DESC, ISA_FGPU32R6, ASE_CRC;
   def CRC32CB : R6MMR6Rel, CRC32CB_ENC, CRC32CB_DESC, ISA_FGPU32R6, ASE_CRC;
   def CRC32CH : R6MMR6Rel, CRC32CH_ENC, CRC32CH_DESC, ISA_FGPU32R6, ASE_CRC;
   def CRC32CW : R6MMR6Rel, CRC32CW_ENC, CRC32CW_DESC, ISA_FGPU32R6, ASE_CRC;
-}
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def GINVI : R6MMR6Rel, GINVI_ENC, GINVI_DESC, ISA_FGPU32R6, ASE_GINV;
   def GINVT : R6MMR6Rel, GINVT_ENC, GINVT_DESC, ISA_FGPU32R6, ASE_GINV;
-}
 
 //===----------------------------------------------------------------------===//
 //
@@ -993,19 +973,16 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
 def : FgpuInstAlias<"dvp", (DVP ZERO), 0>, ISA_FGPU32R6;
 def : FgpuInstAlias<"evp", (EVP ZERO), 0>, ISA_FGPU32R6;
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
 def : FgpuInstAlias<"sdbbp", (SDBBP_R6 0)>, ISA_FGPU32R6;
 def : FgpuInstAlias<"sigrie", (SIGRIE 0)>, ISA_FGPU32R6;
 def : FgpuInstAlias<"jr $rs", (JALR ZERO, GPR32Opnd:$rs), 1>,
       ISA_FGPU32R6, GPR_32;
-}
 
 def : FgpuInstAlias<"jrc $rs", (JIC GPR32Opnd:$rs, 0), 1>, ISA_FGPU32R6, GPR_32;
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
 def : FgpuInstAlias<"jalrc $rs", (JIALC GPR32Opnd:$rs, 0), 1>,
       ISA_FGPU32R6, GPR_32;
-}
+
 
 def : FgpuInstAlias<"div $rs, $rt", (DIV GPR32Opnd:$rs, GPR32Opnd:$rs,
                                          GPR32Opnd:$rt)>, ISA_FGPU32R6;
@@ -1043,10 +1020,8 @@ def : FgpuPat<(setne VT:$lhs, VT:$rhs),
       (NOROp (!cast<Instruction>("CMP_EQ_"#NAME) VT:$lhs, VT:$rhs), ZEROReg)>;
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   defm S : Cmp_Pats<f32, NOR, ZERO>, ISA_FGPU32R6;
   defm D : Cmp_Pats<f64, NOR, ZERO>, ISA_FGPU32R6;
-}
 
 // i32 selects
 multiclass SelectInt_Pats<ValueType RC, Instruction OROp, Instruction XORiOp,
@@ -1085,7 +1060,6 @@ def : FgpuPat<(select (Opg (setne RC:$cond, immz)), immz, RC:$f),
               (SELEQZOp RC:$f, RC:$cond)>;
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
 defm : SelectInt_Pats<i32, OR, XORi, SLTi, SLTiu, SELEQZ, SELNEZ,
                       immZExt16, i32>, ISA_FGPU32R6;
 
@@ -1099,7 +1073,6 @@ def : FgpuPat<(select i32:$cond, i32:$t, immz),
 def : FgpuPat<(select i32:$cond, immz, i32:$f),
               (SELEQZ i32:$f, i32:$cond)>,
               ISA_FGPU32R6;
-}
 
 // Pseudo instructions
 let isCall = 1, isTerminator = 1, isReturn = 1, isBarrier = 1, hasDelaySlot = 1,
@@ -1123,16 +1096,14 @@ class PseudoIndirectBranchBaseR6<Instruction JumpInst, Register RT,
 }
 
 
-let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu,
-                            NoIndirectJumpGuards] in {
+let AdditionalPredicates = [NoIndirectJumpGuards] in {
   def TAILCALLR6REG : TailCallRegR6<JALR, ZERO, GPR32Opnd>, ISA_FGPU32R6;
   def PseudoIndirectBranchR6 : PseudoIndirectBranchBaseR6<JALR, ZERO,
                                                           GPR32Opnd>,
                                ISA_FGPU32R6;
 }
 
-let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu,
-                            UseIndirectJumpsHazard] in {
+let AdditionalPredicates = [UseIndirectJumpsHazard] in {
   def TAILCALLHBR6REG : TailCallReg<JR_HB_R6, GPR32Opnd>, ISA_FGPU32R6;
   def PseudoIndrectHazardBranchR6 : PseudoIndirectBranchBase<JR_HB_R6,
                                                              GPR32Opnd>,

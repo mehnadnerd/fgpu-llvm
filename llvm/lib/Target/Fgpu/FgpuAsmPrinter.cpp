@@ -79,17 +79,6 @@ bool FgpuAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   Subtarget = &MF.getSubtarget<FgpuSubtarget>();
 
   FgpuFI = MF.getInfo<FgpuFunctionInfo>();
-  if (Subtarget->inFgpu16Mode())
-    for (std::map<
-             const char *,
-             const Fgpu16HardFloatInfo::FuncSignature *>::const_iterator
-             it = FgpuFI->StubsNeeded.begin();
-         it != FgpuFI->StubsNeeded.end(); ++it) {
-      const char *Symbol = it->first;
-      const Fgpu16HardFloatInfo::FuncSignature *Signature = it->second;
-      if (StubsNeeded.find(Symbol) == StubsNeeded.end())
-        StubsNeeded[Symbol] = Signature;
-    }
   MCP = MF.getConstantPool();
 
   // In NaCl, all indirect jump targets must be aligned to bundle size.
@@ -115,7 +104,6 @@ bool FgpuAsmPrinter::lowerOperand(const MachineOperand &MO, MCOperand &MCOp) {
 void FgpuAsmPrinter::emitPseudoIndirectBranch(MCStreamer &OutStreamer,
                                               const MachineInstr *MI) {
   bool HasLinkReg = false;
-  bool InMicroFgpuMode = Subtarget->inMicroFgpuMode();
   MCInst TmpInst0;
 
   if (Subtarget->hasFgpu64r6()) {
@@ -124,16 +112,9 @@ void FgpuAsmPrinter::emitPseudoIndirectBranch(MCStreamer &OutStreamer,
     HasLinkReg = true;
   } else if (Subtarget->hasFgpu32r6()) {
     // FGPU32r6 should use (JALR ZERO, $rs)
-    if (InMicroFgpuMode)
-      TmpInst0.setOpcode(Fgpu::JRC16_MMR6);
-    else {
-      TmpInst0.setOpcode(Fgpu::JALR);
-      HasLinkReg = true;
-    }
-  } else if (Subtarget->inMicroFgpuMode())
-    // microFGPU should use (JR_MM $rs)
-    TmpInst0.setOpcode(Fgpu::JR_MM);
-  else {
+    TmpInst0.setOpcode(Fgpu::JALR);
+    HasLinkReg = true;
+  } else {
     // Everything else should use (JR $rs)
     TmpInst0.setOpcode(Fgpu::JR);
   }
@@ -176,7 +157,7 @@ static void emitDirectiveRelocJalr(const MachineInstr &MI,
             MCSymbolRefExpr::create(Callee, OutContext);
         OutStreamer.emitRelocDirective(
             *OffsetExpr,
-            Subtarget.inMicroFgpuMode() ? "R_MICROFGPU_JALR" : "R_FGPU_JALR",
+            "R_FGPU_JALR",
             CaleeExpr, SMLoc(), *TM.getMCSubtargetInfo());
         OutStreamer.emitLabel(OffsetLabel);
         return;
@@ -199,38 +180,6 @@ void FgpuAsmPrinter::emitInstruction(const MachineInstr *MI) {
   }
   if (MI->isDebugLabel())
     return;
-
-  // If we just ended a constant pool, mark it as such.
-  if (InConstantPool && Opc != Fgpu::CONSTPOOL_ENTRY) {
-    OutStreamer->emitDataRegion(MCDR_DataRegionEnd);
-    InConstantPool = false;
-  }
-  if (Opc == Fgpu::CONSTPOOL_ENTRY) {
-    // CONSTPOOL_ENTRY - This instruction represents a floating
-    // constant pool in the function.  The first operand is the ID#
-    // for this instruction, the second is the index into the
-    // MachineConstantPool that this is, the third is the size in
-    // bytes of this constant pool entry.
-    // The required alignment is specified on the basic block holding this MI.
-    //
-    unsigned LabelId = (unsigned)MI->getOperand(0).getImm();
-    unsigned CPIdx = (unsigned)MI->getOperand(1).getIndex();
-
-    // If this is the first entry of the pool, mark it.
-    if (!InConstantPool) {
-      OutStreamer->emitDataRegion(MCDR_DataRegion);
-      InConstantPool = true;
-    }
-
-    OutStreamer->emitLabel(GetCPISymbol(LabelId));
-
-    const MachineConstantPoolEntry &MCPE = MCP->getConstants()[CPIdx];
-    if (MCPE.isMachineConstantPoolEntry())
-      emitMachineConstantPoolValue(MCPE.Val.MachineCPVal);
-    else
-      emitGlobalConstant(MF->getDataLayout(), MCPE.Val.ConstVal);
-    return;
-  }
 
   switch (Opc) {
   case Fgpu::PATCHABLE_FUNCTION_ENTER:
@@ -278,7 +227,7 @@ void FgpuAsmPrinter::emitInstruction(const MachineInstr *MI) {
     // removing another test for this situation downstream in the
     // callchain.
     //
-    if (I->isPseudo() && !Subtarget->inFgpu16Mode()
+    if (I->isPseudo()
         && !isLongBranchPseudo(I->getOpcode()))
       llvm_unreachable("Pseudo opcode found in emitInstruction()");
 
@@ -406,17 +355,8 @@ void FgpuAsmPrinter::emitFunctionEntryLabel() {
   if (Subtarget->isTargetNaCl())
     emitAlignment(std::max(MF->getAlignment(), FGPU_NACL_BUNDLE_ALIGN));
 
-  if (Subtarget->inMicroFgpuMode()) {
-    TS.emitDirectiveSetMicroFgpu();
-    TS.setUsesMicroFgpu();
-    TS.updateABIInfo(*Subtarget);
-  } else
-    TS.emitDirectiveSetNoMicroFgpu();
-
-  if (Subtarget->inFgpu16Mode())
-    TS.emitDirectiveSetFgpu16();
-  else
-    TS.emitDirectiveSetNoFgpu16();
+  TS.emitDirectiveSetNoMicroFgpu();
+  TS.emitDirectiveSetNoFgpu16();
 
   TS.emitDirectiveEnt(*CurrentFnSym);
   OutStreamer->emitLabel(CurrentFnSym);
@@ -436,11 +376,9 @@ void FgpuAsmPrinter::emitFunctionBodyStart() {
   if (!IsNakedFunction)
     printSavedRegsBitmask();
 
-  if (!Subtarget->inFgpu16Mode()) {
-    TS.emitDirectiveSetNoReorder();
-    TS.emitDirectiveSetNoMacro();
-    TS.emitDirectiveSetNoAt();
-  }
+  TS.emitDirectiveSetNoReorder();
+  TS.emitDirectiveSetNoMacro();
+  TS.emitDirectiveSetNoAt();
 }
 
 /// EmitFunctionBodyEnd - Targets can override this to emit stuff after
@@ -451,11 +389,9 @@ void FgpuAsmPrinter::emitFunctionBodyEnd() {
   // There are instruction for this macros, but they must
   // always be at the function end, and we can't emit and
   // break with BB logic.
-  if (!Subtarget->inFgpu16Mode()) {
-    TS.emitDirectiveSetAt();
-    TS.emitDirectiveSetMacro();
-    TS.emitDirectiveSetReorder();
-  }
+  TS.emitDirectiveSetAt();
+  TS.emitDirectiveSetMacro();
+  TS.emitDirectiveSetReorder();
   TS.emitDirectiveEnd(CurrentFnSym->getName());
   // Make sure to terminate any constant pools that were at the end
   // of the function.
@@ -734,10 +670,6 @@ printMemOperand(const MachineInstr *MI, int opNum, raw_ostream &O) {
   switch (MI->getOpcode()) {
   default:
     break;
-  case Fgpu::SWM32_MM:
-  case Fgpu::LWM32_MM:
-    opNum = MI->getNumOperands() - 2;
-    break;
   }
 
   printOperand(MI, opNum+1, O);
@@ -915,225 +847,7 @@ void FgpuAsmPrinter::EmitMovFPIntPair(const MCSubtargetInfo &STI,
   EmitInstrRegReg(STI, MovOpc, Reg2, FPReg2);
 }
 
-void FgpuAsmPrinter::EmitSwapFPIntParams(const MCSubtargetInfo &STI,
-                                         Fgpu16HardFloatInfo::FPParamVariant PV,
-                                         bool LE, bool ToFP) {
-  using namespace Fgpu16HardFloatInfo;
-
-  unsigned MovOpc = ToFP ? Fgpu::MTC1 : Fgpu::MFC1;
-  switch (PV) {
-  case FSig:
-    EmitInstrRegReg(STI, MovOpc, Fgpu::A0, Fgpu::F12);
-    break;
-  case FFSig:
-    EmitMovFPIntPair(STI, MovOpc, Fgpu::A0, Fgpu::A1, Fgpu::F12, Fgpu::F14, LE);
-    break;
-  case FDSig:
-    EmitInstrRegReg(STI, MovOpc, Fgpu::A0, Fgpu::F12);
-    EmitMovFPIntPair(STI, MovOpc, Fgpu::A2, Fgpu::A3, Fgpu::F14, Fgpu::F15, LE);
-    break;
-  case DSig:
-    EmitMovFPIntPair(STI, MovOpc, Fgpu::A0, Fgpu::A1, Fgpu::F12, Fgpu::F13, LE);
-    break;
-  case DDSig:
-    EmitMovFPIntPair(STI, MovOpc, Fgpu::A0, Fgpu::A1, Fgpu::F12, Fgpu::F13, LE);
-    EmitMovFPIntPair(STI, MovOpc, Fgpu::A2, Fgpu::A3, Fgpu::F14, Fgpu::F15, LE);
-    break;
-  case DFSig:
-    EmitMovFPIntPair(STI, MovOpc, Fgpu::A0, Fgpu::A1, Fgpu::F12, Fgpu::F13, LE);
-    EmitInstrRegReg(STI, MovOpc, Fgpu::A2, Fgpu::F14);
-    break;
-  case NoSig:
-    return;
-  }
-}
-
-void FgpuAsmPrinter::EmitSwapFPIntRetval(
-    const MCSubtargetInfo &STI, Fgpu16HardFloatInfo::FPReturnVariant RV,
-    bool LE) {
-  using namespace Fgpu16HardFloatInfo;
-
-  unsigned MovOpc = Fgpu::MFC1;
-  switch (RV) {
-  case FRet:
-    EmitInstrRegReg(STI, MovOpc, Fgpu::V0, Fgpu::F0);
-    break;
-  case DRet:
-    EmitMovFPIntPair(STI, MovOpc, Fgpu::V0, Fgpu::V1, Fgpu::F0, Fgpu::F1, LE);
-    break;
-  case CFRet:
-    EmitMovFPIntPair(STI, MovOpc, Fgpu::V0, Fgpu::V1, Fgpu::F0, Fgpu::F1, LE);
-    break;
-  case CDRet:
-    EmitMovFPIntPair(STI, MovOpc, Fgpu::V0, Fgpu::V1, Fgpu::F0, Fgpu::F1, LE);
-    EmitMovFPIntPair(STI, MovOpc, Fgpu::A0, Fgpu::A1, Fgpu::F2, Fgpu::F3, LE);
-    break;
-  case NoFPRet:
-    break;
-  }
-}
-
-void FgpuAsmPrinter::EmitFPCallStub(
-    const char *Symbol, const Fgpu16HardFloatInfo::FuncSignature *Signature) {
-  using namespace Fgpu16HardFloatInfo;
-
-  MCSymbol *MSymbol = OutContext.getOrCreateSymbol(StringRef(Symbol));
-  bool LE = getDataLayout().isLittleEndian();
-  // Construct a local MCSubtargetInfo here.
-  // This is because the MachineFunction won't exist (but have not yet been
-  // freed) and since we're at the global level we can use the default
-  // constructed subtarget.
-  std::unique_ptr<MCSubtargetInfo> STI(TM.getTarget().createMCSubtargetInfo(
-      TM.getTargetTriple().str(), TM.getTargetCPU(),
-      TM.getTargetFeatureString()));
-
-  //
-  // .global xxxx
-  //
-  OutStreamer->emitSymbolAttribute(MSymbol, MCSA_Global);
-  const char *RetType;
-  //
-  // make the comment field identifying the return and parameter
-  // types of the floating point stub
-  // # Stub function to call rettype xxxx (params)
-  //
-  switch (Signature->RetSig) {
-  case FRet:
-    RetType = "float";
-    break;
-  case DRet:
-    RetType = "double";
-    break;
-  case CFRet:
-    RetType = "complex";
-    break;
-  case CDRet:
-    RetType = "double complex";
-    break;
-  case NoFPRet:
-    RetType = "";
-    break;
-  }
-  const char *Parms;
-  switch (Signature->ParamSig) {
-  case FSig:
-    Parms = "float";
-    break;
-  case FFSig:
-    Parms = "float, float";
-    break;
-  case FDSig:
-    Parms = "float, double";
-    break;
-  case DSig:
-    Parms = "double";
-    break;
-  case DDSig:
-    Parms = "double, double";
-    break;
-  case DFSig:
-    Parms = "double, float";
-    break;
-  case NoSig:
-    Parms = "";
-    break;
-  }
-  OutStreamer->AddComment("\t# Stub function to call " + Twine(RetType) + " " +
-                          Twine(Symbol) + " (" + Twine(Parms) + ")");
-  //
-  // probably not necessary but we save and restore the current section state
-  //
-  OutStreamer->PushSection();
-  //
-  // .section fgpu16.call.fpxxxx,"ax",@progbits
-  //
-  MCSectionELF *M = OutContext.getELFSection(
-      ".fgpu16.call.fp." + std::string(Symbol), ELF::SHT_PROGBITS,
-      ELF::SHF_ALLOC | ELF::SHF_EXECINSTR);
-  OutStreamer->SwitchSection(M, nullptr);
-  //
-  // .align 2
-  //
-  OutStreamer->emitValueToAlignment(4);
-  FgpuTargetStreamer &TS = getTargetStreamer();
-  //
-  // .set nofgpu16
-  // .set nomicrofgpu
-  //
-  TS.emitDirectiveSetNoFgpu16();
-  TS.emitDirectiveSetNoMicroFgpu();
-  //
-  // .ent __call_stub_fp_xxxx
-  // .type  __call_stub_fp_xxxx,@function
-  //  __call_stub_fp_xxxx:
-  //
-  std::string x = "__call_stub_fp_" + std::string(Symbol);
-  MCSymbolELF *Stub =
-      cast<MCSymbolELF>(OutContext.getOrCreateSymbol(StringRef(x)));
-  TS.emitDirectiveEnt(*Stub);
-  MCSymbol *MType =
-      OutContext.getOrCreateSymbol("__call_stub_fp_" + Twine(Symbol));
-  OutStreamer->emitSymbolAttribute(MType, MCSA_ELF_TypeFunction);
-  OutStreamer->emitLabel(Stub);
-
-  // Only handle non-pic for now.
-  assert(!isPositionIndependent() &&
-         "should not be here if we are compiling pic");
-  TS.emitDirectiveSetReorder();
-  //
-  // We need to add a FgpuMCExpr class to MCTargetDesc to fully implement
-  // stubs without raw text but this current patch is for compiler generated
-  // functions and they all return some value.
-  // The calling sequence for non pic is different in that case and we need
-  // to implement %lo and %hi in order to handle the case of no return value
-  // See the corresponding method in Fgpu16HardFloat for details.
-  //
-  // mov the return address to S2.
-  // we have no stack space to store it and we are about to make another call.
-  // We need to make sure that the enclosing function knows to save S2
-  // This should have already been handled.
-  //
-  // Mov $18, $31
-
-  EmitInstrRegRegReg(*STI, Fgpu::OR, Fgpu::S2, Fgpu::RA, Fgpu::ZERO);
-
-  EmitSwapFPIntParams(*STI, Signature->ParamSig, LE, true);
-
-  // Jal xxxx
-  //
-  EmitJal(*STI, MSymbol);
-
-  // fix return values
-  EmitSwapFPIntRetval(*STI, Signature->RetSig, LE);
-  //
-  // do the return
-  // if (Signature->RetSig == NoFPRet)
-  //  llvm_unreachable("should not be any stubs here with no return value");
-  // else
-  EmitInstrReg(*STI, Fgpu::JR, Fgpu::S2);
-
-  MCSymbol *Tmp = OutContext.createTempSymbol();
-  OutStreamer->emitLabel(Tmp);
-  const MCSymbolRefExpr *E = MCSymbolRefExpr::create(Stub, OutContext);
-  const MCSymbolRefExpr *T = MCSymbolRefExpr::create(Tmp, OutContext);
-  const MCExpr *T_min_E = MCBinaryExpr::createSub(T, E, OutContext);
-  OutStreamer->emitELFSize(Stub, T_min_E);
-  TS.emitDirectiveEnd(x);
-  OutStreamer->PopSection();
-}
-
 void FgpuAsmPrinter::emitEndOfAsmFile(Module &M) {
-  // Emit needed stubs
-  //
-  for (std::map<
-           const char *,
-           const Fgpu16HardFloatInfo::FuncSignature *>::const_iterator
-           it = StubsNeeded.begin();
-       it != StubsNeeded.end(); ++it) {
-    const char *Symbol = it->first;
-    const Fgpu16HardFloatInfo::FuncSignature *Signature = it->second;
-    EmitFPCallStub(Symbol, Signature);
-  }
   // return to the text section
   OutStreamer->SwitchSection(OutContext.getObjectFileInfo()->getTextSection());
 }

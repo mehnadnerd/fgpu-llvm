@@ -203,10 +203,6 @@ def HasFgpu64r6  :    Predicate<"Subtarget->hasFgpu64r6()">,
                       AssemblerPredicate<(all_of FeatureFgpu64r6)>;
 def NotFgpu64r6  :    Predicate<"!Subtarget->hasFgpu64r6()">,
                       AssemblerPredicate<(all_of (not FeatureFgpu64r6))>;
-def InFgpu16Mode :    Predicate<"Subtarget->inFgpu16Mode()">,
-                      AssemblerPredicate<(all_of FeatureFgpu16)>;
-def NotInFgpu16Mode : Predicate<"!Subtarget->inFgpu16Mode()">,
-                      AssemblerPredicate<(all_of (not FeatureFgpu16))>;
 def HasCnFgpu    :    Predicate<"Subtarget->hasCnFgpu()">,
                       AssemblerPredicate<(all_of FeatureCnFgpu)>;
 def NotCnFgpu    :    Predicate<"!Subtarget->hasCnFgpu()">,
@@ -226,13 +222,8 @@ def RelocPIC    :     Predicate<"TM.isPositionIndependent()">;
 def NoNaNsFPMath :    Predicate<"TM.Options.NoNaNsFPMath">;
 def UseAbs :          Predicate<"Subtarget->inAbs2008Mode() ||"
                                 "TM.Options.NoNaNsFPMath">;
-def HasStdEnc :       Predicate<"Subtarget->hasStandardEncoding()">,
-                      AssemblerPredicate<(all_of (not FeatureFgpu16))>;
+def HasStdEnc :       Predicate<"Subtarget->hasStandardEncoding()">;
 def NotDSP :          Predicate<"!Subtarget->hasDSP()">;
-def InMicroFgpu    :  Predicate<"Subtarget->inMicroFgpuMode()">,
-                      AssemblerPredicate<(all_of FeatureMicroFgpu)>;
-def NotInMicroFgpu :  Predicate<"!Subtarget->inMicroFgpuMode()">,
-                      AssemblerPredicate<(all_of (not FeatureMicroFgpu))>;
 def IsLE           :  Predicate<"Subtarget->isLittle()">;
 def IsBE           :  Predicate<"!Subtarget->isLittle()">;
 def IsNotNaCl    :    Predicate<"!Subtarget->isTargetNaCl()">;
@@ -362,25 +353,6 @@ class ISA_FGPU64R6 {
   list<Predicate> InsnPredicates = [HasFgpu64r6];
   list<Predicate> EncodingPredicates = [HasStdEnc];
 }
-class ISA_MICROFGPU {
-  list<Predicate> EncodingPredicates = [InMicroFgpu];
-}
-class ISA_MICROFGPU32R5 {
-  list<Predicate> InsnPredicates = [HasFgpu32r5];
-  list<Predicate> EncodingPredicates = [InMicroFgpu];
-}
-class ISA_MICROFGPU32R6 {
-  list<Predicate> InsnPredicates = [HasFgpu32r6];
-  list<Predicate> EncodingPredicates = [InMicroFgpu];
-}
-class ISA_MICROFGPU64R6 {
-  list<Predicate> InsnPredicates = [HasFgpu64r6];
-  list<Predicate> EncodingPredicates = [InMicroFgpu];
-}
-class ISA_MICROFGPU32_NOT_FGPU32R6 {
-  list<Predicate> InsnPredicates = [NotFgpu32r6];
-  list<Predicate> EncodingPredicates = [InMicroFgpu];
-}
 class ASE_EVA { list<Predicate> ASEPredicate = [HasEVA]; }
 
 // The portions of FGPU-III that were also added to FGPU32
@@ -481,13 +453,6 @@ class ASE_VIRT {
 
 class ASE_GINV {
   list <Predicate> ASEPredicate = [HasGINV];
-}
-
-// Class used for separating microFGPUr6 and microFGPU (r3) instruction.
-// It can be used only on instructions that doesn't inherit PredicateControl.
-class ISA_MICROFGPU_NOT_32R6 : PredicateControl {
-  let InsnPredicates = [NotFgpu32r6];
-  let EncodingPredicates = [InMicroFgpu];
 }
 
 class ASE_NOT_DSP {
@@ -2020,122 +1985,115 @@ def LONG_BRANCH_ADDiu2Op : PseudoSE<(outs GPR32Opnd:$dst),
 //===----------------------------------------------------------------------===//
 
 /// Arithmetic Instructions (ALU Immediate)
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def ADDiu : MMRel, StdMMR6Rel, ArithLogicI<"addiu", simm16_relaxed, GPR32Opnd,
+  def ADDiu : ArithLogicI<"addiu", simm16_relaxed, GPR32Opnd,
                                              II_ADDIU, imm32SExt16, add>,
               ADDI_FM<0x9>, IsAsCheapAsAMove, ISA_FGPU1;
 
-  def ANDi : MMRel, StdMMR6Rel,
+  def ANDi : 
              ArithLogicI<"andi", uimm16, GPR32Opnd, II_ANDI, imm32ZExt16, and>,
              ADDI_FM<0xc>, ISA_FGPU1;
-  def ORi  : MMRel, StdMMR6Rel,
+  def ORi  : 
              ArithLogicI<"ori", uimm16, GPR32Opnd, II_ORI, imm32ZExt16, or>,
              ADDI_FM<0xd>, ISA_FGPU1;
-  def XORi : MMRel, StdMMR6Rel,
+  def XORi : 
              ArithLogicI<"xori", uimm16, GPR32Opnd, II_XORI, imm32ZExt16, xor>,
              ADDI_FM<0xe>, ISA_FGPU1;
-  def ADDi  : MMRel, ArithLogicI<"addi", simm16_relaxed, GPR32Opnd, II_ADDI>,
+  def ADDi  : ArithLogicI<"addi", simm16_relaxed, GPR32Opnd, II_ADDI>,
               ADDI_FM<0x8>, ISA_FGPU1_NOT_32R6_64R6;
-  def SLTi  : MMRel, SetCC_I<"slti", setlt, simm16, immSExt16, GPR32Opnd>,
+  def SLTi  : SetCC_I<"slti", setlt, simm16, immSExt16, GPR32Opnd>,
               SLTI_FM<0xa>, ISA_FGPU1;
-  def SLTiu : MMRel, SetCC_I<"sltiu", setult, simm16, immSExt16, GPR32Opnd>,
+  def SLTiu : SetCC_I<"sltiu", setult, simm16, immSExt16, GPR32Opnd>,
               SLTI_FM<0xb>, ISA_FGPU1;
 
-  def LUi   : MMRel, LoadUpper<"lui", GPR32Opnd, uimm16_relaxed>, LUI_FM,
+  def LUi   : LoadUpper<"lui", GPR32Opnd, uimm16_relaxed>, LUI_FM,
               ISA_FGPU1;
 
   /// Arithmetic Instructions (3-Operand, R-Type)
-  def ADDu : MMRel, StdMMR6Rel, ArithLogicR<"addu", GPR32Opnd, 1, II_ADDU, add>,
+  def ADDu :  ArithLogicR<"addu", GPR32Opnd, 1, II_ADDU, add>,
              ADD_FM<0, 0x21>, ISA_FGPU1;
-  def SUBu : MMRel, StdMMR6Rel, ArithLogicR<"subu", GPR32Opnd, 0, II_SUBU, sub>,
+  def SUBu :  ArithLogicR<"subu", GPR32Opnd, 0, II_SUBU, sub>,
              ADD_FM<0, 0x23>, ISA_FGPU1;
 
   let Defs = [HI0, LO0] in
-    def MUL   : MMRel, ArithLogicR<"mul", GPR32Opnd, 1, II_MUL, mul>,
+    def MUL   : ArithLogicR<"mul", GPR32Opnd, 1, II_MUL, mul>,
                 ADD_FM<0x1c, 2>, ISA_FGPU32_NOT_32R6_64R6;
 
-  def ADD   : MMRel, StdMMR6Rel, ArithLogicR<"add", GPR32Opnd, 1, II_ADD>,
+  def ADD   :  ArithLogicR<"add", GPR32Opnd, 1, II_ADD>,
               ADD_FM<0, 0x20>, ISA_FGPU1;
-  def SUB   : MMRel, StdMMR6Rel, ArithLogicR<"sub", GPR32Opnd, 0, II_SUB>,
+  def SUB   :  ArithLogicR<"sub", GPR32Opnd, 0, II_SUB>,
               ADD_FM<0, 0x22>, ISA_FGPU1;
 
-  def SLT   : MMRel, SetCC_R<"slt", setlt, GPR32Opnd>, ADD_FM<0, 0x2a>,
+  def SLT   : SetCC_R<"slt", setlt, GPR32Opnd>, ADD_FM<0, 0x2a>,
               ISA_FGPU1;
-  def SLTu  : MMRel, SetCC_R<"sltu", setult, GPR32Opnd>, ADD_FM<0, 0x2b>,
+  def SLTu  : SetCC_R<"sltu", setult, GPR32Opnd>, ADD_FM<0, 0x2b>,
               ISA_FGPU1;
-  def AND   : MMRel, StdMMR6Rel, ArithLogicR<"and", GPR32Opnd, 1, II_AND, and>,
+  def AND   :  ArithLogicR<"and", GPR32Opnd, 1, II_AND, and>,
               ADD_FM<0, 0x24>, ISA_FGPU1;
-  def OR    : MMRel, StdMMR6Rel, ArithLogicR<"or", GPR32Opnd, 1, II_OR, or>,
+  def OR    :  ArithLogicR<"or", GPR32Opnd, 1, II_OR, or>,
               ADD_FM<0, 0x25>, ISA_FGPU1;
-  def XOR   : MMRel, StdMMR6Rel, ArithLogicR<"xor", GPR32Opnd, 1, II_XOR, xor>,
+  def XOR   :  ArithLogicR<"xor", GPR32Opnd, 1, II_XOR, xor>,
               ADD_FM<0, 0x26>, ISA_FGPU1;
-  def NOR   : MMRel, StdMMR6Rel, LogicNOR<"nor", GPR32Opnd>, ADD_FM<0, 0x27>,
+  def NOR   :  LogicNOR<"nor", GPR32Opnd>, ADD_FM<0, 0x27>,
               ISA_FGPU1;
-}
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   /// Shift Instructions
-  def SLL  : MMRel, shift_rotate_imm<"sll", uimm5, GPR32Opnd, II_SLL, shl,
+  def SLL  : shift_rotate_imm<"sll", uimm5, GPR32Opnd, II_SLL, shl,
                                      immZExt5>, SRA_FM<0, 0>, ISA_FGPU1;
-  def SRL  : MMRel, shift_rotate_imm<"srl", uimm5, GPR32Opnd, II_SRL, srl,
+  def SRL  : shift_rotate_imm<"srl", uimm5, GPR32Opnd, II_SRL, srl,
                                      immZExt5>, SRA_FM<2, 0>, ISA_FGPU1;
-  def SRA  : MMRel, shift_rotate_imm<"sra", uimm5, GPR32Opnd, II_SRA, sra,
+  def SRA  : shift_rotate_imm<"sra", uimm5, GPR32Opnd, II_SRA, sra,
                                      immZExt5>, SRA_FM<3, 0>, ISA_FGPU1;
-  def SLLV : MMRel, shift_rotate_reg<"sllv", GPR32Opnd, II_SLLV, shl>,
+  def SLLV : shift_rotate_reg<"sllv", GPR32Opnd, II_SLLV, shl>,
              SRLV_FM<4, 0>, ISA_FGPU1;
-  def SRLV : MMRel, shift_rotate_reg<"srlv", GPR32Opnd, II_SRLV, srl>,
+  def SRLV : shift_rotate_reg<"srlv", GPR32Opnd, II_SRLV, srl>,
              SRLV_FM<6, 0>, ISA_FGPU1;
-  def SRAV : MMRel, shift_rotate_reg<"srav", GPR32Opnd, II_SRAV, sra>,
+  def SRAV : shift_rotate_reg<"srav", GPR32Opnd, II_SRAV, sra>,
              SRLV_FM<7, 0>, ISA_FGPU1;
 
   // Rotate Instructions
-  def ROTR  : MMRel, shift_rotate_imm<"rotr", uimm5, GPR32Opnd, II_ROTR, rotr,
+  def ROTR  : shift_rotate_imm<"rotr", uimm5, GPR32Opnd, II_ROTR, rotr,
                                       immZExt5>,
               SRA_FM<2, 1>, ISA_FGPU32R2;
-  def ROTRV : MMRel, shift_rotate_reg<"rotrv", GPR32Opnd, II_ROTRV, rotr>,
+  def ROTRV : shift_rotate_reg<"rotrv", GPR32Opnd, II_ROTRV, rotr>,
               SRLV_FM<6, 1>, ISA_FGPU32R2;
-}
 
 /// Load and Store Instructions
 ///  aligned
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def LB  : LoadMemory<"lb", GPR32Opnd, mem_simmptr, sextloadi8, II_LB>, MMRel,
+  def LB  : LoadMemory<"lb", GPR32Opnd, mem_simmptr, sextloadi8, II_LB>,
             LW_FM<0x20>, ISA_FGPU1;
   def LBu : LoadMemory<"lbu", GPR32Opnd, mem_simmptr, zextloadi8, II_LBU,
-                       addrDefault>, MMRel, LW_FM<0x24>, ISA_FGPU1;
+                       addrDefault>, LW_FM<0x24>, ISA_FGPU1;
   def LH  : LoadMemory<"lh", GPR32Opnd, mem_simmptr, sextloadi16, II_LH,
-                       addrDefault>, MMRel, LW_FM<0x21>, ISA_FGPU1;
+                       addrDefault>, LW_FM<0x21>, ISA_FGPU1;
   def LHu : LoadMemory<"lhu", GPR32Opnd, mem_simmptr, zextloadi16, II_LHU>,
-            MMRel, LW_FM<0x25>, ISA_FGPU1;
-  def LW  : StdMMR6Rel, Load<"lw", GPR32Opnd, load, II_LW, addrDefault>, MMRel,
+            LW_FM<0x25>, ISA_FGPU1;
+  def LW  :  Load<"lw", GPR32Opnd, load, II_LW, addrDefault>,
             LW_FM<0x23>, ISA_FGPU1;
-  def SB  : StdMMR6Rel, Store<"sb", GPR32Opnd, truncstorei8, II_SB>, MMRel,
+  def SB  :  Store<"sb", GPR32Opnd, truncstorei8, II_SB>,
             LW_FM<0x28>, ISA_FGPU1;
-  def SH  : Store<"sh", GPR32Opnd, truncstorei16, II_SH>, MMRel, LW_FM<0x29>,
+  def SH  : Store<"sh", GPR32Opnd, truncstorei16, II_SH>, LW_FM<0x29>,
             ISA_FGPU1;
-  def SW  : StdMMR6Rel, Store<"sw", GPR32Opnd, store, II_SW>,
-            MMRel, LW_FM<0x2b>, ISA_FGPU1;
-}
+  def SW  :  Store<"sw", GPR32Opnd, store, II_SW>,
+            LW_FM<0x2b>, ISA_FGPU1;
 
 /// load/store left/right
-let AdditionalPredicates = [NotInMicroFgpu] in {
-def LWL : MMRel, LoadLeftRight<"lwl", FgpuLWL, GPR32Opnd, II_LWL>, LW_FM<0x22>,
+def LWL : LoadLeftRight<"lwl", FgpuLWL, GPR32Opnd, II_LWL>, LW_FM<0x22>,
           ISA_FGPU1_NOT_32R6_64R6;
-def LWR : MMRel, LoadLeftRight<"lwr", FgpuLWR, GPR32Opnd, II_LWR>, LW_FM<0x26>,
+def LWR : LoadLeftRight<"lwr", FgpuLWR, GPR32Opnd, II_LWR>, LW_FM<0x26>,
           ISA_FGPU1_NOT_32R6_64R6;
-def SWL : MMRel, StoreLeftRight<"swl", FgpuSWL, GPR32Opnd, II_SWL>, LW_FM<0x2a>,
+def SWL : StoreLeftRight<"swl", FgpuSWL, GPR32Opnd, II_SWL>, LW_FM<0x2a>,
           ISA_FGPU1_NOT_32R6_64R6;
-def SWR : MMRel, StoreLeftRight<"swr", FgpuSWR, GPR32Opnd, II_SWR>, LW_FM<0x2e>,
+def SWR : StoreLeftRight<"swr", FgpuSWR, GPR32Opnd, II_SWR>, LW_FM<0x2e>,
           ISA_FGPU1_NOT_32R6_64R6;
 
 // COP2 Memory Instructions
-def LWC2 : StdMMR6Rel, LW_FT2<"lwc2", COP2Opnd, II_LWC2, load>, LW_FM<0x32>,
+def LWC2 :  LW_FT2<"lwc2", COP2Opnd, II_LWC2, load>, LW_FM<0x32>,
            ISA_FGPU1_NOT_32R6_64R6;
-def SWC2 : StdMMR6Rel, SW_FT2<"swc2", COP2Opnd, II_SWC2, store>,
+def SWC2 :  SW_FT2<"swc2", COP2Opnd, II_SWC2, store>,
            LW_FM<0x3a>, ISA_FGPU1_NOT_32R6_64R6;
-def LDC2 : StdMMR6Rel, LW_FT2<"ldc2", COP2Opnd, II_LDC2, load>, LW_FM<0x36>,
+def LDC2 :  LW_FT2<"ldc2", COP2Opnd, II_LDC2, load>, LW_FM<0x36>,
            ISA_FGPU2_NOT_32R6_64R6;
-def SDC2 : StdMMR6Rel, SW_FT2<"sdc2", COP2Opnd, II_SDC2, store>,
+def SDC2 :  SW_FT2<"sdc2", COP2Opnd, II_SDC2, store>,
            LW_FM<0x3e>, ISA_FGPU2_NOT_32R6_64R6;
 
 // COP3 Memory Instructions
@@ -2150,126 +2108,116 @@ let DecoderNamespace = "COP3_" in {
              ISA_FGPU2, NOT_ASE_CNFGPU;
 }
 
-  def SYNC : MMRel, StdMMR6Rel, SYNC_FT<"sync">, SYNC_FM, ISA_FGPU2;
-  def SYNCI : MMRel, StdMMR6Rel, SYNCI_FT<"synci", mem_simm16>, SYNCI_FM,
+  def SYNC :  SYNC_FT<"sync">, SYNC_FM, ISA_FGPU2;
+  def SYNCI :  SYNCI_FT<"synci", mem_simm16>, SYNCI_FM,
               ISA_FGPU32R2;
-}
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def TEQ : MMRel, TEQ_FT<"teq", GPR32Opnd, uimm10, II_TEQ>, TEQ_FM<0x34>,
+  def TEQ : TEQ_FT<"teq", GPR32Opnd, uimm10, II_TEQ>, TEQ_FM<0x34>,
             ISA_FGPU2;
-  def TGE : MMRel, TEQ_FT<"tge", GPR32Opnd, uimm10, II_TGE>, TEQ_FM<0x30>,
+  def TGE : TEQ_FT<"tge", GPR32Opnd, uimm10, II_TGE>, TEQ_FM<0x30>,
             ISA_FGPU2;
-  def TGEU : MMRel, TEQ_FT<"tgeu", GPR32Opnd, uimm10, II_TGEU>, TEQ_FM<0x31>,
+  def TGEU : TEQ_FT<"tgeu", GPR32Opnd, uimm10, II_TGEU>, TEQ_FM<0x31>,
              ISA_FGPU2;
-  def TLT : MMRel, TEQ_FT<"tlt", GPR32Opnd, uimm10, II_TLT>, TEQ_FM<0x32>,
+  def TLT : TEQ_FT<"tlt", GPR32Opnd, uimm10, II_TLT>, TEQ_FM<0x32>,
             ISA_FGPU2;
-  def TLTU : MMRel, TEQ_FT<"tltu", GPR32Opnd, uimm10, II_TLTU>, TEQ_FM<0x33>,
+  def TLTU : TEQ_FT<"tltu", GPR32Opnd, uimm10, II_TLTU>, TEQ_FM<0x33>,
             ISA_FGPU2;
-  def TNE : MMRel, TEQ_FT<"tne", GPR32Opnd, uimm10, II_TNE>, TEQ_FM<0x36>,
+  def TNE : TEQ_FT<"tne", GPR32Opnd, uimm10, II_TNE>, TEQ_FM<0x36>,
             ISA_FGPU2;
 
-  def TEQI : MMRel, TEQI_FT<"teqi", GPR32Opnd, II_TEQI>, TEQI_FM<0xc>,
+  def TEQI : TEQI_FT<"teqi", GPR32Opnd, II_TEQI>, TEQI_FM<0xc>,
              ISA_FGPU2_NOT_32R6_64R6;
-  def TGEI : MMRel, TEQI_FT<"tgei", GPR32Opnd, II_TGEI>, TEQI_FM<0x8>,
+  def TGEI : TEQI_FT<"tgei", GPR32Opnd, II_TGEI>, TEQI_FM<0x8>,
              ISA_FGPU2_NOT_32R6_64R6;
-  def TGEIU : MMRel, TEQI_FT<"tgeiu", GPR32Opnd, II_TGEIU>, TEQI_FM<0x9>,
+  def TGEIU : TEQI_FT<"tgeiu", GPR32Opnd, II_TGEIU>, TEQI_FM<0x9>,
               ISA_FGPU2_NOT_32R6_64R6;
-  def TLTI : MMRel, TEQI_FT<"tlti", GPR32Opnd, II_TLTI>, TEQI_FM<0xa>,
+  def TLTI : TEQI_FT<"tlti", GPR32Opnd, II_TLTI>, TEQI_FM<0xa>,
              ISA_FGPU2_NOT_32R6_64R6;
-  def TTLTIU : MMRel, TEQI_FT<"tltiu", GPR32Opnd, II_TTLTIU>, TEQI_FM<0xb>,
+  def TTLTIU : TEQI_FT<"tltiu", GPR32Opnd, II_TTLTIU>, TEQI_FM<0xb>,
                ISA_FGPU2_NOT_32R6_64R6;
-  def TNEI : MMRel, TEQI_FT<"tnei", GPR32Opnd, II_TNEI>, TEQI_FM<0xe>,
+  def TNEI : TEQI_FT<"tnei", GPR32Opnd, II_TNEI>, TEQI_FM<0xe>,
              ISA_FGPU2_NOT_32R6_64R6;
-}
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def BREAK : MMRel, StdMMR6Rel, BRK_FT<"break">, BRK_FM<0xd>, ISA_FGPU1;
-  def SYSCALL : MMRel, SYS_FT<"syscall", uimm20, II_SYSCALL>, SYS_FM<0xc>,
+  def BREAK :  BRK_FT<"break">, BRK_FM<0xd>, ISA_FGPU1;
+  def SYSCALL : SYS_FT<"syscall", uimm20, II_SYSCALL>, SYS_FM<0xc>,
                 ISA_FGPU1;
   def TRAP : TrapBase<BREAK>, ISA_FGPU1;
-  def SDBBP : MMRel, SYS_FT<"sdbbp", uimm20, II_SDBBP>, SDBBP_FM,
+  def SDBBP : SYS_FT<"sdbbp", uimm20, II_SDBBP>, SDBBP_FM,
               ISA_FGPU32_NOT_32R6_64R6;
 
-  def ERET : MMRel, ER_FT<"eret", II_ERET>, ER_FM<0x18, 0x0>, INSN_FGPU3_32;
-  def ERETNC : MMRel, ER_FT<"eretnc", II_ERETNC>, ER_FM<0x18, 0x1>,
+  def ERET : ER_FT<"eret", II_ERET>, ER_FM<0x18, 0x0>, INSN_FGPU3_32;
+  def ERETNC : ER_FT<"eretnc", II_ERETNC>, ER_FM<0x18, 0x1>,
                ISA_FGPU32R5;
-  def DERET : MMRel, ER_FT<"deret", II_DERET>, ER_FM<0x1f, 0x0>, ISA_FGPU32;
+  def DERET : ER_FT<"deret", II_DERET>, ER_FM<0x1f, 0x0>, ISA_FGPU32;
 
-  def EI : MMRel, StdMMR6Rel, DEI_FT<"ei", GPR32Opnd, II_EI>, EI_FM<1>,
+  def EI :  DEI_FT<"ei", GPR32Opnd, II_EI>, EI_FM<1>,
            ISA_FGPU32R2;
-  def DI : MMRel, StdMMR6Rel, DEI_FT<"di", GPR32Opnd, II_DI>, EI_FM<0>,
+  def DI :  DEI_FT<"di", GPR32Opnd, II_DI>, EI_FM<0>,
            ISA_FGPU32R2;
 
-  def WAIT : MMRel, StdMMR6Rel, WAIT_FT<"wait">, WAIT_FM, INSN_FGPU3_32;
-}
+  def WAIT :  WAIT_FT<"wait">, WAIT_FM, INSN_FGPU3_32;
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
 /// Load-linked, Store-conditional
 def LL : LLBase<"ll", GPR32Opnd>, LW_FM<0x30>, PTR_32, ISA_FGPU2_NOT_32R6_64R6;
 def SC : SCBase<"sc", GPR32Opnd>, LW_FM<0x38>, PTR_32, ISA_FGPU2_NOT_32R6_64R6;
-}
+
 /// Jump and Branch Instructions
-let AdditionalPredicates = [NotInMicroFgpu, RelocNotPIC] in
-def J       : MMRel, JumpFJ<jmptarget, "j", br, bb, "j">, FJ<2>,
+let AdditionalPredicates = [RelocNotPIC] in
+def J       : JumpFJ<jmptarget, "j", br, bb, "j">, FJ<2>,
               IsBranch, ISA_FGPU1;
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
-def JR      : MMRel, IndirectBranch<"jr", GPR32Opnd>, MTLO_FM<8>,
+def JR      : IndirectBranch<"jr", GPR32Opnd>, MTLO_FM<8>,
               ISA_FGPU1_NOT_32R6_64R6;
-def BEQ     : MMRel, CBranch<"beq", brtarget, seteq, GPR32Opnd>, BEQ_FM<4>,
+def BEQ     : CBranch<"beq", brtarget, seteq, GPR32Opnd>, BEQ_FM<4>,
               ISA_FGPU1;
-def BEQL    : MMRel, CBranchLikely<"beql", brtarget, GPR32Opnd>,
+def BEQL    : CBranchLikely<"beql", brtarget, GPR32Opnd>,
               BEQ_FM<20>, ISA_FGPU2_NOT_32R6_64R6;
-def BNE     : MMRel, CBranch<"bne", brtarget, setne, GPR32Opnd>, BEQ_FM<5>,
+def BNE     : CBranch<"bne", brtarget, setne, GPR32Opnd>, BEQ_FM<5>,
               ISA_FGPU1;
-def BNEL    : MMRel, CBranchLikely<"bnel", brtarget, GPR32Opnd>,
+def BNEL    : CBranchLikely<"bnel", brtarget, GPR32Opnd>,
               BEQ_FM<21>, ISA_FGPU2_NOT_32R6_64R6;
-def BGEZ    : MMRel, CBranchZero<"bgez", brtarget, setge, GPR32Opnd>,
+def BGEZ    : CBranchZero<"bgez", brtarget, setge, GPR32Opnd>,
               BGEZ_FM<1, 1>, ISA_FGPU1;
-def BGEZL   : MMRel, CBranchZeroLikely<"bgezl", brtarget, GPR32Opnd>,
+def BGEZL   : CBranchZeroLikely<"bgezl", brtarget, GPR32Opnd>,
               BGEZ_FM<1, 3>, ISA_FGPU2_NOT_32R6_64R6;
-def BGTZ    : MMRel, CBranchZero<"bgtz", brtarget, setgt, GPR32Opnd>,
+def BGTZ    : CBranchZero<"bgtz", brtarget, setgt, GPR32Opnd>,
               BGEZ_FM<7, 0>, ISA_FGPU1;
-def BGTZL   : MMRel, CBranchZeroLikely<"bgtzl", brtarget, GPR32Opnd>,
+def BGTZL   : CBranchZeroLikely<"bgtzl", brtarget, GPR32Opnd>,
               BGEZ_FM<23, 0>, ISA_FGPU2_NOT_32R6_64R6;
-def BLEZ    : MMRel, CBranchZero<"blez", brtarget, setle, GPR32Opnd>,
+def BLEZ    : CBranchZero<"blez", brtarget, setle, GPR32Opnd>,
               BGEZ_FM<6, 0>, ISA_FGPU1;
-def BLEZL   : MMRel, CBranchZeroLikely<"blezl", brtarget, GPR32Opnd>,
+def BLEZL   : CBranchZeroLikely<"blezl", brtarget, GPR32Opnd>,
               BGEZ_FM<22, 0>, ISA_FGPU2_NOT_32R6_64R6;
-def BLTZ    : MMRel, CBranchZero<"bltz", brtarget, setlt, GPR32Opnd>,
+def BLTZ    : CBranchZero<"bltz", brtarget, setlt, GPR32Opnd>,
               BGEZ_FM<1, 0>, ISA_FGPU1;
-def BLTZL   : MMRel, CBranchZeroLikely<"bltzl", brtarget, GPR32Opnd>,
+def BLTZL   : CBranchZeroLikely<"bltzl", brtarget, GPR32Opnd>,
               BGEZ_FM<1, 2>, ISA_FGPU2_NOT_32R6_64R6;
 def B       : UncondBranch<BEQ, brtarget>, ISA_FGPU1;
 
-def JAL  : MMRel, JumpLink<"jal", calltarget>, FJ<3>, ISA_FGPU1;
+def JAL  : JumpLink<"jal", calltarget>, FJ<3>, ISA_FGPU1;
 
-}
-
-let AdditionalPredicates = [NotInMicroFgpu, NoIndirectJumpGuards] in {
+let AdditionalPredicates = [NoIndirectJumpGuards] in {
   def JALR : JumpLinkReg<"jalr", GPR32Opnd>, JALR_FM, ISA_FGPU1;
   def JALRPseudo : JumpLinkRegPseudo<GPR32Opnd, JALR, RA>, ISA_FGPU1;
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def JALX : MMRel, JumpLink<"jalx", calltarget>, FJ<0x1D>,
+  def JALX : JumpLink<"jalx", calltarget>, FJ<0x1D>,
              ISA_FGPU32_NOT_32R6_64R6;
-  def BGEZAL : MMRel, BGEZAL_FT<"bgezal", brtarget, GPR32Opnd>, BGEZAL_FM<0x11>,
+  def BGEZAL : BGEZAL_FT<"bgezal", brtarget, GPR32Opnd>, BGEZAL_FM<0x11>,
                ISA_FGPU1_NOT_32R6_64R6;
-  def BGEZALL : MMRel, BGEZAL_FT<"bgezall", brtarget, GPR32Opnd>,
+  def BGEZALL : BGEZAL_FT<"bgezall", brtarget, GPR32Opnd>,
                 BGEZAL_FM<0x13>, ISA_FGPU2_NOT_32R6_64R6;
-  def BLTZAL : MMRel, BGEZAL_FT<"bltzal", brtarget, GPR32Opnd>, BGEZAL_FM<0x10>,
+  def BLTZAL : BGEZAL_FT<"bltzal", brtarget, GPR32Opnd>, BGEZAL_FM<0x10>,
                ISA_FGPU1_NOT_32R6_64R6;
-  def BLTZALL : MMRel, BGEZAL_FT<"bltzall", brtarget, GPR32Opnd>,
+  def BLTZALL : BGEZAL_FT<"bltzall", brtarget, GPR32Opnd>,
                 BGEZAL_FM<0x12>, ISA_FGPU2_NOT_32R6_64R6;
   def BAL_BR : BAL_BR_Pseudo<BGEZAL, brtarget>, ISA_FGPU1;
-}
-let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu] in {
+
+
   def TAILCALL : TailCall<J, jmptarget>, ISA_FGPU1;
-}
-let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu,
-                            NoIndirectJumpGuards] in
+
+
+let AdditionalPredicates = [NoIndirectJumpGuards] in
   def TAILCALLREG : TailCallReg<JR, GPR32Opnd>, ISA_FGPU1_NOT_32R6_64R6;
 
 // Indirect branches are matched as PseudoIndirectBranch/PseudoIndirectBranch64
@@ -2286,8 +2234,7 @@ class PseudoIndirectBranchBase<Instruction JumpInst, RegisterOperand RO> :
   bit isCTI = 1;
 }
 
-let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu,
-                            NoIndirectJumpGuards] in
+let AdditionalPredicates = [NoIndirectJumpGuards] in
   def PseudoIndirectBranch : PseudoIndirectBranchBase<JR, GPR32Opnd>,
                              ISA_FGPU1_NOT_32R6_64R6;
 
@@ -2331,38 +2278,37 @@ let Uses = [V0, V1], isTerminator = 1, isReturn = 1,
 }
 
 /// Multiply and Divide Instructions.
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def MULT  : MMRel, Mult<"mult", II_MULT, GPR32Opnd, [HI0, LO0]>,
+  def MULT  : Mult<"mult", II_MULT, GPR32Opnd, [HI0, LO0]>,
               MULT_FM<0, 0x18>, ISA_FGPU1_NOT_32R6_64R6;
-  def MULTu : MMRel, Mult<"multu", II_MULTU, GPR32Opnd, [HI0, LO0]>,
+  def MULTu : Mult<"multu", II_MULTU, GPR32Opnd, [HI0, LO0]>,
               MULT_FM<0, 0x19>, ISA_FGPU1_NOT_32R6_64R6;
-  def SDIV  : MMRel, Div<"div", II_DIV, GPR32Opnd, [HI0, LO0]>,
+  def SDIV  : Div<"div", II_DIV, GPR32Opnd, [HI0, LO0]>,
               MULT_FM<0, 0x1a>, ISA_FGPU1_NOT_32R6_64R6;
-  def UDIV  : MMRel, Div<"divu", II_DIVU, GPR32Opnd, [HI0, LO0]>,
+  def UDIV  : Div<"divu", II_DIVU, GPR32Opnd, [HI0, LO0]>,
               MULT_FM<0, 0x1b>, ISA_FGPU1_NOT_32R6_64R6;
-  def MTHI : MMRel, MoveToLOHI<"mthi", GPR32Opnd, [HI0]>, MTLO_FM<0x11>,
+  def MTHI : MoveToLOHI<"mthi", GPR32Opnd, [HI0]>, MTLO_FM<0x11>,
              ISA_FGPU1_NOT_32R6_64R6;
-  def MTLO : MMRel, MoveToLOHI<"mtlo", GPR32Opnd, [LO0]>, MTLO_FM<0x13>,
+  def MTLO : MoveToLOHI<"mtlo", GPR32Opnd, [LO0]>, MTLO_FM<0x13>,
              ISA_FGPU1_NOT_32R6_64R6;
-  def MFHI : MMRel, MoveFromLOHI<"mfhi", GPR32Opnd, AC0>, MFLO_FM<0x10>,
+  def MFHI : MoveFromLOHI<"mfhi", GPR32Opnd, AC0>, MFLO_FM<0x10>,
              ISA_FGPU1_NOT_32R6_64R6;
-  def MFLO : MMRel, MoveFromLOHI<"mflo", GPR32Opnd, AC0>, MFLO_FM<0x12>,
+  def MFLO : MoveFromLOHI<"mflo", GPR32Opnd, AC0>, MFLO_FM<0x12>,
              ISA_FGPU1_NOT_32R6_64R6;
 
   /// Sign Ext In Register Instructions.
-  def SEB : MMRel, StdMMR6Rel, SignExtInReg<"seb", i8, GPR32Opnd, II_SEB>,
+  def SEB :  SignExtInReg<"seb", i8, GPR32Opnd, II_SEB>,
             SEB_FM<0x10, 0x20>, ISA_FGPU32R2;
-  def SEH : MMRel, StdMMR6Rel, SignExtInReg<"seh", i16, GPR32Opnd, II_SEH>,
+  def SEH :  SignExtInReg<"seh", i16, GPR32Opnd, II_SEH>,
             SEB_FM<0x18, 0x20>, ISA_FGPU32R2;
 
   /// Count Leading
-  def CLZ : MMRel, CountLeading0<"clz", GPR32Opnd, II_CLZ>, CLO_FM<0x20>,
+  def CLZ : CountLeading0<"clz", GPR32Opnd, II_CLZ>, CLO_FM<0x20>,
             ISA_FGPU32_NOT_32R6_64R6;
-  def CLO : MMRel, CountLeading1<"clo", GPR32Opnd, II_CLO>, CLO_FM<0x21>,
+  def CLO : CountLeading1<"clo", GPR32Opnd, II_CLO>, CLO_FM<0x21>,
             ISA_FGPU32_NOT_32R6_64R6;
 
   /// Word Swap Bytes Within Halfwords
-  def WSBH : MMRel, SubwordSwap<"wsbh", GPR32Opnd, II_WSBH>, SEB_FM<2, 0x20>,
+  def WSBH : SubwordSwap<"wsbh", GPR32Opnd, II_WSBH>, SEB_FM<2, 0x20>,
              ISA_FGPU32R2;
 
   /// No operation.
@@ -2373,20 +2319,18 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   // instructions. The same not happens for stack address copies, so an
   // add op with mem ComplexPattern is used and the stack address copy
   // can be matched. It's similar to Sparc LEA_ADDRi
-  let AdditionalPredicates = [NotInMicroFgpu] in
-    def LEA_ADDiu : MMRel, EffectiveAddress<"addiu", GPR32Opnd>, LW_FM<9>,
+    def LEA_ADDiu : EffectiveAddress<"addiu", GPR32Opnd>, LW_FM<9>,
                     ISA_FGPU1;
 
   // MADD*/MSUB*
-  def MADD  : MMRel, MArithR<"madd", II_MADD, 1>, MULT_FM<0x1c, 0>,
+  def MADD  : MArithR<"madd", II_MADD, 1>, MULT_FM<0x1c, 0>,
               ISA_FGPU32_NOT_32R6_64R6;
-  def MADDU : MMRel, MArithR<"maddu", II_MADDU, 1>, MULT_FM<0x1c, 1>,
+  def MADDU : MArithR<"maddu", II_MADDU, 1>, MULT_FM<0x1c, 1>,
               ISA_FGPU32_NOT_32R6_64R6;
-  def MSUB  : MMRel, MArithR<"msub", II_MSUB>, MULT_FM<0x1c, 4>,
+  def MSUB  : MArithR<"msub", II_MSUB>, MULT_FM<0x1c, 4>,
               ISA_FGPU32_NOT_32R6_64R6;
-  def MSUBU : MMRel, MArithR<"msubu", II_MSUBU>, MULT_FM<0x1c, 5>,
+  def MSUBU : MArithR<"msubu", II_MSUBU>, MULT_FM<0x1c, 5>,
               ISA_FGPU32_NOT_32R6_64R6;
-}
 
 let AdditionalPredicates = [NotDSP] in {
 def PseudoMULT  : MultDivPseudo<MULT, ACC64, GPR32Opnd, FgpuMult, II_MULT>,
@@ -2406,23 +2350,22 @@ def PseudoMSUBU : MAddSubPseudo<MSUBU, FgpuMSubu, II_MSUBU>,
                   ISA_FGPU32_NOT_32R6_64R6;
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def PseudoSDIV : MultDivPseudo<SDIV, ACC64, GPR32Opnd, FgpuDivRem, II_DIV,
                                  0, 1, 1>, ISA_FGPU1_NOT_32R6_64R6;
   def PseudoUDIV : MultDivPseudo<UDIV, ACC64, GPR32Opnd, FgpuDivRemU, II_DIVU,
                                  0, 1, 1>, ISA_FGPU1_NOT_32R6_64R6;
-  def RDHWR : MMRel, ReadHardware<GPR32Opnd, HWRegsOpnd>, RDHWR_FM, ISA_FGPU1;
+  def RDHWR : ReadHardware<GPR32Opnd, HWRegsOpnd>, RDHWR_FM, ISA_FGPU1;
   // TODO: Add '0 < pos+size <= 32' constraint check to ext instruction
-  def EXT : MMRel, StdMMR6Rel, ExtBase<"ext", GPR32Opnd, uimm5, uimm5_plus1,
+  def EXT :  ExtBase<"ext", GPR32Opnd, uimm5, uimm5_plus1,
                                        immZExt5, immZExt5Plus1, FgpuExt>,
             EXT_FM<0>, ISA_FGPU32R2;
-  def INS : MMRel, StdMMR6Rel, InsBase<"ins", GPR32Opnd, uimm5,
+  def INS :  InsBase<"ins", GPR32Opnd, uimm5,
                                        uimm5_inssize_plus1, immZExt5,
                                        immZExt5Plus1>,
             EXT_FM<4>, ISA_FGPU32R2;
-}
+
+
 /// Move Control Registers From/To CPU Registers
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def MTC0 : MTC3OP<"mtc0", COP0Opnd, GPR32Opnd, II_MTC0>,
              MFC3OP_FM<0x10, 4, 0>, ISA_FGPU1;
   def MFC0 : MFC3OP<"mfc0", GPR32Opnd, COP0Opnd, II_MFC0>,
@@ -2431,19 +2374,18 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
              MFC3OP_FM<0x12, 0, 0>, ISA_FGPU1;
   def MTC2 : MTC3OP<"mtc2", COP2Opnd, GPR32Opnd, II_MTC2>,
              MFC3OP_FM<0x12, 4, 0>, ISA_FGPU1;
-}
+
 
 class Barrier<string asmstr, InstrItinClass itin = NoItinerary> :
   InstSE<(outs), (ins), asmstr, [], itin, FrmOther, asmstr>;
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def SSNOP : MMRel, StdMMR6Rel, Barrier<"ssnop", II_SSNOP>, BARRIER_FM<1>,
+  def SSNOP :  Barrier<"ssnop", II_SSNOP>, BARRIER_FM<1>,
               ISA_FGPU1;
-  def EHB : MMRel, Barrier<"ehb", II_EHB>, BARRIER_FM<3>, ISA_FGPU1;
+  def EHB : Barrier<"ehb", II_EHB>, BARRIER_FM<3>, ISA_FGPU1;
 
   let isCTI = 1 in
-  def PAUSE : MMRel, StdMMR6Rel, Barrier<"pause", II_PAUSE>, BARRIER_FM<5>,
+  def PAUSE :  Barrier<"pause", II_PAUSE>, BARRIER_FM<5>,
               ISA_FGPU32R2;
-}
+
 
 // JR_HB and JALR_HB are defined here using the new style naming
 // scheme because some of this code is shared with Fgpu32r6InstrInfo.td
@@ -2488,12 +2430,11 @@ class JALR_HB_ENC : JALR_HB_FM<9>;
 def JR_HB : JR_HB_DESC<GPR32Opnd>, JR_HB_ENC, ISA_FGPU32R2_NOT_32R6_64R6;
 def JALR_HB : JALR_HB_DESC<GPR32Opnd>, JALR_HB_ENC, ISA_FGPU32;
 
-let AdditionalPredicates = [NotInMicroFgpu, UseIndirectJumpsHazard] in
+let AdditionalPredicates = [UseIndirectJumpsHazard] in
   def JALRHBPseudo : JumpLinkRegPseudo<GPR32Opnd, JALR_HB, RA>;
 
 
-let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu,
-                            UseIndirectJumpsHazard] in {
+let AdditionalPredicates = [UseIndirectJumpsHazard] in {
   def TAILCALLREGHB : TailCallReg<JR_HB, GPR32Opnd>, ISA_FGPU32_NOT_32R6_64R6;
   def PseudoIndirectHazardBranch : PseudoIndirectBranchBase<JR_HB, GPR32Opnd>,
                                    ISA_FGPU32R2_NOT_32R6_64R6;
@@ -2501,12 +2442,11 @@ let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu,
 
 class TLB<string asmstr, InstrItinClass itin = NoItinerary> :
   InstSE<(outs), (ins), asmstr, [], itin, FrmOther, asmstr>;
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def TLBP : MMRel, TLB<"tlbp", II_TLBP>, COP0_TLB_FM<0x08>, ISA_FGPU1;
-  def TLBR : MMRel, TLB<"tlbr", II_TLBR>, COP0_TLB_FM<0x01>, ISA_FGPU1;
-  def TLBWI : MMRel, TLB<"tlbwi", II_TLBWI>, COP0_TLB_FM<0x02>, ISA_FGPU1;
-  def TLBWR : MMRel, TLB<"tlbwr", II_TLBWR>, COP0_TLB_FM<0x06>, ISA_FGPU1;
-}
+  def TLBP : TLB<"tlbp", II_TLBP>, COP0_TLB_FM<0x08>, ISA_FGPU1;
+  def TLBR : TLB<"tlbr", II_TLBR>, COP0_TLB_FM<0x01>, ISA_FGPU1;
+  def TLBWI : TLB<"tlbwi", II_TLBWI>, COP0_TLB_FM<0x02>, ISA_FGPU1;
+  def TLBWR : TLB<"tlbwr", II_TLBWR>, COP0_TLB_FM<0x06>, ISA_FGPU1;
+
 class CacheOp<string instr_asm, Operand MemOpnd,
               InstrItinClass itin = NoItinerary> :
     InstSE<(outs), (ins  MemOpnd:$addr, uimm5:$hint),
@@ -2515,12 +2455,11 @@ class CacheOp<string instr_asm, Operand MemOpnd,
   let DecoderMethod = "DecodeCacheOp";
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def CACHE : MMRel, CacheOp<"cache", mem, II_CACHE>, CACHEOP_FM<0b101111>,
+  def CACHE : CacheOp<"cache", mem, II_CACHE>, CACHEOP_FM<0b101111>,
               INSN_FGPU3_32_NOT_32R6_64R6;
-  def PREF :  MMRel, CacheOp<"pref", mem, II_PREF>, CACHEOP_FM<0b110011>,
+  def PREF :  CacheOp<"pref", mem, II_PREF>, CACHEOP_FM<0b110011>,
               INSN_FGPU3_32_NOT_32R6_64R6;
-}
+
 // FIXME: We are missing the prefx instruction.
 def ROL : FgpuAsmPseudoInst<(outs),
                             (ins GPR32Opnd:$rs, GPR32Opnd:$rt, GPR32Opnd:$rd),
@@ -2625,30 +2564,28 @@ class HYPCALL_FT<string opstr> :
   let BaseOpcode = opstr;
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def MFGC0    : MMRel, MFC3OP<"mfgc0", GPR32Opnd, COP0Opnd, II_MFGC0>,
+  def MFGC0    : MFC3OP<"mfgc0", GPR32Opnd, COP0Opnd, II_MFGC0>,
                  MFC3OP_FM<0x10, 3, 0>, ISA_FGPU32R5, ASE_VIRT;
-  def MTGC0    : MMRel, MTC3OP<"mtgc0", COP0Opnd, GPR32Opnd, II_MTGC0>,
+  def MTGC0    : MTC3OP<"mtgc0", COP0Opnd, GPR32Opnd, II_MTGC0>,
                  MFC3OP_FM<0x10, 3, 2>, ISA_FGPU32R5, ASE_VIRT;
-  def MFHGC0   : MMRel, MFC3OP<"mfhgc0", GPR32Opnd, COP0Opnd, II_MFHGC0>,
+  def MFHGC0   : MFC3OP<"mfhgc0", GPR32Opnd, COP0Opnd, II_MFHGC0>,
                  MFC3OP_FM<0x10, 3, 4>, ISA_FGPU32R5, ASE_VIRT;
-  def MTHGC0   : MMRel, MTC3OP<"mthgc0", COP0Opnd, GPR32Opnd, II_MTHGC0>,
+  def MTHGC0   : MTC3OP<"mthgc0", COP0Opnd, GPR32Opnd, II_MTHGC0>,
                  MFC3OP_FM<0x10, 3, 6>, ISA_FGPU32R5, ASE_VIRT;
-  def TLBGINV  : MMRel, TLB<"tlbginv", II_TLBGINV>, COP0_TLB_FM<0b001011>,
+  def TLBGINV  : TLB<"tlbginv", II_TLBGINV>, COP0_TLB_FM<0b001011>,
                  ISA_FGPU32R5, ASE_VIRT;
-  def TLBGINVF : MMRel, TLB<"tlbginvf", II_TLBGINVF>, COP0_TLB_FM<0b001100>,
+  def TLBGINVF : TLB<"tlbginvf", II_TLBGINVF>, COP0_TLB_FM<0b001100>,
                  ISA_FGPU32R5, ASE_VIRT;
-  def TLBGP    : MMRel, TLB<"tlbgp", II_TLBGP>, COP0_TLB_FM<0b010000>,
+  def TLBGP    : TLB<"tlbgp", II_TLBGP>, COP0_TLB_FM<0b010000>,
                  ISA_FGPU32R5, ASE_VIRT;
-  def TLBGR    : MMRel, TLB<"tlbgr", II_TLBGR>, COP0_TLB_FM<0b001001>,
+  def TLBGR    : TLB<"tlbgr", II_TLBGR>, COP0_TLB_FM<0b001001>,
                  ISA_FGPU32R5, ASE_VIRT;
-  def TLBGWI   : MMRel, TLB<"tlbgwi", II_TLBGWI>, COP0_TLB_FM<0b001010>,
+  def TLBGWI   : TLB<"tlbgwi", II_TLBGWI>, COP0_TLB_FM<0b001010>,
                  ISA_FGPU32R5, ASE_VIRT;
-  def TLBGWR   : MMRel, TLB<"tlbgwr", II_TLBGWR>, COP0_TLB_FM<0b001110>,
+  def TLBGWR   : TLB<"tlbgwr", II_TLBGWR>, COP0_TLB_FM<0b001110>,
                  ISA_FGPU32R5, ASE_VIRT;
-  def HYPCALL  : MMRel, HYPCALL_FT<"hypcall">,
+  def HYPCALL  : HYPCALL_FT<"hypcall">,
                  HYPCALL_FM<0b101000>, ISA_FGPU32R5, ASE_VIRT;
-}
 
 //===----------------------------------------------------------------------===//
 // Instruction aliases
@@ -2668,7 +2605,6 @@ multiclass OneOrTwoOperandMacroImmediateAlias<string Memnomic,
                                         Imm:$imm), 0>;
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuInstAlias<"move $dst, $src",
                       (OR GPR32Opnd:$dst, GPR32Opnd:$src, ZERO), 1>,
         GPR_32, ISA_FGPU1;
@@ -2863,7 +2799,7 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuInstAlias<"rdhwr $rt, $rs",
                       (RDHWR GPR32Opnd:$rt, HWRegsOpnd:$rs, 0), 1>, ISA_FGPU1;
 
-}
+
 def : FgpuInstAlias<"sub, $rd, $rs, $imm",
                     (ADDi GPR32Opnd:$rd, GPR32Opnd:$rs,
                           InvertedImOperand:$imm), 0>, ISA_FGPU1_NOT_32R6_64R6;
@@ -2875,7 +2811,6 @@ def : FgpuInstAlias<"subu, $rd, $rs, $imm",
                            InvertedImOperand:$imm), 0>;
 def : FgpuInstAlias<"subu $rs, $imm", (ADDiu GPR32Opnd:$rs, GPR32Opnd:$rs,
                                              InvertedImOperand:$imm), 0>;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuInstAlias<"sll $rd, $rt, $rs",
                       (SLLV GPR32Opnd:$rd, GPR32Opnd:$rt, GPR32Opnd:$rs), 0>;
   def : FgpuInstAlias<"sra $rd, $rt, $rs",
@@ -2892,10 +2827,9 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
                      ISA_FGPU32R2;
   def : FgpuInstAlias<"seb $rd", (SEB GPR32Opnd:$rd, GPR32Opnd:$rd), 0>,
                      ISA_FGPU32R2;
-}
+
 def : FgpuInstAlias<"sdbbp", (SDBBP 0)>, ISA_FGPU32_NOT_32R6_64R6;
-let AdditionalPredicates = [NotInMicroFgpu] in
-  def : FgpuInstAlias<"sync", (SYNC 0), 1>, ISA_FGPU2;
+def : FgpuInstAlias<"sync", (SYNC 0), 1>, ISA_FGPU2;
 
 def : FgpuInstAlias<"mulo $rs, $rt",
                     (MULOMacro GPR32Opnd:$rs, GPR32Opnd:$rs, GPR32Opnd:$rt), 0>,
@@ -2904,7 +2838,6 @@ def : FgpuInstAlias<"mulou $rs, $rt",
                     (MULOUMacro GPR32Opnd:$rs, GPR32Opnd:$rs, GPR32Opnd:$rt), 0>,
                     ISA_FGPU1_NOT_32R6_64R6;
 
-let AdditionalPredicates = [NotInMicroFgpu] in
   def : FgpuInstAlias<"hypcall", (HYPCALL 0), 1>, ISA_FGPU32R5, ASE_VIRT;
 
 //===----------------------------------------------------------------------===//
@@ -3128,14 +3061,12 @@ def : FgpuPat<(VT ORiPred:$imm), (ORiOp ZEROReg, imm:$imm)>;
 def : FgpuPat<(VT immSExt16:$imm), (ADDiuOp ZEROReg, imm:$imm)>;
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in
   defm : MaterializeImms<i32, ZERO, ADDiu, LUi, ORi>, ISA_FGPU1;
 
 // Carry FgpuPatterns
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuPat<(subc GPR32:$lhs, GPR32:$rhs),
                 (SUBu GPR32:$lhs, GPR32:$rhs)>, ISA_FGPU1;
-}
+
 def : FgpuPat<(addc GPR32:$lhs, GPR32:$rhs),
               (ADDu GPR32:$lhs, GPR32:$rhs)>, ISA_FGPU1, ASE_NOT_DSP;
 def : FgpuPat<(addc  GPR32:$src, immSExt16:$imm),
@@ -3158,12 +3089,11 @@ def : FgpuPat<(FgpuJmpLink (i32 texternalsym:$dst)),
 //              (JALR GPR32:$dst)>;
 
 // Tail call
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuPat<(FgpuTailCall (iPTR tglobaladdr:$dst)),
                 (TAILCALL tglobaladdr:$dst)>, ISA_FGPU1;
   def : FgpuPat<(FgpuTailCall (iPTR texternalsym:$dst)),
                 (TAILCALL texternalsym:$dst)>, ISA_FGPU1;
-}
+
 // hi/lo relocs
 multiclass FgpuHiLoRelocs<Instruction Lui, Instruction Addiu,
                           Register ZeroReg, RegisterOperand GPROpnd> {
@@ -3204,7 +3134,6 @@ multiclass FgpuHiLoRelocs<Instruction Lui, Instruction Addiu,
 class WrapperPat<SDNode node, Instruction ADDiuOp, RegisterClass RC>:
       FgpuPat<(FgpuWrapper RC:$gp, node:$in), (ADDiuOp RC:$gp, node:$in)>;
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   defm : FgpuHiLoRelocs<LUi, ADDiu, ZERO, GPR32Opnd>, ISA_FGPU1;
 
   def : FgpuPat<(FgpuGotHi tglobaladdr:$in), (LUi tglobaladdr:$in)>, ISA_FGPU1;
@@ -3230,17 +3159,15 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   // Fgpu does not have "not", so we expand our way
   def : FgpuPat<(not GPR32:$in),
                 (NOR GPR32Opnd:$in, ZERO)>, ISA_FGPU1;
-}
+
 
 // extended loads
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuPat<(i32 (extloadi1  addr:$src)), (LBu addr:$src)>, ISA_FGPU1;
   def : FgpuPat<(i32 (extloadi8  addr:$src)), (LBu addr:$src)>, ISA_FGPU1;
   def : FgpuPat<(i32 (extloadi16 addr:$src)), (LHu addr:$src)>, ISA_FGPU1;
 
   // peepholes
   def : FgpuPat<(store (i32 0), addr:$dst), (SW ZERO, addr:$dst)>, ISA_FGPU1;
-}
 
 // brcond patterns
 multiclass BrcondPats<RegisterClass RC, Instruction BEQOp, Instruction BEQOp1,
@@ -3273,14 +3200,13 @@ def : FgpuPat<(brcond (i32 (setule RC:$lhs, RC:$rhs)), bb:$dst),
 def : FgpuPat<(brcond RC:$cond, bb:$dst),
               (BNEOp RC:$cond, ZEROReg, bb:$dst)>;
 }
-let AdditionalPredicates = [NotInMicroFgpu] in {
   defm : BrcondPats<GPR32, BEQ, BEQ, BNE, SLT, SLTu, SLTi, SLTiu, ZERO>,
          ISA_FGPU1;
   def : FgpuPat<(brcond (i32 (setlt i32:$lhs, 1)), bb:$dst),
                 (BLEZ i32:$lhs, bb:$dst)>, ISA_FGPU1;
   def : FgpuPat<(brcond (i32 (setgt i32:$lhs, -1)), bb:$dst),
                 (BGEZ i32:$lhs, bb:$dst)>, ISA_FGPU1;
-}
+
 
 // setcc patterns
 multiclass SeteqPats<RegisterClass RC, Instruction SLTiuOp, Instruction XOROp,
@@ -3326,7 +3252,6 @@ multiclass SetgeImmPats<RegisterClass RC, Instruction XORiOp,
                 (XORiOp (SLTiuOp RC:$lhs, immSExt16:$rhs), 1)>;
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   defm : SeteqPats<GPR32, SLTiu, XOR, SLTu, ZERO>, ISA_FGPU1;
   defm : SetlePats<GPR32, XORi, SLT, SLTu>, ISA_FGPU1;
   defm : SetgtPats<GPR32, SLT, SLTu>, ISA_FGPU1;
@@ -3335,10 +3260,9 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
 
   // bswap pattern
   def : FgpuPat<(bswap GPR32:$rt), (ROTR (WSBH GPR32:$rt), 16)>, ISA_FGPU32R2;
-}
+
 
 // Load halfword/word patterns.
-let AdditionalPredicates = [NotInMicroFgpu] in {
   let AddedComplexity = 40 in {
     def : LoadRegImmPat<LBu, i32, zextloadi8>, ISA_FGPU1;
     def : LoadRegImmPat<LHu, i32, zextloadi16>, ISA_FGPU1;
@@ -3359,7 +3283,7 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
         ISA_FGPU1;
   def : FgpuPat<(atomic_store_32 addr:$a, GPR32:$v), (SW GPR32:$v, addr:$a)>,
         ISA_FGPU1;
-}
+
 
 //===----------------------------------------------------------------------===//
 // Floating Point Support

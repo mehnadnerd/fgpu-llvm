@@ -610,7 +610,7 @@ bool FgpuDelaySlotFiller::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
 
       if (Filled) {
         // Get instruction with delay slot.
-        MachineBasicBlock::instr_iterator DSI = I.getInstrIterator();
+        //MachineBasicBlock::instr_iterator DSI = I.getInstrIterator();
         ++FilledSlots;
         Changed = true;
         continue;
@@ -700,8 +700,8 @@ bool FgpuDelaySlotFiller::searchRange(MachineBasicBlock &MBB, IterTy Begin,
         continue;
     }
 
-    const FgpuInstrInfo *TII = STI.getInstrInfo();
-    unsigned Opcode = (*Slot).getOpcode();
+    // const FgpuInstrInfo *TII = STI.getInstrInfo();
+    //unsigned Opcode = (*Slot).getOpcode();
 
     Filler = CurrI;
     LLVM_DEBUG(dbgs() << DEBUG_TYPE ": found instruction for delay slot: ";

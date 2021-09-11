@@ -562,12 +562,6 @@ public:
 
     const Triple &TheTriple = sti.getTargetTriple();
     IsLittleEndian = TheTriple.isLittleEndian();
-
-    if (getSTI().getCPU() == "fgpu64r6" && inMicroFgpuMode())
-      report_fatal_error("microFGPU64R6 is not supported", false);
-
-    if (!isABI_O32() && inMicroFgpuMode())
-      report_fatal_error("microFGPU64 is not supported", false);
   }
 
   /// True if all of $fcc0 - $fcc7 exist for the current ISA.
@@ -604,10 +598,6 @@ public:
 
   bool useOddSPReg() const {
     return !(getSTI().getFeatureBits()[Fgpu::FeatureNoOddSPReg]);
-  }
-
-  bool inMicroFgpuMode() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureMicroFgpu];
   }
 
   bool hasFgpu1() const {
@@ -1755,28 +1745,6 @@ static const MCInstrDesc &getInstDesc(unsigned Opcode) {
   return FgpuInsts[Opcode];
 }
 
-static bool hasShortDelaySlot(MCInst &Inst) {
-  switch (Inst.getOpcode()) {
-    case Fgpu::BEQ_MM:
-    case Fgpu::BNE_MM:
-    case Fgpu::BLTZ_MM:
-    case Fgpu::BGEZ_MM:
-    case Fgpu::BLEZ_MM:
-    case Fgpu::BGTZ_MM:
-    case Fgpu::JRC16_MM:
-    case Fgpu::JALS_MM:
-    case Fgpu::JALRS_MM:
-    case Fgpu::JALRS16_MM:
-    case Fgpu::BGEZALS_MM:
-    case Fgpu::BLTZALS_MM:
-      return true;
-    case Fgpu::J_MM:
-      return !Inst.getOperand(0).isReg();
-    default:
-      return false;
-  }
-}
-
 static const MCSymbol *getSingleMCSymbol(const MCExpr *Expr) {
   if (const MCSymbolRefExpr *SRExpr = dyn_cast<MCSymbolRefExpr>(Expr)) {
     return &SRExpr->getSymbol();
@@ -1894,16 +1862,14 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
 
     case Fgpu::BEQ:
     case Fgpu::BNE:
-    case Fgpu::BEQ_MM:
-    case Fgpu::BNE_MM:
       assert(MCID.getNumOperands() == 3 && "unexpected number of operands");
       Offset = Inst.getOperand(2);
       if (!Offset.isImm())
         break; // We'll deal with this situation later on when applying fixups.
-      if (!isIntN(inMicroFgpuMode() ? 17 : 18, Offset.getImm()))
+      if (!isIntN(18, Offset.getImm()))
         return Error(IDLoc, "branch target out of range");
       if (offsetToAlignment(Offset.getImm(),
-                            (inMicroFgpuMode() ? Align(2) : Align(4))))
+                            (Align(4))))
         return Error(IDLoc, "branch to misaligned address");
       break;
     case Fgpu::BGEZ:
@@ -1914,34 +1880,22 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
     case Fgpu::BLTZAL:
     case Fgpu::BC1F:
     case Fgpu::BC1T:
-    case Fgpu::BGEZ_MM:
-    case Fgpu::BGTZ_MM:
-    case Fgpu::BLEZ_MM:
-    case Fgpu::BLTZ_MM:
-    case Fgpu::BGEZAL_MM:
-    case Fgpu::BLTZAL_MM:
-    case Fgpu::BC1F_MM:
-    case Fgpu::BC1T_MM:
-    case Fgpu::BC1EQZC_MMR6:
-    case Fgpu::BC1NEZC_MMR6:
-    case Fgpu::BC2EQZC_MMR6:
-    case Fgpu::BC2NEZC_MMR6:
       assert(MCID.getNumOperands() == 2 && "unexpected number of operands");
       Offset = Inst.getOperand(1);
       if (!Offset.isImm())
         break; // We'll deal with this situation later on when applying fixups.
-      if (!isIntN(inMicroFgpuMode() ? 17 : 18, Offset.getImm()))
+      if (!isIntN(18, Offset.getImm()))
         return Error(IDLoc, "branch target out of range");
       if (offsetToAlignment(Offset.getImm(),
-                            (inMicroFgpuMode() ? Align(2) : Align(4))))
+                            (Align(4))))
         return Error(IDLoc, "branch to misaligned address");
       break;
-    case Fgpu::BGEC:    case Fgpu::BGEC_MMR6:
-    case Fgpu::BLTC:    case Fgpu::BLTC_MMR6:
-    case Fgpu::BGEUC:   case Fgpu::BGEUC_MMR6:
-    case Fgpu::BLTUC:   case Fgpu::BLTUC_MMR6:
-    case Fgpu::BEQC:    case Fgpu::BEQC_MMR6:
-    case Fgpu::BNEC:    case Fgpu::BNEC_MMR6:
+    case Fgpu::BGEC:
+    case Fgpu::BLTC:
+    case Fgpu::BGEUC:
+    case Fgpu::BLTUC:
+    case Fgpu::BEQC:
+    case Fgpu::BNEC:
       assert(MCID.getNumOperands() == 3 && "unexpected number of operands");
       Offset = Inst.getOperand(2);
       if (!Offset.isImm())
@@ -1951,10 +1905,10 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
       if (offsetToAlignment(Offset.getImm(), Align(4)))
         return Error(IDLoc, "branch to misaligned address");
       break;
-    case Fgpu::BLEZC:   case Fgpu::BLEZC_MMR6:
-    case Fgpu::BGEZC:   case Fgpu::BGEZC_MMR6:
-    case Fgpu::BGTZC:   case Fgpu::BGTZC_MMR6:
-    case Fgpu::BLTZC:   case Fgpu::BLTZC_MMR6:
+    case Fgpu::BLEZC:
+    case Fgpu::BGEZC:
+    case Fgpu::BGTZC:
+    case Fgpu::BLTZC:
       assert(MCID.getNumOperands() == 2 && "unexpected number of operands");
       Offset = Inst.getOperand(1);
       if (!Offset.isImm())
@@ -1964,8 +1918,8 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
       if (offsetToAlignment(Offset.getImm(), Align(4)))
         return Error(IDLoc, "branch to misaligned address");
       break;
-    case Fgpu::BEQZC:   case Fgpu::BEQZC_MMR6:
-    case Fgpu::BNEZC:   case Fgpu::BNEZC_MMR6:
+    case Fgpu::BEQZC:
+    case Fgpu::BNEZC:
       assert(MCID.getNumOperands() == 2 && "unexpected number of operands");
       Offset = Inst.getOperand(1);
       if (!Offset.isImm())
@@ -1973,19 +1927,6 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
       if (!isIntN(23, Offset.getImm()))
         return Error(IDLoc, "branch target out of range");
       if (offsetToAlignment(Offset.getImm(), Align(4)))
-        return Error(IDLoc, "branch to misaligned address");
-      break;
-    case Fgpu::BEQZ16_MM:
-    case Fgpu::BEQZC16_MMR6:
-    case Fgpu::BNEZ16_MM:
-    case Fgpu::BNEZC16_MMR6:
-      assert(MCID.getNumOperands() == 2 && "unexpected number of operands");
-      Offset = Inst.getOperand(1);
-      if (!Offset.isImm())
-        break; // We'll deal with this situation later on when applying fixups.
-      if (!isInt<8>(Offset.getImm()))
-        return Error(IDLoc, "branch target out of range");
-      if (offsetToAlignment(Offset.getImm(), Align(2)))
         return Error(IDLoc, "branch to misaligned address");
       break;
     }
@@ -2068,8 +2009,6 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
   case Fgpu::SDIV:
   case Fgpu::UDIV:
   case Fgpu::DUDIV:
-  case Fgpu::UDIV_MM:
-  case Fgpu::SDIV_MM:
     FirstOp = 0;
     SecondOp = 1;
     LLVM_FALLTHROUGH;
@@ -2081,8 +2020,6 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
   case Fgpu::DIVU:
   case Fgpu::DDIV:
   case Fgpu::DDIVU:
-  case Fgpu::DIVU_MMR6:
-  case Fgpu::DIV_MMR6:
     if (Inst.getOperand(SecondOp).getReg() == Fgpu::ZERO ||
         Inst.getOperand(SecondOp).getReg() == Fgpu::ZERO_64) {
       if (Inst.getOperand(FirstOp).getReg() == Fgpu::ZERO ||
@@ -2095,9 +2032,9 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
   }
 
   // For PIC code convert unconditional jump to unconditional branch.
-  if ((Opcode == Fgpu::J || Opcode == Fgpu::J_MM) && inPicMode()) {
+  if ((Opcode == Fgpu::J) && inPicMode()) {
     MCInst BInst;
-    BInst.setOpcode(inMicroFgpuMode() ? Fgpu::BEQ_MM : Fgpu::BEQ);
+    BInst.setOpcode(Fgpu::BEQ);
     BInst.addOperand(MCOperand::createReg(Fgpu::ZERO));
     BInst.addOperand(MCOperand::createReg(Fgpu::ZERO));
     BInst.addOperand(Inst.getOperand(0));
@@ -2106,7 +2043,7 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
 
   // This expansion is not in a function called by tryExpandInstruction()
   // because the pseudo-instruction doesn't have a distinct opcode.
-  if ((Opcode == Fgpu::JAL || Opcode == Fgpu::JAL_MM) && inPicMode()) {
+  if ((Opcode == Fgpu::JAL) && inPicMode()) {
     warnIfNoMacro(IDLoc);
 
     const MCExpr *JalExpr = Inst.getOperand(0).getExpr();
@@ -2125,10 +2062,7 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
       return true;
 
     MCInst JalrInst;
-    if (inMicroFgpuMode())
-      JalrInst.setOpcode(IsCpRestoreSet ? Fgpu::JALRS_MM : Fgpu::JALR_MM);
-    else
-      JalrInst.setOpcode(Fgpu::JALR);
+    JalrInst.setOpcode(Fgpu::JALR);
     JalrInst.addOperand(MCOperand::createReg(Fgpu::RA));
     JalrInst.addOperand(MCOperand::createReg(Fgpu::T9));
 
@@ -2143,7 +2077,7 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
                                   getContext(), IDLoc);
 
       TOut.getStreamer().emitRelocDirective(
-          *TmpExpr, inMicroFgpuMode() ? "R_MICROFGPU_JALR" : "R_FGPU_JALR",
+          *TmpExpr, "R_FGPU_JALR",
           RelocJalrExpr, IDLoc, *STI);
       TOut.getStreamer().emitLabel(TmpLabel);
     }
@@ -2169,154 +2103,6 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
     }
   }
 
-  if (inMicroFgpuMode()) {
-    if (MCID.mayLoad() && Opcode != Fgpu::LWP_MM) {
-      // Try to create 16-bit GP relative load instruction.
-      for (unsigned i = 0; i < MCID.getNumOperands(); i++) {
-        const MCOperandInfo &OpInfo = MCID.OpInfo[i];
-        if ((OpInfo.OperandType == MCOI::OPERAND_MEMORY) ||
-            (OpInfo.OperandType == MCOI::OPERAND_UNKNOWN)) {
-          MCOperand &Op = Inst.getOperand(i);
-          if (Op.isImm()) {
-            int MemOffset = Op.getImm();
-            MCOperand &DstReg = Inst.getOperand(0);
-            MCOperand &BaseReg = Inst.getOperand(1);
-            if (isInt<9>(MemOffset) && (MemOffset % 4 == 0) &&
-                getContext().getRegisterInfo()->getRegClass(
-                  Fgpu::GPRMM16RegClassID).contains(DstReg.getReg()) &&
-                (BaseReg.getReg() == Fgpu::GP ||
-                BaseReg.getReg() == Fgpu::GP_64)) {
-
-              TOut.emitRRI(Fgpu::LWGP_MM, DstReg.getReg(), Fgpu::GP, MemOffset,
-                           IDLoc, STI);
-              return false;
-            }
-          }
-        }
-      } // for
-    }   // if load
-
-    // TODO: Handle this with the AsmOperandClass.PredicateMethod.
-
-    MCOperand Opnd;
-    int Imm;
-
-    switch (Opcode) {
-      default:
-        break;
-      case Fgpu::ADDIUSP_MM:
-        Opnd = Inst.getOperand(0);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if (Imm < -1032 || Imm > 1028 || (Imm < 8 && Imm > -12) ||
-            Imm % 4 != 0)
-          return Error(IDLoc, "immediate operand value out of range");
-        break;
-      case Fgpu::SLL16_MM:
-      case Fgpu::SRL16_MM:
-        Opnd = Inst.getOperand(2);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if (Imm < 1 || Imm > 8)
-          return Error(IDLoc, "immediate operand value out of range");
-        break;
-      case Fgpu::LI16_MM:
-        Opnd = Inst.getOperand(1);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if (Imm < -1 || Imm > 126)
-          return Error(IDLoc, "immediate operand value out of range");
-        break;
-      case Fgpu::ADDIUR2_MM:
-        Opnd = Inst.getOperand(2);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if (!(Imm == 1 || Imm == -1 ||
-              ((Imm % 4 == 0) && Imm < 28 && Imm > 0)))
-          return Error(IDLoc, "immediate operand value out of range");
-        break;
-      case Fgpu::ANDI16_MM:
-        Opnd = Inst.getOperand(2);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if (!(Imm == 128 || (Imm >= 1 && Imm <= 4) || Imm == 7 || Imm == 8 ||
-              Imm == 15 || Imm == 16 || Imm == 31 || Imm == 32 || Imm == 63 ||
-              Imm == 64 || Imm == 255 || Imm == 32768 || Imm == 65535))
-          return Error(IDLoc, "immediate operand value out of range");
-        break;
-      case Fgpu::LBU16_MM:
-        Opnd = Inst.getOperand(2);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if (Imm < -1 || Imm > 14)
-          return Error(IDLoc, "immediate operand value out of range");
-        break;
-      case Fgpu::SB16_MM:
-      case Fgpu::SB16_MMR6:
-        Opnd = Inst.getOperand(2);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if (Imm < 0 || Imm > 15)
-          return Error(IDLoc, "immediate operand value out of range");
-        break;
-      case Fgpu::LHU16_MM:
-      case Fgpu::SH16_MM:
-      case Fgpu::SH16_MMR6:
-        Opnd = Inst.getOperand(2);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if (Imm < 0 || Imm > 30 || (Imm % 2 != 0))
-          return Error(IDLoc, "immediate operand value out of range");
-        break;
-      case Fgpu::LW16_MM:
-      case Fgpu::SW16_MM:
-      case Fgpu::SW16_MMR6:
-        Opnd = Inst.getOperand(2);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if (Imm < 0 || Imm > 60 || (Imm % 4 != 0))
-          return Error(IDLoc, "immediate operand value out of range");
-        break;
-      case Fgpu::ADDIUPC_MM:
-        Opnd = Inst.getOperand(1);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if ((Imm % 4 != 0) || !isInt<25>(Imm))
-          return Error(IDLoc, "immediate operand value out of range");
-        break;
-      case Fgpu::LWP_MM:
-      case Fgpu::SWP_MM:
-        if (Inst.getOperand(0).getReg() == Fgpu::RA)
-          return Error(IDLoc, "invalid operand for instruction");
-        break;
-      case Fgpu::MOVEP_MM:
-      case Fgpu::MOVEP_MMR6: {
-        unsigned R0 = Inst.getOperand(0).getReg();
-        unsigned R1 = Inst.getOperand(1).getReg();
-        bool RegPair = ((R0 == Fgpu::A1 && R1 == Fgpu::A2) ||
-                        (R0 == Fgpu::A1 && R1 == Fgpu::A3) ||
-                        (R0 == Fgpu::A2 && R1 == Fgpu::A3) ||
-                        (R0 == Fgpu::A0 && R1 == Fgpu::S5) ||
-                        (R0 == Fgpu::A0 && R1 == Fgpu::S6) ||
-                        (R0 == Fgpu::A0 && R1 == Fgpu::A1) ||
-                        (R0 == Fgpu::A0 && R1 == Fgpu::A2) ||
-                        (R0 == Fgpu::A0 && R1 == Fgpu::A3));
-        if (!RegPair)
-          return Error(IDLoc, "invalid operand for instruction");
-        break;
-      }
-    }
-  }
 
   bool FillDelaySlot =
       MCID.hasDelaySlot() && AssemblerOptions.back()->isReorder();
@@ -2335,17 +2121,11 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
     return true;
   }
 
-  // We know we emitted an instruction on the MER_NotAMacro or MER_Success path.
-  // If we're in microFGPU mode then we must also set EF_FGPU_MICROFGPU.
-  if (inMicroFgpuMode()) {
-    TOut.setUsesMicroFgpu();
-    TOut.updateABIInfo(*this);
-  }
 
   // If this instruction has a delay slot and .set reorder is active,
   // emit a NOP after it.
   if (FillDelaySlot) {
-    TOut.emitEmptyDelaySlot(hasShortDelaySlot(Inst), IDLoc, STI);
+    TOut.emitEmptyDelaySlot(false, IDLoc, STI);
     TOut.emitDirectiveSetReorder();
   }
 
@@ -2357,7 +2137,7 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
       // If .set reorder has been used, we've already emitted a NOP.
       // If .set noreorder has been used, we need to emit a NOP at this point.
       if (!AssemblerOptions.back()->isReorder())
-        TOut.emitEmptyDelaySlot(hasShortDelaySlot(Inst), IDLoc,
+        TOut.emitEmptyDelaySlot(false, IDLoc,
                                 STI);
 
       // Load the $gp from the stack.
@@ -2404,14 +2184,6 @@ FgpuAsmParser::tryExpandInstruction(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                              Out, STI)
                ? MER_Fail
                : MER_Success;
-  case Fgpu::B_MM_Pseudo:
-  case Fgpu::B_MMR6_Pseudo:
-    return expandUncondBranchMMPseudo(Inst, IDLoc, Out, STI) ? MER_Fail
-                                                             : MER_Success;
-  case Fgpu::SWM_MM:
-  case Fgpu::LWM_MM:
-    return expandLoadStoreMultiple(Inst, IDLoc, Out, STI) ? MER_Fail
-                                                          : MER_Success;
   case Fgpu::JalOneReg:
   case Fgpu::JalTwoReg:
     return expandJalWithRegs(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
@@ -2548,10 +2320,10 @@ FgpuAsmParser::tryExpandInstruction(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
       return MER_NotAMacro;
     }
     return expandAliasImmediate(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::ADDi:   case Fgpu::ADDi_MM:
-  case Fgpu::ADDiu:  case Fgpu::ADDiu_MM:
-  case Fgpu::SLTi:   case Fgpu::SLTi_MM:
-  case Fgpu::SLTiu:  case Fgpu::SLTiu_MM:
+  case Fgpu::ADDi:
+  case Fgpu::ADDiu:
+  case Fgpu::SLTi:
+  case Fgpu::SLTiu:
     if ((Inst.getNumOperands() == 3) && Inst.getOperand(0).isReg() &&
         Inst.getOperand(1).isReg() && Inst.getOperand(2).isImm()) {
       int64_t ImmValue = Inst.getOperand(2).getImm();
@@ -2561,9 +2333,9 @@ FgpuAsmParser::tryExpandInstruction(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                                                          : MER_Success;
     }
     return MER_NotAMacro;
-  case Fgpu::ANDi:  case Fgpu::ANDi_MM:  case Fgpu::ANDi64:
-  case Fgpu::ORi:   case Fgpu::ORi_MM:   case Fgpu::ORi64:
-  case Fgpu::XORi:  case Fgpu::XORi_MM:  case Fgpu::XORi64:
+  case Fgpu::ANDi: case Fgpu::ANDi64:
+  case Fgpu::ORi:  case Fgpu::ORi64:
+  case Fgpu::XORi: case Fgpu::XORi64:
     if ((Inst.getNumOperands() == 3) && Inst.getOperand(0).isReg() &&
         Inst.getOperand(1).isReg() && Inst.getOperand(2).isImm()) {
       int64_t ImmValue = Inst.getOperand(2).getImm();
@@ -2645,23 +2417,12 @@ bool FgpuAsmParser::expandJalWithRegs(MCInst &Inst, SMLoc IDLoc,
 
   if (Opcode == Fgpu::JalOneReg) {
     // jal $rs => jalr $rs
-    if (IsCpRestoreSet && inMicroFgpuMode()) {
-      JalrInst.setOpcode(Fgpu::JALRS16_MM);
-      JalrInst.addOperand(FirstRegOp);
-    } else if (inMicroFgpuMode()) {
-      JalrInst.setOpcode(hasFgpu32r6() ? Fgpu::JALRC16_MMR6 : Fgpu::JALR16_MM);
-      JalrInst.addOperand(FirstRegOp);
-    } else {
-      JalrInst.setOpcode(Fgpu::JALR);
-      JalrInst.addOperand(MCOperand::createReg(Fgpu::RA));
-      JalrInst.addOperand(FirstRegOp);
-    }
+    JalrInst.setOpcode(Fgpu::JALR);
+    JalrInst.addOperand(MCOperand::createReg(Fgpu::RA));
+    JalrInst.addOperand(FirstRegOp);
   } else if (Opcode == Fgpu::JalTwoReg) {
     // jal $rd, $rs => jalr $rd, $rs
-    if (IsCpRestoreSet && inMicroFgpuMode())
-      JalrInst.setOpcode(Fgpu::JALRS_MM);
-    else
-      JalrInst.setOpcode(inMicroFgpuMode() ? Fgpu::JALR_MM : Fgpu::JALR);
+    JalrInst.setOpcode(Fgpu::JALR);
     JalrInst.addOperand(FirstRegOp);
     const MCOperand SecondRegOp = Inst.getOperand(1);
     JalrInst.addOperand(SecondRegOp);
@@ -2672,7 +2433,7 @@ bool FgpuAsmParser::expandJalWithRegs(MCInst &Inst, SMLoc IDLoc,
   // emit a NOP after it.
   const MCInstrDesc &MCID = getInstDesc(JalrInst.getOpcode());
   if (MCID.hasDelaySlot() && AssemblerOptions.back()->isReorder())
-    TOut.emitEmptyDelaySlot(hasShortDelaySlot(JalrInst), IDLoc,
+    TOut.emitEmptyDelaySlot(false, IDLoc,
                             STI);
 
   return false;
@@ -3563,50 +3324,6 @@ bool FgpuAsmParser::expandLoadDoubleImmToFPR(MCInst &Inst, bool Is64FPU,
   return false;
 }
 
-bool FgpuAsmParser::expandUncondBranchMMPseudo(MCInst &Inst, SMLoc IDLoc,
-                                               MCStreamer &Out,
-                                               const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-
-  assert(getInstDesc(Inst.getOpcode()).getNumOperands() == 1 &&
-         "unexpected number of operands");
-
-  MCOperand Offset = Inst.getOperand(0);
-  if (Offset.isExpr()) {
-    Inst.clear();
-    Inst.setOpcode(Fgpu::BEQ_MM);
-    Inst.addOperand(MCOperand::createReg(Fgpu::ZERO));
-    Inst.addOperand(MCOperand::createReg(Fgpu::ZERO));
-    Inst.addOperand(MCOperand::createExpr(Offset.getExpr()));
-  } else {
-    assert(Offset.isImm() && "expected immediate operand kind");
-    if (isInt<11>(Offset.getImm())) {
-      // If offset fits into 11 bits then this instruction becomes microFGPU
-      // 16-bit unconditional branch instruction.
-      if (inMicroFgpuMode())
-        Inst.setOpcode(hasFgpu32r6() ? Fgpu::BC16_MMR6 : Fgpu::B16_MM);
-    } else {
-      if (!isInt<17>(Offset.getImm()))
-        return Error(IDLoc, "branch target out of range");
-      if (offsetToAlignment(Offset.getImm(), Align(2)))
-        return Error(IDLoc, "branch to misaligned address");
-      Inst.clear();
-      Inst.setOpcode(Fgpu::BEQ_MM);
-      Inst.addOperand(MCOperand::createReg(Fgpu::ZERO));
-      Inst.addOperand(MCOperand::createReg(Fgpu::ZERO));
-      Inst.addOperand(MCOperand::createImm(Offset.getImm()));
-    }
-  }
-  Out.emitInstruction(Inst, *STI);
-
-  // If .set reorder is active and branch instruction has a delay slot,
-  // emit a NOP after it.
-  const MCInstrDesc &MCID = getInstDesc(Inst.getOpcode());
-  if (MCID.hasDelaySlot() && AssemblerOptions.back()->isReorder())
-    TOut.emitEmptyDelaySlot(true, IDLoc, STI);
-
-  return false;
-}
 
 bool FgpuAsmParser::expandBranchImm(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                                     const MCSubtargetInfo *STI) {
@@ -3857,35 +3574,6 @@ void FgpuAsmParser::expandMem9Inst(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   }
 
   llvm_unreachable("unexpected operand type");
-}
-
-bool FgpuAsmParser::expandLoadStoreMultiple(MCInst &Inst, SMLoc IDLoc,
-                                            MCStreamer &Out,
-                                            const MCSubtargetInfo *STI) {
-  unsigned OpNum = Inst.getNumOperands();
-  unsigned Opcode = Inst.getOpcode();
-  unsigned NewOpcode = Opcode == Fgpu::SWM_MM ? Fgpu::SWM32_MM : Fgpu::LWM32_MM;
-
-  assert(Inst.getOperand(OpNum - 1).isImm() &&
-         Inst.getOperand(OpNum - 2).isReg() &&
-         Inst.getOperand(OpNum - 3).isReg() && "Invalid instruction operand.");
-
-  if (OpNum < 8 && Inst.getOperand(OpNum - 1).getImm() <= 60 &&
-      Inst.getOperand(OpNum - 1).getImm() >= 0 &&
-      (Inst.getOperand(OpNum - 2).getReg() == Fgpu::SP ||
-       Inst.getOperand(OpNum - 2).getReg() == Fgpu::SP_64) &&
-      (Inst.getOperand(OpNum - 3).getReg() == Fgpu::RA ||
-       Inst.getOperand(OpNum - 3).getReg() == Fgpu::RA_64)) {
-    // It can be implemented as SWM16 or LWM16 instruction.
-    if (inMicroFgpuMode() && hasFgpu32r6())
-      NewOpcode = Opcode == Fgpu::SWM_MM ? Fgpu::SWM16_MMR6 : Fgpu::LWM16_MMR6;
-    else
-      NewOpcode = Opcode == Fgpu::SWM_MM ? Fgpu::SWM16_MM : Fgpu::LWM16_MM;
-  }
-
-  Inst.setOpcode(NewOpcode);
-  Out.emitInstruction(Inst, *STI);
-  return false;
 }
 
 bool FgpuAsmParser::expandCondBranches(MCInst &Inst, SMLoc IDLoc,
@@ -4802,27 +4490,6 @@ bool FgpuAsmParser::expandAliasImmediate(MCInst &Inst, SMLoc IDLoc,
       break;
     case Fgpu::XORi:
       FinalOpcode = Fgpu::XOR;
-      break;
-    case Fgpu::ADDi_MM:
-      FinalOpcode = Fgpu::ADD_MM;
-      break;
-    case Fgpu::ADDiu_MM:
-      FinalOpcode = Fgpu::ADDu_MM;
-      break;
-    case Fgpu::ANDi_MM:
-      FinalOpcode = Fgpu::AND_MM;
-      break;
-    case Fgpu::ORi_MM:
-      FinalOpcode = Fgpu::OR_MM;
-      break;
-    case Fgpu::SLTi_MM:
-      FinalOpcode = Fgpu::SLT_MM;
-      break;
-    case Fgpu::SLTiu_MM:
-      FinalOpcode = Fgpu::SLTu_MM;
-      break;
-    case Fgpu::XORi_MM:
-      FinalOpcode = Fgpu::XOR_MM;
       break;
     case Fgpu::ANDi64:
       FinalOpcode = Fgpu::AND64;
@@ -5786,13 +5453,7 @@ unsigned FgpuAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
   // and registers Rd and Base for microFGPU lwp instruction
   case Fgpu::JALR_HB:
   case Fgpu::JALR_HB64:
-  case Fgpu::JALRC_HB_MMR6:
-  case Fgpu::JALRC_MMR6:
     if (Inst.getOperand(0).getReg() == Inst.getOperand(1).getReg())
-      return Match_RequiresDifferentSrcAndDst;
-    return Match_Success;
-  case Fgpu::LWP_MM:
-    if (Inst.getOperand(0).getReg() == Inst.getOperand(2).getReg())
       return Match_RequiresDifferentSrcAndDst;
     return Match_Success;
   case Fgpu::SYNC:
@@ -5818,12 +5479,12 @@ unsigned FgpuAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
   // The compact branches that branch iff the signed addition of two registers
   // would overflow must have rs >= rt. That can be handled like beqc/bnec with
   // operand swapping. They do not have restriction of using the zero register.
-  case Fgpu::BLEZC:   case Fgpu::BLEZC_MMR6:
-  case Fgpu::BGEZC:   case Fgpu::BGEZC_MMR6:
-  case Fgpu::BGTZC:   case Fgpu::BGTZC_MMR6:
-  case Fgpu::BLTZC:   case Fgpu::BLTZC_MMR6:
-  case Fgpu::BEQZC:   case Fgpu::BEQZC_MMR6:
-  case Fgpu::BNEZC:   case Fgpu::BNEZC_MMR6:
+  case Fgpu::BLEZC:
+  case Fgpu::BGEZC:
+  case Fgpu::BGTZC:
+  case Fgpu::BLTZC:
+  case Fgpu::BEQZC:
+  case Fgpu::BNEZC:
   case Fgpu::BLEZC64:
   case Fgpu::BGEZC64:
   case Fgpu::BGTZC64:
@@ -5834,12 +5495,12 @@ unsigned FgpuAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
         Inst.getOperand(0).getReg() == Fgpu::ZERO_64)
       return Match_RequiresNoZeroRegister;
     return Match_Success;
-  case Fgpu::BGEC:    case Fgpu::BGEC_MMR6:
-  case Fgpu::BLTC:    case Fgpu::BLTC_MMR6:
-  case Fgpu::BGEUC:   case Fgpu::BGEUC_MMR6:
-  case Fgpu::BLTUC:   case Fgpu::BLTUC_MMR6:
-  case Fgpu::BEQC:    case Fgpu::BEQC_MMR6:
-  case Fgpu::BNEC:    case Fgpu::BNEC_MMR6:
+  case Fgpu::BGEC:
+  case Fgpu::BLTC:
+  case Fgpu::BGEUC:
+  case Fgpu::BLTUC:
+  case Fgpu::BEQC:
+  case Fgpu::BNEC:
   case Fgpu::BGEC64:
   case Fgpu::BLTC64:
   case Fgpu::BGEUC64:
@@ -6130,17 +5791,6 @@ void FgpuAsmParser::warnIfRegIndexIsAT(unsigned RegIndex, SMLoc Loc) {
 void FgpuAsmParser::warnIfNoMacro(SMLoc Loc) {
   if (!AssemblerOptions.back()->isMacro())
     Warning(Loc, "macro instruction expanded into multiple instructions");
-}
-
-void FgpuAsmParser::ConvertXWPOperands(MCInst &Inst,
-                                       const OperandVector &Operands) {
-  assert(
-      (Inst.getOpcode() == Fgpu::LWP_MM || Inst.getOpcode() == Fgpu::SWP_MM) &&
-      "Unexpected instruction!");
-  ((FgpuOperand &)*Operands[1]).addGPR32ZeroAsmRegOperands(Inst, 1);
-  int NextReg = nextReg(((FgpuOperand &)*Operands[1]).getGPR32Reg());
-  Inst.addOperand(MCOperand::createReg(NextReg));
-  ((FgpuOperand &)*Operands[2]).addMemOperands(Inst, 2);
 }
 
 void
@@ -7505,9 +7155,6 @@ bool FgpuAsmParser::parseSetArchDirective() {
   if (ArchFeatureName.empty())
     return reportParseError("unsupported architecture");
 
-  if (ArchFeatureName == "fgpu64r6" && inMicroFgpuMode())
-    return reportParseError("fgpu64r6 does not support microFGPU");
-
   selectArch(ArchFeatureName);
   getTargetStreamer().emitDirectiveSetArch(Arch);
   return false;
@@ -7533,10 +7180,6 @@ bool FgpuAsmParser::parseSetFeature(uint64_t Feature) {
   case Fgpu::FeatureDSPR2:
     setFeatureBits(Fgpu::FeatureDSPR2, "dspr2");
     getTargetStreamer().emitDirectiveSetDspr2();
-    break;
-  case Fgpu::FeatureMicroFgpu:
-    setFeatureBits(Fgpu::FeatureMicroFgpu, "microfgpu");
-    getTargetStreamer().emitDirectiveSetMicroFgpu();
     break;
   case Fgpu::FeatureFgpu1:
     selectArch("fgpu1");
@@ -7906,23 +7549,6 @@ bool FgpuAsmParser::parseDirectiveSet() {
     return parseSetMacroDirective();
   if (IdVal == "nomacro")
     return parseSetNoMacroDirective();
-  if (IdVal == "fgpu16")
-    return parseSetFgpu16Directive();
-  if (IdVal == "nofgpu16")
-    return parseSetNoFgpu16Directive();
-  if (IdVal == "nomicrofgpu") {
-    clearFeatureBits(Fgpu::FeatureMicroFgpu, "microfgpu");
-    getTargetStreamer().emitDirectiveSetNoMicroFgpu();
-    getParser().eatToEndOfStatement();
-    return false;
-  }
-  if (IdVal == "microfgpu") {
-    if (hasFgpu64r6()) {
-      Error(Loc, ".set microfgpu directive is not supported with FGPU64R6");
-      return false;
-    }
-    return parseSetFeature(Fgpu::FeatureMicroFgpu);
-  }
   if (IdVal == "fgpu0")
     return parseSetFgpu0Directive();
   if (IdVal == "fgpu1")
@@ -7954,10 +7580,6 @@ bool FgpuAsmParser::parseDirectiveSet() {
   if (IdVal == "fgpu64r5")
     return parseSetFeature(Fgpu::FeatureFgpu64r5);
   if (IdVal == "fgpu64r6") {
-    if (inMicroFgpuMode()) {
-      Error(Loc, "FGPU64R6 is not supported with microFGPU");
-      return false;
-    }
     return parseSetFeature(Fgpu::FeatureFgpu64r6);
   }
   if (IdVal == "dsp")

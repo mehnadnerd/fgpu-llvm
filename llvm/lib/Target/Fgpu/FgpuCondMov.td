@@ -103,8 +103,7 @@ multiclass MovnPats<RegisterClass CRC, RegisterClass DRC, Instruction MOVNInst,
 }
 
 // Instantiation of instructions.
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def MOVZ_I_I : MMRel, CMov_I_I_FT<"movz", GPR32Opnd, GPR32Opnd, II_MOVZ>,
+  def MOVZ_I_I :  CMov_I_I_FT<"movz", GPR32Opnd, GPR32Opnd, II_MOVZ>,
                  ADD_FM<0, 0xa>, INSN_FGPU4_32_NOT_32R6_64R6;
 
   let isCodeGenOnly = 1 in {
@@ -116,7 +115,7 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
                        ADD_FM<0, 0xa>, INSN_FGPU4_32_NOT_32R6_64R6, GPR_64;
   }
 
-  def MOVN_I_I     : MMRel, CMov_I_I_FT<"movn", GPR32Opnd, GPR32Opnd, II_MOVN>,
+  def MOVN_I_I     :  CMov_I_I_FT<"movn", GPR32Opnd, GPR32Opnd, II_MOVN>,
                      ADD_FM<0, 0xb>, INSN_FGPU4_32_NOT_32R6_64R6;
 
   let isCodeGenOnly = 1 in {
@@ -127,24 +126,24 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
     def MOVN_I64_I64 : CMov_I_I_FT<"movn", GPR64Opnd, GPR64Opnd, II_MOVN>,
                        ADD_FM<0, 0xb>, INSN_FGPU4_32_NOT_32R6_64R6, GPR_64;
   }
-  def MOVZ_I_S : MMRel, CMov_I_F_FT<"movz.s", GPR32Opnd, FGR32Opnd, II_MOVZ_S>,
+  def MOVZ_I_S :  CMov_I_F_FT<"movz.s", GPR32Opnd, FGR32Opnd, II_MOVZ_S>,
                  CMov_I_F_FM<18, 16>, INSN_FGPU4_32_NOT_32R6_64R6;
 
   let isCodeGenOnly = 1 in
   def MOVZ_I64_S : CMov_I_F_FT<"movz.s", GPR64Opnd, FGR32Opnd, II_MOVZ_S>,
                    CMov_I_F_FM<18, 16>, INSN_FGPU4_32_NOT_32R6_64R6, GPR_64;
 
-  def MOVN_I_S : MMRel, CMov_I_F_FT<"movn.s", GPR32Opnd, FGR32Opnd, II_MOVN_S>,
+  def MOVN_I_S :  CMov_I_F_FT<"movn.s", GPR32Opnd, FGR32Opnd, II_MOVN_S>,
                  CMov_I_F_FM<19, 16>, INSN_FGPU4_32_NOT_32R6_64R6;
 
   let isCodeGenOnly = 1 in
   def MOVN_I64_S : CMov_I_F_FT<"movn.s", GPR64Opnd, FGR32Opnd, II_MOVN_S>,
                    CMov_I_F_FM<19, 16>, INSN_FGPU4_32_NOT_32R6_64R6, GPR_64;
 
-  def MOVZ_I_D32 : MMRel, CMov_I_F_FT<"movz.d", GPR32Opnd, AFGR64Opnd,
+  def MOVZ_I_D32 :  CMov_I_F_FT<"movz.d", GPR32Opnd, AFGR64Opnd,
                                       II_MOVZ_D>, CMov_I_F_FM<18, 17>,
                    INSN_FGPU4_32_NOT_32R6_64R6, FGR_32;
-  def MOVN_I_D32 : MMRel, CMov_I_F_FT<"movn.d", GPR32Opnd, AFGR64Opnd,
+  def MOVN_I_D32 :  CMov_I_F_FT<"movn.d", GPR32Opnd, AFGR64Opnd,
                                       II_MOVN_D>, CMov_I_F_FM<19, 17>,
                    INSN_FGPU4_32_NOT_32R6_64R6, FGR_32;
 
@@ -163,28 +162,28 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
     }
   }
 
-  def MOVT_I : MMRel, CMov_F_I_FT<"movt", GPR32Opnd, II_MOVT, FgpuCMovFP_T>,
+  def MOVT_I :  CMov_F_I_FT<"movt", GPR32Opnd, II_MOVT, FgpuCMovFP_T>,
                CMov_F_I_FM<1>, INSN_FGPU4_32_NOT_32R6_64R6;
 
   let isCodeGenOnly = 1 in
   def MOVT_I64 : CMov_F_I_FT<"movt", GPR64Opnd, II_MOVT, FgpuCMovFP_T>,
                  CMov_F_I_FM<1>, INSN_FGPU4_32_NOT_32R6_64R6, GPR_64;
 
-  def MOVF_I : MMRel, CMov_F_I_FT<"movf", GPR32Opnd, II_MOVF, FgpuCMovFP_F>,
+  def MOVF_I :  CMov_F_I_FT<"movf", GPR32Opnd, II_MOVF, FgpuCMovFP_F>,
                CMov_F_I_FM<0>, INSN_FGPU4_32_NOT_32R6_64R6;
 
   let isCodeGenOnly = 1 in
   def MOVF_I64 : CMov_F_I_FT<"movf", GPR64Opnd, II_MOVF, FgpuCMovFP_F>,
                  CMov_F_I_FM<0>, INSN_FGPU4_32_NOT_32R6_64R6, GPR_64;
-  def MOVT_S : MMRel, CMov_F_F_FT<"movt.s", FGR32Opnd, II_MOVT_S, FgpuCMovFP_T>,
+  def MOVT_S :  CMov_F_F_FT<"movt.s", FGR32Opnd, II_MOVT_S, FgpuCMovFP_T>,
                CMov_F_F_FM<16, 1>, INSN_FGPU4_32_NOT_32R6_64R6;
-  def MOVF_S : MMRel, CMov_F_F_FT<"movf.s", FGR32Opnd, II_MOVF_S, FgpuCMovFP_F>,
+  def MOVF_S :  CMov_F_F_FT<"movf.s", FGR32Opnd, II_MOVF_S, FgpuCMovFP_F>,
                CMov_F_F_FM<16, 0>, INSN_FGPU4_32_NOT_32R6_64R6;
 
-  def MOVT_D32 : MMRel, CMov_F_F_FT<"movt.d", AFGR64Opnd, II_MOVT_D,
+  def MOVT_D32 :  CMov_F_F_FT<"movt.d", AFGR64Opnd, II_MOVT_D,
                                     FgpuCMovFP_T>, CMov_F_F_FM<17, 1>,
                  INSN_FGPU4_32_NOT_32R6_64R6, FGR_32;
-  def MOVF_D32 : MMRel, CMov_F_F_FT<"movf.d", AFGR64Opnd, II_MOVF_D,
+  def MOVF_D32 :  CMov_F_F_FT<"movf.d", AFGR64Opnd, II_MOVF_D,
                                     FgpuCMovFP_F>, CMov_F_F_FM<17, 0>,
                  INSN_FGPU4_32_NOT_32R6_64R6, FGR_32;
 
@@ -260,7 +259,7 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
          FGR_64;
   defm : MovnPats<GPR64, FGR64, MOVN_I64_D64, XOR64>,
          INSN_FGPU4_32_NOT_32R6_64R6, FGR_64;
-}
+
 // For targets that don't have conditional-move instructions
 // we have to match SELECT nodes with pseudo instructions.
 let usesCustomInserter = 1, hasNoSchedulingInfo = 1 in {

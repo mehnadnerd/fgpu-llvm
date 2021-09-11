@@ -3060,8 +3060,6 @@ FgpuSETargetLowering::emitBPOSGE32(MachineInstr &MI,
 
   // Insert the real bposge32 instruction to $BB.
   BuildMI(BB, DL, TII->get(Fgpu::BPOSGE32)).addMBB(TBB);
-  // Insert the real bposge32c instruction to $BB.
-  BuildMI(BB, DL, TII->get(Fgpu::BPOSGE32C_MMR3)).addMBB(TBB);
 
   // Fill $FBB.
   Register VR2 = RegInfo.createVirtualRegister(RC);

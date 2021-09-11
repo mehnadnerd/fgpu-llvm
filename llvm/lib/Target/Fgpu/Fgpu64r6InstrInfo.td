@@ -128,7 +128,6 @@ class CRC32CD_DESC : CRC_DESC_BASE<"crc32cd", GPR32Opnd, II_CRC32CD>;
 //
 //===----------------------------------------------------------------------===//
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   let DecoderMethod = "DecodeDAHIDATI" in {
     def DATI : DATI_ENC, DATI_DESC, ISA_FGPU64R6;
     def DAHI : DAHI_ENC, DAHI_DESC, ISA_FGPU64R6;
@@ -148,7 +147,6 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   def DMUL_R6: DMUL_R6_ENC, DMUL_R6_DESC, ISA_FGPU64R6;
   def DMULU: DMULU_ENC, DMULU_DESC, ISA_FGPU64R6;
   def LLD_R6 : LLD_R6_ENC, LLD_R6_DESC, ISA_FGPU64R6;
-}
 def LDPC: LDPC_ENC, LDPC_DESC, ISA_FGPU64R6;
 def LWUPC : LWUPC_ENC, LWUPC_DESC, ISA_FGPU64R6;
 def SCD_R6 : SCD_R6_ENC, SCD_R6_DESC, ISA_FGPU32R6;
@@ -157,8 +155,7 @@ let DecoderNamespace = "Fgpu32r6_64r6_GP64" in {
   def SELNEZ64 : SELNEZ_ENC, SELNEZ64_DESC, ISA_FGPU32R6, GPR_64;
   def JR_HB64_R6 : JR_HB_R6_ENC, JR_HB64_R6_DESC, ISA_FGPU32R6;
 }
-let AdditionalPredicates = [NotInMicroFgpu],
-    DecoderNamespace = "Fgpu32r6_64r6_PTR64" in {
+let DecoderNamespace = "Fgpu32r6_64r6_PTR64" in {
   def LL64_R6 : LL_R6_ENC, LL64_R6_DESC, PTR_64, ISA_FGPU64R6;
   def SC64_R6 : SC_R6_ENC, SC64_R6_DESC, PTR_64, ISA_FGPU64R6;
 }
@@ -183,10 +180,8 @@ let DecoderNamespace = "Fgpu32r6_64r6_BranchZero" in {
 def BLTZC64 : BLTZC_ENC, BLTZC64_DESC, ISA_FGPU64R6, GPR_64;
 def BGEZC64 : BGEZC_ENC, BGEZC64_DESC, ISA_FGPU64R6, GPR_64;
 }
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def CRC32D : R6MMR6Rel, CRC32D_ENC, CRC32D_DESC, ISA_FGPU64R6, ASE_CRC;
   def CRC32CD : R6MMR6Rel, CRC32CD_ENC, CRC32CD_DESC, ISA_FGPU64R6, ASE_CRC;
-}
 
 //===----------------------------------------------------------------------===//
 //
@@ -322,16 +317,14 @@ def : FgpuPat<(i64 (sext (i32 (urem GPR32:$src, GPR32:$src2)))),
 
 // Pseudo instructions
 
-let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu,
-                            NoIndirectJumpGuards] in {
+let AdditionalPredicates = [NoIndirectJumpGuards] in {
   def TAILCALL64R6REG : TailCallRegR6<JALR64, ZERO_64, GPR64Opnd>, ISA_FGPU64R6;
   def PseudoIndirectBranch64R6 : PseudoIndirectBranchBaseR6<JALR64, ZERO_64,
                                                             GPR64Opnd>,
                                  ISA_FGPU64R6;
 }
 
-let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu,
-                            UseIndirectJumpsHazard] in {
+let AdditionalPredicates = [UseIndirectJumpsHazard] in {
   def TAILCALLHB64R6REG : TailCallReg<JR_HB64_R6, GPR64Opnd>,
                           ISA_FGPU64R6;
   def PseudoIndrectHazardBranch64R6 : PseudoIndirectBranchBase<JR_HB64_R6,

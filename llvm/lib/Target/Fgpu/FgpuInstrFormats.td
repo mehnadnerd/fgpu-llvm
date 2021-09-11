@@ -35,34 +35,6 @@ def FrmFR     : Format<4>;
 def FrmFI     : Format<5>;
 def FrmOther  : Format<6>; // Instruction w/ a custom format
 
-class MMRel;
-
-def Std2MicroFgpu : InstrMapping {
-  let FilterClass = "MMRel";
-  // Instructions with the same BaseOpcode and isNVStore values form a row.
-  let RowFields = ["BaseOpcode"];
-  // Instructions with the same predicate sense form a column.
-  let ColFields = ["Arch"];
-  // The key column is the unpredicated instructions.
-  let KeyCol = ["se"];
-  // Value columns are PredSense=true and PredSense=false
-  let ValueCols = [["se"], ["microfgpu"]];
-}
-
-class StdMMR6Rel;
-
-def Std2MicroFgpuR6 : InstrMapping {
-  let FilterClass = "StdMMR6Rel";
-  // Instructions with the same BaseOpcode and isNVStore values form a row.
-  let RowFields = ["BaseOpcode"];
-  // Instructions with the same predicate sense form a column.
-  let ColFields = ["Arch"];
-  // The key column is the unpredicated instructions.
-  let KeyCol = ["se"];
-  // Value columns are PredSense=true and PredSense=false
-  let ValueCols = [["se"], ["microfgpur6"]];
-}
-
 class StdArch {
   string Arch = "se";
 }
@@ -115,7 +87,7 @@ class FgpuInst<dag outs, dag ins, string asmstr, list<dag> pattern,
 class InstSE<dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin, Format f, string opstr = ""> :
   FgpuInst<outs, ins, asmstr, pattern, itin, f> {
-  let EncodingPredicates = [NotInFgpu16Mode];
+  let EncodingPredicates = [];
   string BaseOpcode = opstr;
   string Arch;
 }
@@ -132,7 +104,7 @@ class FgpuPseudo<dag outs, dag ins, list<dag> pattern,
 class PseudoSE<dag outs, dag ins, list<dag> pattern,
                InstrItinClass itin = IIPseudo> :
   FgpuPseudo<outs, ins, pattern, itin> {
-  let EncodingPredicates = [NotInFgpu16Mode];
+  let EncodingPredicates = [];
 }
 
 // Pseudo-instructions for alternate assembly syntax (never used by codegen).

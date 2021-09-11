@@ -106,10 +106,6 @@ void FgpuMCCodeEmitter::LowerCompactBranch(MCInst& Inst) const {
   } else if (Inst.getOpcode() == Fgpu::BNVC || Inst.getOpcode() == Fgpu::BOVC) {
     if (Reg0 >= Reg1)
       return;
-  } else if (Inst.getOpcode() == Fgpu::BNVC_MMR6 ||
-             Inst.getOpcode() == Fgpu::BOVC_MMR6) {
-    if (Reg1 >= Reg0)
-      return;
   } else
     llvm_unreachable("Cannot rewrite unknown branch!");
 
@@ -173,9 +169,7 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
   case Fgpu::BEQC64:
   case Fgpu::BNEC64:
   case Fgpu::BOVC:
-  case Fgpu::BOVC_MMR6:
   case Fgpu::BNVC:
-  case Fgpu::BNVC_MMR6:
     LowerCompactBranch(TmpInst);
   }
 
@@ -187,37 +181,10 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
   // so we have to special check for them.
   const unsigned Opcode = TmpInst.getOpcode();
   if ((Opcode != Fgpu::NOP) && (Opcode != Fgpu::SLL) &&
-      (Opcode != Fgpu::SLL_MM) && (Opcode != Fgpu::SLL_MMR6) && !Binary)
+      !Binary)
     llvm_unreachable("unimplemented opcode in encodeInstruction()");
 
   int NewOpcode = -1;
-  if (isMicroFgpu(STI)) {
-    if (isFgpu32r6(STI)) {
-      NewOpcode = Fgpu::FgpuR62MicroFgpuR6(Opcode, Fgpu::Arch_microfgpur6);
-      if (NewOpcode == -1)
-        NewOpcode = Fgpu::Std2MicroFgpuR6(Opcode, Fgpu::Arch_microfgpur6);
-    }
-    else
-      NewOpcode = Fgpu::Std2MicroFgpu(Opcode, Fgpu::Arch_microfgpu);
-
-    // Check whether it is Dsp instruction.
-    if (NewOpcode == -1)
-      NewOpcode = Fgpu::Dsp2MicroFgpu(Opcode, Fgpu::Arch_mmdsp);
-
-    if (NewOpcode != -1) {
-      if (Fixups.size() > N)
-        Fixups.pop_back();
-
-      TmpInst.setOpcode (NewOpcode);
-      Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
-    }
-
-    if (((MI.getOpcode() == Fgpu::MOVEP_MM) ||
-         (MI.getOpcode() == Fgpu::MOVEP_MMR6))) {
-      unsigned RegPair = getMovePRegPairOpValue(MI, 0, Fixups, STI);
-      Binary = (Binary & 0xFFFFFC7F) | (RegPair << 7);
-    }
-  }
 
   const MCInstrDesc &Desc = MCII.get(TmpInst.getOpcode());
 
@@ -874,10 +841,6 @@ getMemEncodingMMImm12(const MCInst &MI, unsigned OpNo,
   switch (MI.getOpcode()) {
   default:
     break;
-  case Fgpu::SWM32_MM:
-  case Fgpu::LWM32_MM:
-    OpNo = MI.getNumOperands() - 2;
-    break;
   }
 
   // Base register is encoded in bits 20-16, offset is encoded in bits 11-0.
@@ -900,32 +863,6 @@ getMemEncodingMMImm16(const MCInst &MI, unsigned OpNo,
   unsigned OffBits = getMachineOpValue(MI, MI.getOperand(OpNo+1), Fixups, STI);
 
   return (OffBits & 0xFFFF) | RegBits;
-}
-
-unsigned FgpuMCCodeEmitter::
-getMemEncodingMMImm4sp(const MCInst &MI, unsigned OpNo,
-                       SmallVectorImpl<MCFixup> &Fixups,
-                       const MCSubtargetInfo &STI) const {
-  // opNum can be invalid if instruction had reglist as operand
-  // MemOperand is always last operand of instruction (base + offset)
-  switch (MI.getOpcode()) {
-  default:
-    break;
-  case Fgpu::SWM16_MM:
-  case Fgpu::SWM16_MMR6:
-  case Fgpu::LWM16_MM:
-  case Fgpu::LWM16_MMR6:
-    OpNo = MI.getNumOperands() - 2;
-    break;
-  }
-
-  // Offset is encoded in bits 4-0.
-  assert(MI.getOperand(OpNo).isReg());
-  // Base register is always SP - thus it is not encoded.
-  assert(MI.getOperand(OpNo+1).isImm());
-  unsigned OffBits = getMachineOpValue(MI, MI.getOperand(OpNo+1), Fixups, STI);
-
-  return ((OffBits >> 2) & 0x0F);
 }
 
 // FIXME: should be called getMSBEncoding

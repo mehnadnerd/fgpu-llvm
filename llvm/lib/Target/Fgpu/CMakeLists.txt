@@ -24,7 +24,6 @@ add_llvm_target(FgpuCodeGen
   FgpuAsmPrinter.cpp
   FgpuCallLowering.cpp
   FgpuCCState.cpp
-  FgpuConstantIslandPass.cpp
   FgpuDelaySlotFiller.cpp
   FgpuExpandPseudo.cpp
   FgpuFastISel.cpp

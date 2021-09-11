@@ -189,20 +189,18 @@ getReservedRegs(const MachineFunction &MF) const {
   }
   // Reserve FP if this function should have a dedicated frame pointer register.
   if (Subtarget.getFrameLowering()->hasFP(MF)) {
-    if (Subtarget.inFgpu16Mode())
-      Reserved.set(Fgpu::S0);
-    else {
-      Reserved.set(Fgpu::FP);
-      Reserved.set(Fgpu::FP_64);
 
-      // Reserve the base register if we need to both realign the stack and
-      // allocate variable-sized objects at runtime. This should test the
-      // same conditions as FgpuFrameLowering::hasBP().
-      if (hasStackRealignment(MF) && MF.getFrameInfo().hasVarSizedObjects()) {
-        Reserved.set(Fgpu::S7);
-        Reserved.set(Fgpu::S7_64);
-      }
+    Reserved.set(Fgpu::FP);
+    Reserved.set(Fgpu::FP_64);
+
+    // Reserve the base register if we need to both realign the stack and
+    // allocate variable-sized objects at runtime. This should test the
+    // same conditions as FgpuFrameLowering::hasBP().
+    if (hasStackRealignment(MF) && MF.getFrameInfo().hasVarSizedObjects()) {
+      Reserved.set(Fgpu::S7);
+      Reserved.set(Fgpu::S7_64);
     }
+
   }
 
   // Reserve hardware registers.
@@ -218,17 +216,6 @@ getReservedRegs(const MachineFunction &MF) const {
   // Reserve MSA control registers.
   for (MCPhysReg Reg : Fgpu::MSACtrlRegClass)
     Reserved.set(Reg);
-
-  // Reserve RA if in fgpu16 mode.
-  if (Subtarget.inFgpu16Mode()) {
-    const FgpuFunctionInfo *FgpuFI = MF.getInfo<FgpuFunctionInfo>();
-    Reserved.set(Fgpu::RA);
-    Reserved.set(Fgpu::RA_64);
-    Reserved.set(Fgpu::T0);
-    Reserved.set(Fgpu::T1);
-    if (MF.getFunction().hasFnAttribute("saveS2") || FgpuFI->hasSaveS2())
-      Reserved.set(Fgpu::S2);
-  }
 
   // Reserve GP if small section is used.
   if (Subtarget.useSmallSection()) {
@@ -278,11 +265,8 @@ getFrameRegister(const MachineFunction &MF) const {
   bool IsN64 =
       static_cast<const FgpuTargetMachine &>(MF.getTarget()).getABI().IsN64();
 
-  if (Subtarget.inFgpu16Mode())
-    return TFI->hasFP(MF) ? Fgpu::S0 : Fgpu::SP;
-  else
-    return TFI->hasFP(MF) ? (IsN64 ? Fgpu::FP_64 : Fgpu::FP) :
-                            (IsN64 ? Fgpu::SP_64 : Fgpu::SP);
+  return TFI->hasFP(MF) ? (IsN64 ? Fgpu::FP_64 : Fgpu::FP) :
+                          (IsN64 ? Fgpu::SP_64 : Fgpu::SP);
 }
 
 bool FgpuRegisterInfo::canRealignStack(const MachineFunction &MF) const {
@@ -299,10 +283,6 @@ bool FgpuRegisterInfo::canRealignStack(const MachineFunction &MF) const {
   const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
   unsigned FP = Subtarget.isGP32bit() ? Fgpu::FP : Fgpu::FP_64;
   unsigned BP = Subtarget.isGP32bit() ? Fgpu::S7 : Fgpu::S7_64;
-
-  // Support dynamic stack realignment for all targets except Fgpu16.
-  if (Subtarget.inFgpu16Mode())
-    return false;
 
   // We can't perform dynamic stack realignment if we can't reserve the
   // frame pointer register.

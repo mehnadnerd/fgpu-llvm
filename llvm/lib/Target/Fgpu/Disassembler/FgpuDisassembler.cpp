@@ -38,13 +38,11 @@ using DecodeStatus = MCDisassembler::DecodeStatus;
 namespace {
 
 class FgpuDisassembler : public MCDisassembler {
-  bool IsMicroFgpu;
   bool IsBigEndian;
 
 public:
   FgpuDisassembler(const MCSubtargetInfo &STI, MCContext &Ctx, bool IsBigEndian)
       : MCDisassembler(STI, Ctx),
-        IsMicroFgpu(STI.getFeatureBits()[Fgpu::FeatureMicroFgpu]),
         IsBigEndian(IsBigEndian) {}
 
   bool hasFgpu2() const { return STI.getFeatureBits()[Fgpu::FeatureFgpu2]; }
@@ -698,40 +696,6 @@ static DecodeStatus DecodeAddiGroupBranch(MCInst &MI, InsnType insn,
 }
 
 template <typename InsnType>
-static DecodeStatus DecodePOP35GroupBranchMMR6(MCInst &MI, InsnType insn,
-                                               uint64_t Address,
-                                               const void *Decoder) {
-  InsnType Rt = fieldFromInstruction(insn, 21, 5);
-  InsnType Rs = fieldFromInstruction(insn, 16, 5);
-  int64_t Imm = 0;
-
-  if (Rs >= Rt) {
-    MI.setOpcode(Fgpu::BOVC_MMR6);
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                       Rt)));
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                       Rs)));
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 2 + 4;
-  } else if (Rs != 0 && Rs < Rt) {
-    MI.setOpcode(Fgpu::BEQC_MMR6);
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                       Rs)));
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                       Rt)));
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 4 + 4;
-  } else {
-    MI.setOpcode(Fgpu::BEQZALC_MMR6);
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                       Rt)));
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 2 + 4;
-  }
-
-  MI.addOperand(MCOperand::createImm(Imm));
-
-  return MCDisassembler::Success;
-}
-
-template <typename InsnType>
 static DecodeStatus DecodeDaddiGroupBranch(MCInst &MI, InsnType insn,
                                            uint64_t Address,
                                            const void *Decoder) {
@@ -770,117 +734,6 @@ static DecodeStatus DecodeDaddiGroupBranch(MCInst &MI, InsnType insn,
   return MCDisassembler::Success;
 }
 
-template <typename InsnType>
-static DecodeStatus DecodePOP37GroupBranchMMR6(MCInst &MI, InsnType insn,
-                                               uint64_t Address,
-                                               const void *Decoder) {
-  InsnType Rt = fieldFromInstruction(insn, 21, 5);
-  InsnType Rs = fieldFromInstruction(insn, 16, 5);
-  int64_t Imm = 0;
-
-  if (Rs >= Rt) {
-    MI.setOpcode(Fgpu::BNVC_MMR6);
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                       Rt)));
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                       Rs)));
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 2 + 4;
-  } else if (Rs != 0 && Rs < Rt) {
-    MI.setOpcode(Fgpu::BNEC_MMR6);
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                       Rs)));
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                       Rt)));
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 4 + 4;
-  } else {
-    MI.setOpcode(Fgpu::BNEZALC_MMR6);
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                       Rt)));
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 2 + 4;
-  }
-
-  MI.addOperand(MCOperand::createImm(Imm));
-
-  return MCDisassembler::Success;
-}
-
-template <typename InsnType>
-static DecodeStatus DecodePOP65GroupBranchMMR6(MCInst &MI, InsnType insn,
-                                               uint64_t Address,
-                                               const void *Decoder) {
-  // We have:
-  //    0b110101 ttttt sssss iiiiiiiiiiiiiiii
-  //      Invalid if rt == 0
-  //      BGTZC_MMR6   if rs == 0  && rt != 0
-  //      BLTZC_MMR6   if rs == rt && rt != 0
-  //      BLTC_MMR6    if rs != rt && rs != 0  && rt != 0
-
-  InsnType Rt = fieldFromInstruction(insn, 21, 5);
-  InsnType Rs = fieldFromInstruction(insn, 16, 5);
-  int64_t Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 4 + 4;
-  bool HasRs = false;
-
-  if (Rt == 0)
-    return MCDisassembler::Fail;
-  else if (Rs == 0)
-    MI.setOpcode(Fgpu::BGTZC_MMR6);
-  else if (Rs == Rt)
-    MI.setOpcode(Fgpu::BLTZC_MMR6);
-  else {
-    MI.setOpcode(Fgpu::BLTC_MMR6);
-    HasRs = true;
-  }
-
-  if (HasRs)
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                              Rs)));
-
-  MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                     Rt)));
-
-  MI.addOperand(MCOperand::createImm(Imm));
-
-  return MCDisassembler::Success;
-}
-
-template <typename InsnType>
-static DecodeStatus DecodePOP75GroupBranchMMR6(MCInst &MI, InsnType insn,
-                                               uint64_t Address,
-                                               const void *Decoder) {
-  // We have:
-  //    0b111101 ttttt sssss iiiiiiiiiiiiiiii
-  //      Invalid if rt == 0
-  //      BLEZC_MMR6   if rs == 0  && rt != 0
-  //      BGEZC_MMR6   if rs == rt && rt != 0
-  //      BGEC_MMR6    if rs != rt && rs != 0  && rt != 0
-
-  InsnType Rt = fieldFromInstruction(insn, 21, 5);
-  InsnType Rs = fieldFromInstruction(insn, 16, 5);
-  int64_t Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 4 + 4;
-  bool HasRs = false;
-
-  if (Rt == 0)
-    return MCDisassembler::Fail;
-  else if (Rs == 0)
-    MI.setOpcode(Fgpu::BLEZC_MMR6);
-  else if (Rs == Rt)
-    MI.setOpcode(Fgpu::BGEZC_MMR6);
-  else {
-    HasRs = true;
-    MI.setOpcode(Fgpu::BGEC_MMR6);
-  }
-
-  if (HasRs)
-    MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                       Rs)));
-
-  MI.addOperand(MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID,
-                                     Rt)));
-
-  MI.addOperand(MCOperand::createImm(Imm));
-
-  return MCDisassembler::Success;
-}
 
 template <typename InsnType>
 static DecodeStatus DecodeBlezlGroupBranch(MCInst &MI, InsnType insn,
@@ -1160,25 +1013,6 @@ static DecodeStatus DecodeCRC(MCInst &MI, InsnType Insn, uint64_t Address,
   return MCDisassembler::Success;
 }
 
-/// Read two bytes from the ArrayRef and return 16 bit halfword sorted
-/// according to the given endianness.
-static DecodeStatus readInstruction16(ArrayRef<uint8_t> Bytes, uint64_t Address,
-                                      uint64_t &Size, uint32_t &Insn,
-                                      bool IsBigEndian) {
-  // We want to read exactly 2 Bytes of data.
-  if (Bytes.size() < 2) {
-    Size = 0;
-    return MCDisassembler::Fail;
-  }
-
-  if (IsBigEndian) {
-    Insn = (Bytes[0] << 8) | Bytes[1];
-  } else {
-    Insn = (Bytes[1] << 8) | Bytes[0];
-  }
-
-  return MCDisassembler::Success;
-}
 
 /// Read four bytes from the ArrayRef and return 32 bit word sorted
 /// according to the given endianness.
@@ -1204,13 +1038,8 @@ static DecodeStatus readInstruction32(ArrayRef<uint8_t> Bytes, uint64_t Address,
     Insn =
         (Bytes[3] << 0) | (Bytes[2] << 8) | (Bytes[1] << 16) | (Bytes[0] << 24);
   } else {
-    if (IsMicroFgpu) {
-      Insn = (Bytes[2] << 0) | (Bytes[3] << 8) | (Bytes[0] << 16) |
-             (Bytes[1] << 24);
-    } else {
       Insn = (Bytes[0] << 0) | (Bytes[1] << 8) | (Bytes[2] << 16) |
              (Bytes[3] << 24);
-    }
   }
 
   return MCDisassembler::Success;
@@ -1223,78 +1052,6 @@ DecodeStatus FgpuDisassembler::getInstruction(MCInst &Instr, uint64_t &Size,
   uint32_t Insn;
   DecodeStatus Result;
   Size = 0;
-
-  if (IsMicroFgpu) {
-    Result = readInstruction16(Bytes, Address, Size, Insn, IsBigEndian);
-    if (Result == MCDisassembler::Fail)
-      return MCDisassembler::Fail;
-
-    if (hasFgpu32r6()) {
-      LLVM_DEBUG(
-          dbgs() << "Trying MicroFgpuR616 table (16-bit instructions):\n");
-      // Calling the auto-generated decoder function for microFGPU32R6
-      // 16-bit instructions.
-      Result = decodeInstruction(DecoderTableMicroFgpuR616, Instr, Insn,
-                                 Address, this, STI);
-      if (Result != MCDisassembler::Fail) {
-        Size = 2;
-        return Result;
-      }
-    }
-
-    LLVM_DEBUG(dbgs() << "Trying MicroFgpu16 table (16-bit instructions):\n");
-    // Calling the auto-generated decoder function for microFGPU 16-bit
-    // instructions.
-    Result = decodeInstruction(DecoderTableMicroFgpu16, Instr, Insn, Address,
-                               this, STI);
-    if (Result != MCDisassembler::Fail) {
-      Size = 2;
-      return Result;
-    }
-
-    Result = readInstruction32(Bytes, Address, Size, Insn, IsBigEndian, true);
-    if (Result == MCDisassembler::Fail)
-      return MCDisassembler::Fail;
-
-    if (hasFgpu32r6()) {
-      LLVM_DEBUG(
-          dbgs() << "Trying MicroFgpu32r632 table (32-bit instructions):\n");
-      // Calling the auto-generated decoder function.
-      Result = decodeInstruction(DecoderTableMicroFgpuR632, Instr, Insn,
-                                 Address, this, STI);
-      if (Result != MCDisassembler::Fail) {
-        Size = 4;
-        return Result;
-      }
-    }
-
-    LLVM_DEBUG(dbgs() << "Trying MicroFgpu32 table (32-bit instructions):\n");
-    // Calling the auto-generated decoder function.
-    Result = decodeInstruction(DecoderTableMicroFgpu32, Instr, Insn, Address,
-                               this, STI);
-    if (Result != MCDisassembler::Fail) {
-      Size = 4;
-      return Result;
-    }
-
-    if (isFP64()) {
-      LLVM_DEBUG(dbgs() << "Trying MicroFgpuFP64 table (32-bit opcodes):\n");
-      Result = decodeInstruction(DecoderTableMicroFgpuFP6432, Instr, Insn,
-                                 Address, this, STI);
-      if (Result != MCDisassembler::Fail) {
-        Size = 4;
-        return Result;
-      }
-    }
-
-    // This is an invalid instruction. Claim that the Size is 2 bytes. Since
-    // microFGPU instructions have a minimum alignment of 2, the next 2 bytes
-    // could form a valid instruction. The two bytes we rejected as an
-    // instruction could have actually beeen an inline constant pool that is
-    // unconditionally branched over.
-    Size = 2;
-    return MCDisassembler::Fail;
-  }
 
   // Attempt to read the instruction so that we can attempt to decode it. If
   // the buffer is not 4 bytes long, let the higher level logic figure out
@@ -1747,63 +1504,6 @@ static DecodeStatus DecodeMSA128Mem(MCInst &Inst, unsigned Insn,
   return MCDisassembler::Success;
 }
 
-static DecodeStatus DecodeMemMMImm4(MCInst &Inst,
-                                    unsigned Insn,
-                                    uint64_t Address,
-                                    const void *Decoder) {
-  unsigned Offset = Insn & 0xf;
-  unsigned Reg = fieldFromInstruction(Insn, 7, 3);
-  unsigned Base = fieldFromInstruction(Insn, 4, 3);
-
-  switch (Inst.getOpcode()) {
-    case Fgpu::LBU16_MM:
-    case Fgpu::LHU16_MM:
-    case Fgpu::LW16_MM:
-      if (DecodeGPRMM16RegisterClass(Inst, Reg, Address, Decoder)
-            == MCDisassembler::Fail)
-        return MCDisassembler::Fail;
-      break;
-    case Fgpu::SB16_MM:
-    case Fgpu::SB16_MMR6:
-    case Fgpu::SH16_MM:
-    case Fgpu::SH16_MMR6:
-    case Fgpu::SW16_MM:
-    case Fgpu::SW16_MMR6:
-      if (DecodeGPRMM16ZeroRegisterClass(Inst, Reg, Address, Decoder)
-            == MCDisassembler::Fail)
-        return MCDisassembler::Fail;
-      break;
-  }
-
-  if (DecodeGPRMM16RegisterClass(Inst, Base, Address, Decoder)
-        == MCDisassembler::Fail)
-    return MCDisassembler::Fail;
-
-  switch (Inst.getOpcode()) {
-    case Fgpu::LBU16_MM:
-      if (Offset == 0xf)
-        Inst.addOperand(MCOperand::createImm(-1));
-      else
-        Inst.addOperand(MCOperand::createImm(Offset));
-      break;
-    case Fgpu::SB16_MM:
-    case Fgpu::SB16_MMR6:
-      Inst.addOperand(MCOperand::createImm(Offset));
-      break;
-    case Fgpu::LHU16_MM:
-    case Fgpu::SH16_MM:
-    case Fgpu::SH16_MMR6:
-      Inst.addOperand(MCOperand::createImm(Offset << 1));
-      break;
-    case Fgpu::LW16_MM:
-    case Fgpu::SW16_MM:
-    case Fgpu::SW16_MMR6:
-      Inst.addOperand(MCOperand::createImm(Offset << 2));
-      break;
-  }
-
-  return MCDisassembler::Success;
-}
 
 static DecodeStatus DecodeMemMMSPImm5Lsl2(MCInst &Inst,
                                           unsigned Insn,
@@ -1837,86 +1537,6 @@ static DecodeStatus DecodeMemMMGPImm7Lsl2(MCInst &Inst,
   return MCDisassembler::Success;
 }
 
-static DecodeStatus DecodeMemMMReglistImm4Lsl2(MCInst &Inst,
-                                               unsigned Insn,
-                                               uint64_t Address,
-                                               const void *Decoder) {
-  int Offset;
-  switch (Inst.getOpcode()) {
-  case Fgpu::LWM16_MMR6:
-  case Fgpu::SWM16_MMR6:
-    Offset = fieldFromInstruction(Insn, 4, 4);
-    break;
-  default:
-    Offset = SignExtend32<4>(Insn & 0xf);
-    break;
-  }
-
-  if (DecodeRegListOperand16(Inst, Insn, Address, Decoder)
-      == MCDisassembler::Fail)
-    return MCDisassembler::Fail;
-
-  Inst.addOperand(MCOperand::createReg(Fgpu::SP));
-  Inst.addOperand(MCOperand::createImm(Offset << 2));
-
-  return MCDisassembler::Success;
-}
-
-static DecodeStatus DecodeMemMMImm9(MCInst &Inst,
-                                    unsigned Insn,
-                                    uint64_t Address,
-                                    const void *Decoder) {
-  int Offset = SignExtend32<9>(Insn & 0x1ff);
-  unsigned Reg = fieldFromInstruction(Insn, 21, 5);
-  unsigned Base = fieldFromInstruction(Insn, 16, 5);
-
-  Reg = getReg(Decoder, Fgpu::GPR32RegClassID, Reg);
-  Base = getReg(Decoder, Fgpu::GPR32RegClassID, Base);
-
-  if (Inst.getOpcode() == Fgpu::SCE_MM || Inst.getOpcode() == Fgpu::SC_MMR6)
-    Inst.addOperand(MCOperand::createReg(Reg));
-
-  Inst.addOperand(MCOperand::createReg(Reg));
-  Inst.addOperand(MCOperand::createReg(Base));
-  Inst.addOperand(MCOperand::createImm(Offset));
-
-  return MCDisassembler::Success;
-}
-
-static DecodeStatus DecodeMemMMImm12(MCInst &Inst,
-                                     unsigned Insn,
-                                     uint64_t Address,
-                                     const void *Decoder) {
-  int Offset = SignExtend32<12>(Insn & 0x0fff);
-  unsigned Reg = fieldFromInstruction(Insn, 21, 5);
-  unsigned Base = fieldFromInstruction(Insn, 16, 5);
-
-  Reg = getReg(Decoder, Fgpu::GPR32RegClassID, Reg);
-  Base = getReg(Decoder, Fgpu::GPR32RegClassID, Base);
-
-  switch (Inst.getOpcode()) {
-  case Fgpu::SWM32_MM:
-  case Fgpu::LWM32_MM:
-    if (DecodeRegListOperand(Inst, Insn, Address, Decoder)
-        == MCDisassembler::Fail)
-      return MCDisassembler::Fail;
-    Inst.addOperand(MCOperand::createReg(Base));
-    Inst.addOperand(MCOperand::createImm(Offset));
-    break;
-  case Fgpu::SC_MM:
-    Inst.addOperand(MCOperand::createReg(Reg));
-    LLVM_FALLTHROUGH;
-  default:
-    Inst.addOperand(MCOperand::createReg(Reg));
-    if (Inst.getOpcode() == Fgpu::LWP_MM || Inst.getOpcode() == Fgpu::SWP_MM)
-      Inst.addOperand(MCOperand::createReg(Reg+1));
-
-    Inst.addOperand(MCOperand::createReg(Base));
-    Inst.addOperand(MCOperand::createImm(Offset));
-  }
-
-  return MCDisassembler::Success;
-}
 
 static DecodeStatus DecodeMemMMImm16(MCInst &Inst,
                                      unsigned Insn,
@@ -2457,10 +2077,6 @@ static DecodeStatus DecodeRegListOperand16(MCInst &Inst, unsigned Insn,
   default:
     RegLst = fieldFromInstruction(Insn, 4, 2);
     break;
-  case Fgpu::LWM16_MMR6:
-  case Fgpu::SWM16_MMR6:
-    RegLst = fieldFromInstruction(Insn, 8, 2);
-    break;
   }
   unsigned RegNum = RegLst & 0x3;
 
@@ -2546,94 +2162,3 @@ static DecodeStatus DecodeSimm23Lsl2(MCInst &Inst, unsigned Insn,
   return MCDisassembler::Success;
 }
 
-template <typename InsnType>
-static DecodeStatus DecodeBgtzGroupBranchMMR6(MCInst &MI, InsnType insn,
-  uint64_t Address,
-  const void *Decoder) {
-  // We have:
-  //    0b000111 ttttt sssss iiiiiiiiiiiiiiii
-  //      Invalid      if rt == 0
-  //      BGTZALC_MMR6 if rs == 0 && rt != 0
-  //      BLTZALC_MMR6 if rs != 0 && rs == rt
-  //      BLTUC_MMR6   if rs != 0 && rs != rt
-
-  InsnType Rt = fieldFromInstruction(insn, 21, 5);
-  InsnType Rs = fieldFromInstruction(insn, 16, 5);
-  InsnType Imm = 0;
-  bool HasRs = false;
-  bool HasRt = false;
-
-  if (Rt == 0)
-    return MCDisassembler::Fail;
-  else if (Rs == 0) {
-    MI.setOpcode(Fgpu::BGTZALC_MMR6);
-    HasRt = true;
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 2 + 4;
-  }
-  else if (Rs == Rt) {
-    MI.setOpcode(Fgpu::BLTZALC_MMR6);
-    HasRs = true;
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 2 + 4;
-  }
-  else {
-    MI.setOpcode(Fgpu::BLTUC_MMR6);
-    HasRs = true;
-    HasRt = true;
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 4 + 4;
-  }
-
-  if (HasRs)
-    MI.addOperand(
-    MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID, Rs)));
-
-  if (HasRt)
-    MI.addOperand(
-    MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID, Rt)));
-
-  MI.addOperand(MCOperand::createImm(Imm));
-
-  return MCDisassembler::Success;
-}
-
-template <typename InsnType>
-static DecodeStatus DecodeBlezGroupBranchMMR6(MCInst &MI, InsnType insn,
-  uint64_t Address,
-  const void *Decoder) {
-  // We have:
-  //    0b000110 ttttt sssss iiiiiiiiiiiiiiii
-  //      Invalid        if rt == 0
-  //      BLEZALC_MMR6   if rs == 0  && rt != 0
-  //      BGEZALC_MMR6   if rs == rt && rt != 0
-  //      BGEUC_MMR6     if rs != rt && rs != 0  && rt != 0
-
-  InsnType Rt = fieldFromInstruction(insn, 21, 5);
-  InsnType Rs = fieldFromInstruction(insn, 16, 5);
-  InsnType Imm = 0;
-  bool HasRs = false;
-
-  if (Rt == 0)
-    return MCDisassembler::Fail;
-  else if (Rs == 0) {
-    MI.setOpcode(Fgpu::BLEZALC_MMR6);
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 2 + 4;
-  }
-  else if (Rs == Rt) {
-    MI.setOpcode(Fgpu::BGEZALC_MMR6);
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 2 + 4;
-  }
-  else {
-    HasRs = true;
-    MI.setOpcode(Fgpu::BGEUC_MMR6);
-    Imm = SignExtend64(fieldFromInstruction(insn, 0, 16), 16) * 4 + 4;
-  }
-
-  if (HasRs)
-    MI.addOperand(
-    MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID, Rs)));
-  MI.addOperand(
-    MCOperand::createReg(getReg(Decoder, Fgpu::GPR32RegClassID, Rt)));
-
-  MI.addOperand(MCOperand::createImm(Imm));
-
-  return MCDisassembler::Success;
-}

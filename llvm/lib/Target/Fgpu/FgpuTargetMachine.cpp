@@ -55,7 +55,6 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeFgpuTarget() {
   initializeGlobalISel(*PR);
   initializeFgpuDelaySlotFillerPass(*PR);
   initializeFgpuBranchExpansionPass(*PR);
-  initializeMicroFgpuSizeReducePass(*PR);
   initializeFgpuPreLegalizerCombinerPass(*PR);
 }
 
@@ -251,16 +250,11 @@ std::unique_ptr<CSEConfigBase> FgpuPassConfig::getCSEConfig() const {
 void FgpuPassConfig::addIRPasses() {
   TargetPassConfig::addIRPasses();
   addPass(createAtomicExpandPass());
-  if (getFgpuSubtarget().os16())
-    addPass(createFgpuOs16Pass());
-  if (getFgpuSubtarget().inFgpu16HardFloat())
-    addPass(createFgpu16HardFloatPass());
 }
 // Install an instruction selector pass using
 // the ISelDag to gen Fgpu code.
 bool FgpuPassConfig::addInstSelector() {
   addPass(createFgpuModuleISelDagPass());
-  addPass(createFgpu16ISelDag(getFgpuTargetMachine(), getOptLevel()));
   addPass(createFgpuSEISelDag(getFgpuTargetMachine(), getOptLevel()));
   return false;
 }
@@ -271,12 +265,6 @@ void FgpuPassConfig::addPreRegAlloc() {
 
 TargetTransformInfo
 FgpuTargetMachine::getTargetTransformInfo(const Function &F) {
-  if (Subtarget->allowMixed16_32()) {
-    LLVM_DEBUG(errs() << "No Target Transform Info Pass Added\n");
-    // FIXME: This is no longer necessary as the TTI returned is per-function.
-    return TargetTransformInfo(F.getParent()->getDataLayout());
-  }
-
   LLVM_DEBUG(errs() << "Target Transform Info Pass Added\n");
   return TargetTransformInfo(BasicTTIImpl(this, F));
 }
@@ -286,10 +274,6 @@ FgpuTargetMachine::getTargetTransformInfo(const Function &F) {
 void FgpuPassConfig::addPreEmitPass() {
   // Expand pseudo instructions that are sensitive to register allocation.
   addPass(createFgpuExpandPseudoPass());
-
-  // The microFGPU size reduction pass performs instruction reselection for
-  // instructions which can be remapped to a 16 bit instruction.
-  addPass(createMicroFgpuSizeReducePass());
 
   // The delay slot filler pass can potientially create forbidden slot hazards
   // for FGPUR6 and therefore it should go before FgpuBranchExpansion pass.
@@ -305,7 +289,6 @@ void FgpuPassConfig::addPreEmitPass() {
   // Any new pass should go before this pass.
   addPass(createFgpuBranchExpansion());
 
-  addPass(createFgpuConstantIslandPass());
 }
 
 bool FgpuPassConfig::addIRTranslator() {

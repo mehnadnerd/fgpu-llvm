@@ -475,7 +475,7 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
   }
 
   // FGPU16 lacks FGPU32's clz and clo instructions.
-  if (!Subtarget.hasFgpu32() || Subtarget.inFgpu16Mode())
+  if (!Subtarget.hasFgpu32())
     setOperationAction(ISD::CTLZ, MVT::i32, Expand);
   if (!Subtarget.hasFgpu64())
     setOperationAction(ISD::CTLZ, MVT::i64, Expand);
@@ -523,15 +523,11 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
   setStackPointerRegisterToSaveRestore(ABI.IsN64() ? Fgpu::SP_64 : Fgpu::SP);
 
   MaxStoresPerMemcpy = 16;
-
-  isMicroFgpu = Subtarget.inMicroFgpuMode();
 }
 
 const FgpuTargetLowering *
 FgpuTargetLowering::create(const FgpuTargetMachine &TM,
                            const FgpuSubtarget &STI) {
-  if (STI.inFgpu16Mode())
-    return createFgpu16TargetLowering(TM, STI);
 
   return createFgpuSETargetLowering(TM, STI);
 }
@@ -545,8 +541,7 @@ FgpuTargetLowering::createFastISel(FunctionLoweringInfo &funcInfo,
 
   // We support only the standard encoding [FGPU32,FGPU32R5] ISAs.
   bool UseFastISel = TM.Options.EnableFastISel && Subtarget.hasFgpu32() &&
-                     !Subtarget.hasFgpu32r6() && !Subtarget.inFgpu16Mode() &&
-                     !Subtarget.inMicroFgpuMode();
+                     !Subtarget.hasFgpu32r6();
 
   // Disable if either of the following is true:
   // We do not generate PIC, the ABI is not O32, XGOT is being used.
@@ -1060,7 +1055,7 @@ static SDValue performSUBCombine(SDNode *N, SelectionDAG &DAG,
   // (sub v0 (mul v1, v2)) => (msub v1, v2, v0)
   if (DCI.isBeforeLegalizeOps()) {
     if (Subtarget.hasFgpu32() && !Subtarget.hasFgpu32r6() &&
-        !Subtarget.inFgpu16Mode() && N->getValueType(0) == MVT::i64)
+        N->getValueType(0) == MVT::i64)
       return performMADD_MSUBCombine(N, DAG, Subtarget);
 
     return SDValue();
@@ -1075,7 +1070,7 @@ static SDValue performADDCombine(SDNode *N, SelectionDAG &DAG,
   // (add v0 (mul v1, v2)) => (madd v1, v2, v0)
   if (DCI.isBeforeLegalizeOps()) {
     if (Subtarget.hasFgpu32() && !Subtarget.hasFgpu32r6() &&
-        !Subtarget.inFgpu16Mode() && N->getValueType(0) == MVT::i64)
+        N->getValueType(0) == MVT::i64)
       return performMADD_MSUBCombine(N, DAG, Subtarget);
 
     return SDValue();
@@ -1254,7 +1249,7 @@ addLiveIn(MachineFunction &MF, unsigned PReg, const TargetRegisterClass *RC)
 static MachineBasicBlock *insertDivByZeroTrap(MachineInstr &MI,
                                               MachineBasicBlock &MBB,
                                               const TargetInstrInfo &TII,
-                                              bool Is64Bit, bool IsMicroFgpu) {
+                                              bool Is64Bit) {
   if (NoZeroDivCheck)
     return &MBB;
 
@@ -1263,7 +1258,7 @@ static MachineBasicBlock *insertDivByZeroTrap(MachineInstr &MI,
   MachineInstrBuilder MIB;
   MachineOperand &Divisor = MI.getOperand(2);
   MIB = BuildMI(MBB, std::next(I), MI.getDebugLoc(),
-                TII.get(IsMicroFgpu ? Fgpu::TEQ_MM : Fgpu::TEQ))
+                TII.get(Fgpu::TEQ))
             .addReg(Divisor.getReg(), getKillRegState(Divisor.isKill()))
             .addReg(Fgpu::ZERO)
             .addImm(7);
@@ -1401,25 +1396,14 @@ FgpuTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case Fgpu::DIVU:
   case Fgpu::MOD:
   case Fgpu::MODU:
-    return insertDivByZeroTrap(MI, *BB, *Subtarget.getInstrInfo(), false,
-                               false);
-  case Fgpu::SDIV_MM_Pseudo:
-  case Fgpu::UDIV_MM_Pseudo:
-  case Fgpu::SDIV_MM:
-  case Fgpu::UDIV_MM:
-  case Fgpu::DIV_MMR6:
-  case Fgpu::DIVU_MMR6:
-  case Fgpu::MOD_MMR6:
-  case Fgpu::MODU_MMR6:
-    return insertDivByZeroTrap(MI, *BB, *Subtarget.getInstrInfo(), false, true);
+    return insertDivByZeroTrap(MI, *BB, *Subtarget.getInstrInfo(), false);
   case Fgpu::PseudoDSDIV:
   case Fgpu::PseudoDUDIV:
   case Fgpu::DDIV:
   case Fgpu::DDIVU:
   case Fgpu::DMOD:
   case Fgpu::DMODU:
-    return insertDivByZeroTrap(MI, *BB, *Subtarget.getInstrInfo(), true, false);
-
+    return insertDivByZeroTrap(MI, *BB, *Subtarget.getInstrInfo(), true);
   case Fgpu::PseudoSELECT_I:
   case Fgpu::PseudoSELECT_I64:
   case Fgpu::PseudoSELECT_S:
@@ -3067,15 +3051,6 @@ getOpndList(SmallVectorImpl<SDValue> &Ops,
   const uint32_t *Mask =
       TRI->getCallPreservedMask(CLI.DAG.getMachineFunction(), CLI.CallConv);
   assert(Mask && "Missing call preserved mask for calling convention");
-  if (Subtarget.inFgpu16HardFloat()) {
-    if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(CLI.Callee)) {
-      StringRef Sym = G->getGlobal()->getName();
-      Function *F = G->getGlobal()->getParent()->getFunction(Sym);
-      if (F && F->hasFnAttribute("__Fgpu16RetHelper")) {
-        Mask = FgpuRegisterInfo::getFgpu16RetHelperMask();
-      }
-    }
-  }
   Ops.push_back(CLI.DAG.getRegisterMask(Mask));
 
   if (InFlag.getNode())
@@ -3091,16 +3066,11 @@ void FgpuTargetLowering::AdjustInstrPostInstrSelection(MachineInstr &MI,
     case Fgpu::JALRPseudo:
     case Fgpu::JALR64:
     case Fgpu::JALR64Pseudo:
-    case Fgpu::JALR16_MM:
-    case Fgpu::JALRC16_MMR6:
     case Fgpu::TAILCALLREG:
     case Fgpu::TAILCALLREG64:
     case Fgpu::TAILCALLR6REG:
-    case Fgpu::TAILCALL64R6REG:
-    case Fgpu::TAILCALLREG_MM:
-    case Fgpu::TAILCALLREG_MMR6: {
+    case Fgpu::TAILCALL64R6REG: {
       if (!EmitJalrReloc ||
-          Subtarget.inFgpu16Mode() ||
           !isPositionIndependent() ||
           Node->getNumOperands() < 1 ||
           Node->getOperand(0).getNumOperands() < 2) {
@@ -4121,8 +4091,6 @@ FgpuTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
     case 'y': // Same as 'r'. Exists for compatibility.
     case 'r':
       if (VT == MVT::i32 || VT == MVT::i16 || VT == MVT::i8) {
-        if (Subtarget.inFgpu16Mode())
-          return std::make_pair(0U, &Fgpu::CPU16RegsRegClass);
         return std::make_pair(0U, &Fgpu::GPR32RegClass);
       }
       if (VT == MVT::i64 && !Subtarget.isGP64bit())

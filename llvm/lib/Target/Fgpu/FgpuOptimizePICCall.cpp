@@ -194,8 +194,6 @@ void MBBInfo::postVisit() {
 
 // OptimizePICCall methods.
 bool OptimizePICCall::runOnMachineFunction(MachineFunction &F) {
-  if (static_cast<const FgpuSubtarget &>(F.getSubtarget()).inFgpu16Mode())
-    return false;
 
   // Do a pre-order traversal of the dominator tree.
   MachineDominatorTree *MDT = &getAnalysis<MachineDominatorTree>();

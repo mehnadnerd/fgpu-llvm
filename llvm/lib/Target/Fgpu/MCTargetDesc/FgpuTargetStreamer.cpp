@@ -277,17 +277,11 @@ void FgpuTargetStreamer::emitDSLL(unsigned DstReg, unsigned SrcReg,
 
 void FgpuTargetStreamer::emitEmptyDelaySlot(bool hasShortDelaySlot, SMLoc IDLoc,
                                             const MCSubtargetInfo *STI) {
-  if (hasShortDelaySlot)
-    emitRR(Fgpu::MOVE16_MM, Fgpu::ZERO, Fgpu::ZERO, IDLoc, STI);
-  else
-    emitRRI(Fgpu::SLL, Fgpu::ZERO, Fgpu::ZERO, 0, IDLoc, STI);
+  emitRRI(Fgpu::SLL, Fgpu::ZERO, Fgpu::ZERO, 0, IDLoc, STI);
 }
 
 void FgpuTargetStreamer::emitNop(SMLoc IDLoc, const MCSubtargetInfo *STI) {
-  if (isMicroFgpu(STI))
-    emitRR(Fgpu::MOVE16_MM, Fgpu::ZERO, Fgpu::ZERO, IDLoc, STI);
-  else
-    emitRRI(Fgpu::SLL, Fgpu::ZERO, Fgpu::ZERO, 0, IDLoc, STI);
+  emitRRI(Fgpu::SLL, Fgpu::ZERO, Fgpu::ZERO, 0, IDLoc, STI);
 }
 
 /// Emit the $gp restore operation for .cprestore.

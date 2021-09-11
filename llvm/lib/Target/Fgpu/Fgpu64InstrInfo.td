@@ -118,11 +118,10 @@ let DecoderNamespace = "Fgpu64" in {
 /// Arithmetic Instructions (ALU Immediate)
 def DADDi   : ArithLogicI<"daddi", simm16_64, GPR64Opnd, II_DADDI>,
               ADDI_FM<0x18>, ISA_FGPU3_NOT_32R6_64R6;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def DADDiu : ArithLogicI<"daddiu", simm16_64, GPR64Opnd, II_DADDIU,
                            immSExt16, add>,
                ADDI_FM<0x19>, IsAsCheapAsAMove, ISA_FGPU3;
-}
+
 
 let isCodeGenOnly = 1 in {
 def SLTi64  : SetCC_I<"slti", setlt, simm16_64, immSExt16, GPR64Opnd>,
@@ -139,7 +138,6 @@ def LUi64   : LoadUpper<"lui", GPR64Opnd, uimm16_64_relaxed>, LUI_FM, GPR_64;
 }
 
 /// Arithmetic Instructions (3-Operand, R-Type)
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def DADD   : ArithLogicR<"dadd", GPR64Opnd, 1, II_DADD>, ADD_FM<0, 0x2c>,
                ISA_FGPU3;
   def DADDu  : ArithLogicR<"daddu", GPR64Opnd, 1, II_DADDU, add>,
@@ -148,7 +146,6 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
                ADD_FM<0, 0x2f>, ISA_FGPU3;
   def DSUB   : ArithLogicR<"dsub", GPR64Opnd, 0, II_DSUB>, ADD_FM<0, 0x2e>,
                ISA_FGPU3;
-}
 
 let isCodeGenOnly = 1 in {
 def SLT64  : SetCC_R<"slt", setlt, GPR64Opnd>, ADD_FM<0, 0x2a>, GPR_64;
@@ -163,7 +160,6 @@ def NOR64  : LogicNOR<"nor", GPR64Opnd>, ADD_FM<0, 0x27>, GPR_64;
 }
 
 /// Shift Instructions
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def DSLL : shift_rotate_imm<"dsll", uimm6, GPR64Opnd, II_DSLL, shl,
                               immZExt6>,
              SRA_FM<0x38, 0>, ISA_FGPU3;
@@ -194,7 +190,6 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
                SRLV_FM<0x16, 1>, ISA_FGPU64R2;
   def DROTR32 : shift_rotate_imm<"drotr32", uimm5, GPR64Opnd, II_DROTR32>,
                 SRA_FM<0x3e, 1>, ISA_FGPU64R2;
-}
 
 /// Load and Store Instructions
 ///  aligned
@@ -211,14 +206,12 @@ def SW64  : Store<"sw", GPR64Opnd, truncstorei32, II_SW>, LW_FM<0x2b>,
             GPR_64;
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
-  def LWu : MMRel, Load<"lwu", GPR64Opnd, zextloadi32, II_LWU>,
+  def LWu : Load<"lwu", GPR64Opnd, zextloadi32, II_LWU>,
             LW_FM<0x27>, ISA_FGPU3;
   def LD  : LoadMemory<"ld", GPR64Opnd, mem_simmptr, load, II_LD>,
             LW_FM<0x37>, ISA_FGPU3;
   def SD  : StoreMemory<"sd", GPR64Opnd, mem_simmptr, store, II_SD>,
             LW_FM<0x3f>, ISA_FGPU3;
-}
 
 
 
@@ -244,14 +237,11 @@ def SDR   : StoreLeftRight<"sdr", FgpuSDR, GPR64Opnd, II_SDR>, LW_FM<0x2d>,
             ISA_FGPU3_NOT_32R6_64R6;
 
 /// Load-linked, Store-conditional
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def LLD : LLBase<"lld", GPR64Opnd, mem_simmptr>, LW_FM<0x34>,
             ISA_FGPU3_NOT_32R6_64R6;
-}
 def SCD : SCBase<"scd", GPR64Opnd>, LW_FM<0x3c>, ISA_FGPU3_NOT_32R6_64R6;
 
-let AdditionalPredicates = [NotInMicroFgpu],
-    DecoderNamespace = "Fgpu32_64_PTR64" in {
+let DecoderNamespace = "Fgpu32_64_PTR64" in {
 def LL64 : LLBase<"ll", GPR32Opnd>, LW_FM<0x30>, PTR_64,
            ISA_FGPU2_NOT_32R6_64R6;
 def SC64 : SCBase<"sc", GPR32Opnd>, LW_FM<0x38>, PTR_64,
@@ -279,23 +269,20 @@ let isCodeGenOnly = 1 in {
     def JALR64Pseudo : JumpLinkRegPseudo<GPR64Opnd, JALR, RA, GPR32Opnd>,
                        PTR_64;
 }
-let AdditionalPredicates = [NotInMicroFgpu],
-    DecoderNamespace = "Fgpu64" in {
+let DecoderNamespace = "Fgpu64" in {
   def JR_HB64 : JR_HB_DESC<GPR64Opnd>, JR_HB_ENC, ISA_FGPU64_NOT_64R6;
   def JALR_HB64 : JALR_HB_DESC<GPR64Opnd>, JALR_HB_ENC, ISA_FGPU64R2;
 }
 def PseudoReturn64 : PseudoReturnBase<GPR64Opnd>, GPR_64;
 
-let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu,
-                            NoIndirectJumpGuards] in {
+let AdditionalPredicates = [NoIndirectJumpGuards] in {
   def TAILCALLREG64 : TailCallReg<JR64, GPR64Opnd>, ISA_FGPU3_NOT_32R6_64R6,
                       PTR_64;
   def PseudoIndirectBranch64 : PseudoIndirectBranchBase<JR64, GPR64Opnd>,
                                ISA_FGPU3_NOT_32R6_64R6;
 }
 
-let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu,
-                            UseIndirectJumpsHazard] in {
+let AdditionalPredicates = [UseIndirectJumpsHazard] in {
   def TAILCALLREGHB64 : TailCallReg<JR_HB64, GPR64Opnd>,
                         ISA_FGPU32R2_NOT_32R6_64R6, PTR_64;
   def PseudoIndirectHazardBranch64 : PseudoIndirectBranchBase<JR_HB64,
@@ -304,22 +291,18 @@ let AdditionalPredicates = [NotInFgpu16Mode, NotInMicroFgpu,
 }
 
 /// Multiply and Divide Instructions.
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def DMULT  : Mult<"dmult", II_DMULT, GPR64Opnd, [HI0_64, LO0_64]>,
                MULT_FM<0, 0x1c>, ISA_FGPU3_NOT_32R6_64R6;
   def DMULTu : Mult<"dmultu", II_DMULTU, GPR64Opnd, [HI0_64, LO0_64]>,
                MULT_FM<0, 0x1d>, ISA_FGPU3_NOT_32R6_64R6;
-}
 def PseudoDMULT  : MultDivPseudo<DMULT, ACC128, GPR64Opnd, FgpuMult,
                                  II_DMULT>, ISA_FGPU3_NOT_32R6_64R6;
 def PseudoDMULTu : MultDivPseudo<DMULTu, ACC128, GPR64Opnd, FgpuMultu,
                                  II_DMULTU>, ISA_FGPU3_NOT_32R6_64R6;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def DSDIV : Div<"ddiv", II_DDIV, GPR64Opnd, [HI0_64, LO0_64]>,
               MULT_FM<0, 0x1e>, ISA_FGPU3_NOT_32R6_64R6;
   def DUDIV : Div<"ddivu", II_DDIVU, GPR64Opnd, [HI0_64, LO0_64]>,
               MULT_FM<0, 0x1f>, ISA_FGPU3_NOT_32R6_64R6;
-}
 def PseudoDSDIV : MultDivPseudo<DSDIV, ACC128, GPR64Opnd, FgpuDivRem,
                                 II_DDIV, 0, 1, 1>, ISA_FGPU3_NOT_32R6_64R6;
 def PseudoDUDIV : MultDivPseudo<DUDIV, ACC128, GPR64Opnd, FgpuDivRemU,
@@ -348,7 +331,6 @@ def SEH64 : SignExtInReg<"seh", i16, GPR64Opnd, II_SEH>, SEB_FM<0x18, 0x20>,
 }
 
 /// Count Leading
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def DCLZ : CountLeading0<"dclz", GPR64Opnd, II_DCLZ>, CLO_FM<0x24>,
              ISA_FGPU64_NOT_64R6, GPR_64;
   def DCLO : CountLeading1<"dclo", GPR64Opnd, II_DCLO>, CLO_FM<0x25>,
@@ -362,12 +344,10 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
 
   def LEA_ADDiu64 : EffectiveAddress<"daddiu", GPR64Opnd>, LW_FM<0x19>,
                     GPR_64;
-}
 
 let isCodeGenOnly = 1 in
 def RDHWR64 : ReadHardware<GPR64Opnd, HWRegsOpnd>, RDHWR_FM, GPR_64;
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   // The 'pos + size' constraints for code generation are enforced by the
   // code that lowers into FgpuISD::Ext.
   // For assembly parsing, we alias dextu and dextm to dext, and match by
@@ -401,9 +381,9 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
                         immZExt5, immZExtRange2To64>,
                 EXT_FM<5>, ISA_FGPU64R2;
   }
-}
 
-let isCodeGenOnly = 1, AdditionalPredicates = [NotInMicroFgpu] in {
+
+let isCodeGenOnly = 1 in {
   def DEXT64_32
       : InstSE<(outs GPR64Opnd:$rt),
                (ins GPR32Opnd:$rs, uimm5_report_uimm6:$pos, uimm5_plus1:$size),
@@ -526,7 +506,6 @@ def DMUL  : ArithLogicR<"dmul", GPR64Opnd, 1, II_DMUL, mul>,
   let Defs = [HI0, LO0, P0, P1, P2];
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   // Extract a signed bit field /+32
   def EXTS  : ExtsCins<"exts", II_EXT, GPR64Opnd, immZExt5>, EXTS_FM<0x3a>,
               ASE_FGPU64_CNFGPU;
@@ -547,7 +526,6 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
                           "cins">,
                    EXTS_FM<0x32>, ASE_FGPU64_CNFGPU;
   }
-}
 
 // Move to multiplier/product register
 def MTM0   : MoveToLOHI<"mtm0", GPR64Opnd, [MPL0, P0, P1, P2]>, MTMR_FM<0x08>,
@@ -663,7 +641,6 @@ def : FgpuPat<(i64 (extloadi32 addr:$src)), (LW64 addr:$src)>, ISA_FGPU3,
       GPR_64;
 
 // hi/lo relocs
-let AdditionalPredicates = [NotInMicroFgpu] in
 defm : FgpuHiLoRelocs<LUi64, DADDiu, ZERO_64, GPR64Opnd>, ISA_FGPU3, GPR_64,
        SYM_32;
 
@@ -676,7 +653,6 @@ def : FgpuPat<(FgpuTlsHi tglobaltlsaddr:$in), (LUi64 tglobaltlsaddr:$in)>,
       ISA_FGPU3, GPR_64;
 
 // highest/higher/hi/lo relocs
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuPat<(FgpuJmpLink (i64 texternalsym:$dst)),
                 (JAL texternalsym:$dst)>, ISA_FGPU3, GPR_64, SYM_64;
 
@@ -768,7 +744,6 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuPat<(add GPR64:$hi, (FgpuLo (i64 texternalsym:$lo))),
                 (DADDiu GPR64:$hi, texternalsym:$lo)>,
                 ISA_FGPU3, GPR_64, SYM_64;
-}
 
 // gp_rel relocs
 def : FgpuPat<(add GPR64:$gp, (FgpuGPRel tglobaladdr:$in)),
@@ -792,13 +767,11 @@ def : FgpuPat<(brcond (i32 (setgt i64:$lhs, -1)), bb:$dst),
               (BGEZ64 i64:$lhs, bb:$dst)>, ISA_FGPU3, GPR_64;
 
 // setcc patterns
-let AdditionalPredicates = [NotInMicroFgpu] in {
   defm : SeteqPats<GPR64, SLTiu64, XOR64, SLTu64, ZERO_64>, ISA_FGPU3, GPR_64;
   defm : SetlePats<GPR64, XORi, SLT64, SLTu64>, ISA_FGPU3, GPR_64;
   defm : SetgtPats<GPR64, SLT64, SLTu64>, ISA_FGPU3, GPR_64;
   defm : SetgePats<GPR64, XORi, SLT64, SLTu64>, ISA_FGPU3, GPR_64;
   defm : SetgeImmPats<GPR64, XORi, SLTi64, SLTiu64>, ISA_FGPU3, GPR_64;
-}
 // truncate
 def : FgpuPat<(trunc (assertsext GPR64:$src)),
               (EXTRACT_SUBREG GPR64:$src, sub_32)>, ISA_FGPU3, GPR_64;
@@ -840,13 +813,11 @@ def : FgpuPat<(i64 (zext GPR32:$src)), (DSRL (DSLL64_32 GPR32:$src), 32)>,
 def : FgpuPat<(i64 (sext GPR32:$src)), (SLL64_32 GPR32:$src)>, ISA_FGPU3,
       GPR_64;
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuPat<(i64 (zext GPR32:$src)), (DEXT64_32 GPR32:$src, 0, 32)>,
         ISA_FGPU64R2, GPR_64;
   def : FgpuPat<(i64 (zext (i32 (shl GPR32:$rt, immZExt5:$imm)))),
                 (CINS64_32 GPR32:$rt, imm:$imm, (immZExt5To31 imm:$imm))>,
         ISA_FGPU64R2, GPR_64, ASE_FGPU64_CNFGPU;
-}
 
 // Sign extend in register
 def : FgpuPat<(i64 (sext_inreg GPR64:$src, i32)),
@@ -856,14 +827,12 @@ def : FgpuPat<(i64 (sext_inreg GPR64:$src, i32)),
 def : FgpuPat<(bswap GPR64:$rt), (DSHD (DSBH GPR64:$rt))>, ISA_FGPU64R2;
 
 // Carry pattern
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuPat<(subc GPR64:$lhs, GPR64:$rhs),
                 (DSUBu GPR64:$lhs, GPR64:$rhs)>, ISA_FGPU3, GPR_64;
   def : FgpuPat<(addc GPR64:$lhs, GPR64:$rhs),
                 (DADDu GPR64:$lhs, GPR64:$rhs)>, ISA_FGPU3, ASE_NOT_DSP, GPR_64;
   def : FgpuPat<(addc GPR64:$lhs, immSExt16:$imm),
                 (DADDiu GPR64:$lhs, imm:$imm)>, ISA_FGPU3, ASE_NOT_DSP, GPR_64;
-}
 
 // Octeon bbit0/bbit1 FgpuPattern
 def : FgpuPat<(brcond (i32 (seteq (and i64:$lhs, PowerOf2LO:$mask), 0)), bb:$dst),
@@ -945,7 +914,6 @@ def : FgpuPat<(i64 (sext (i32 (sra GPR32:$src, GPR32:$src2)))),
 //===----------------------------------------------------------------------===//
 // Instruction aliases
 //===----------------------------------------------------------------------===//
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuInstAlias<"move $dst, $src",
                       (OR64 GPR64Opnd:$dst,  GPR64Opnd:$src, ZERO_64), 1>,
         GPR_64;
@@ -973,8 +941,6 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
 
   defm : OneOrTwoOperandMacroImmediateAlias<"xor", XORi64, GPR64Opnd, imm64>,
          ISA_FGPU3, GPR_64;
-}
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuInstAlias<"dneg $rt, $rs",
                       (DSUB GPR64Opnd:$rt, ZERO_64, GPR64Opnd:$rs), 1>,
                       ISA_FGPU3;
@@ -987,7 +953,6 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuInstAlias<"dnegu $rt",
                       (DSUBu GPR64Opnd:$rt, ZERO_64, GPR64Opnd:$rt), 1>,
                       ISA_FGPU3;
-}
 def : FgpuInstAlias<"dsubi $rs, $rt, $imm",
                     (DADDi GPR64Opnd:$rs, GPR64Opnd:$rt,
                            InvertedImOperand64:$imm),
@@ -1004,18 +969,15 @@ def : FgpuInstAlias<"dsub $rs, $imm",
                     (DADDi GPR64Opnd:$rs, GPR64Opnd:$rs,
                            InvertedImOperand64:$imm),
                     0>, ISA_FGPU3_NOT_32R6_64R6;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuInstAlias<"dsubu $rt, $rs, $imm",
                       (DADDiu GPR64Opnd:$rt, GPR64Opnd:$rs,
                               InvertedImOperand64:$imm), 0>, ISA_FGPU3;
   def : FgpuInstAlias<"dsubu $rs, $imm",
                       (DADDiu GPR64Opnd:$rs, GPR64Opnd:$rs,
                               InvertedImOperand64:$imm), 0>, ISA_FGPU3;
-}
 def : FgpuInstAlias<"dsra $rd, $rt, $rs",
                     (DSRAV GPR64Opnd:$rd, GPR64Opnd:$rt, GPR32Opnd:$rs), 0>,
                     ISA_FGPU3;
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuInstAlias<"dsll $rd, $rt, $rs",
                       (DSLLV GPR64Opnd:$rd, GPR64Opnd:$rt, GPR32Opnd:$rs), 0>,
                       ISA_FGPU3;
@@ -1053,7 +1015,6 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
   def : FgpuInstAlias<"dmtgc0 $rt, $rd",
                       (DMTGC0 COP0Opnd:$rd, GPR64Opnd:$rt, 0), 0>,
                       ISA_FGPU64R5, ASE_VIRT;
-}
 def : FgpuInstAlias<"dmfc2 $rt, $rd",
                     (DMFC2 GPR64Opnd:$rt, COP2Opnd:$rd, 0), 0>;
 def : FgpuInstAlias<"dmtc2 $rt, $rd",
@@ -1129,7 +1090,6 @@ def DMULMacro : FgpuAsmPseudoInst<(outs), (ins GPR64Opnd:$rs, GPR64Opnd:$rt,
   let InsnPredicates = [HasFgpu3, NotFgpu64r6, NotCnFgpu];
 }
 
-let AdditionalPredicates = [NotInMicroFgpu] in {
   def DSDivMacro : FgpuAsmPseudoInst<(outs GPR64Opnd:$rd),
                                      (ins GPR64Opnd:$rs, GPR64Opnd:$rt),
                                      "ddiv\t$rd, $rs, $rt">,
@@ -1204,7 +1164,6 @@ let AdditionalPredicates = [NotInMicroFgpu] in {
                                                       GPR64Opnd:$rd,
                                                       simm32_relaxed:$imm), 0>,
         ISA_FGPU3_NOT_32R6_64R6;
-}
 
 def NORImm64 : NORIMM_DESC_BASE<GPR64Opnd, imm64>, GPR_64;
 def : FgpuInstAlias<"nor\t$rs, $imm", (NORImm64 GPR64Opnd:$rs, GPR64Opnd:$rs,

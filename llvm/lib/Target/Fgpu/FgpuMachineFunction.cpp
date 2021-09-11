@@ -29,7 +29,7 @@ bool FgpuFunctionInfo::globalBaseRegSet() const {
 }
 
 static const TargetRegisterClass &getGlobalBaseRegClass(MachineFunction &MF) {
-  auto &STI = static_cast<const FgpuSubtarget &>(MF.getSubtarget());
+  //auto &STI = static_cast<const FgpuSubtarget &>(MF.getSubtarget());
   auto &TM = static_cast<const FgpuTargetMachine &>(MF.getTarget());
 
   if (TM.getABI().IsN64())
