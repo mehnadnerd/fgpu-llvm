@@ -42,11 +42,7 @@ FgpuTargetStreamer::FgpuTargetStreamer(MCStreamer &S)
     : MCTargetStreamer(S), GPReg(Fgpu::GP), ModuleDirectiveAllowed(true) {
   GPRInfoSet = FPRInfoSet = FrameInfoSet = false;
 }
-void FgpuTargetStreamer::emitDirectiveSetMicroFgpu() {}
-void FgpuTargetStreamer::emitDirectiveSetNoMicroFgpu() {}
-void FgpuTargetStreamer::setUsesMicroFgpu() {}
-void FgpuTargetStreamer::emitDirectiveSetFgpu16() {}
-void FgpuTargetStreamer::emitDirectiveSetNoFgpu16() { forbidModuleDirective(); }
+
 void FgpuTargetStreamer::emitDirectiveSetReorder() { forbidModuleDirective(); }
 void FgpuTargetStreamer::emitDirectiveSetNoReorder() {}
 void FgpuTargetStreamer::emitDirectiveSetMacro() { forbidModuleDirective(); }
@@ -363,26 +359,6 @@ void FgpuTargetStreamer::emitLoadWithImmOffset(unsigned Opcode, unsigned DstReg,
 FgpuTargetAsmStreamer::FgpuTargetAsmStreamer(MCStreamer &S,
                                              formatted_raw_ostream &OS)
     : FgpuTargetStreamer(S), OS(OS) {}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetMicroFgpu() {
-  OS << "\t.set\tmicrofgpu\n";
-  forbidModuleDirective();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetNoMicroFgpu() {
-  OS << "\t.set\tnomicrofgpu\n";
-  forbidModuleDirective();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu16() {
-  OS << "\t.set\tfgpu16\n";
-  forbidModuleDirective();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetNoFgpu16() {
-  OS << "\t.set\tnofgpu16\n";
-  FgpuTargetStreamer::emitDirectiveSetNoFgpu16();
-}
 
 void FgpuTargetAsmStreamer::emitDirectiveSetReorder() {
   OS << "\t.set\treorder\n";
@@ -779,7 +755,7 @@ void FgpuTargetAsmStreamer::emitDirectiveModuleNoGINV() {
 // This part is for ELF object output.
 FgpuTargetELFStreamer::FgpuTargetELFStreamer(MCStreamer &S,
                                              const MCSubtargetInfo &STI)
-    : FgpuTargetStreamer(S), MicroFgpuEnabled(false), STI(STI) {
+    : FgpuTargetStreamer(S), STI(STI) {
   MCAssembler &MCA = getStreamer().getAssembler();
 
   // It's possible that MCObjectFileInfo isn't fully initialized at this point
@@ -862,8 +838,6 @@ void FgpuTargetELFStreamer::emitLabel(MCSymbol *S) {
   if (Type != ELF::STT_FUNC)
     return;
 
-  if (isMicroFgpuEnabled())
-    Symbol->setOther(ELF::STO_FGPU_MICROFGPU);
 }
 
 void FgpuTargetELFStreamer::finish() {
@@ -908,24 +882,6 @@ void FgpuTargetELFStreamer::finish() {
   // the constructor for a full rundown on this.
   unsigned EFlags = MCA.getELFHeaderEFlags();
 
-  // ABI
-  // N64 does not require any ABI bits.
-  if (getABI().IsO32())
-    EFlags |= ELF::EF_FGPU_ABI_O32;
-  else if (getABI().IsN32())
-    EFlags |= ELF::EF_FGPU_ABI2;
-
-  if (Features[Fgpu::FeatureGP64Bit]) {
-    if (getABI().IsO32())
-      EFlags |= ELF::EF_FGPU_32BITMODE; /* Compatibility Mode */
-  } else if (Features[Fgpu::FeatureFgpu64r2] || Features[Fgpu::FeatureFgpu64])
-    EFlags |= ELF::EF_FGPU_32BITMODE;
-
-  // -mplt is not implemented but we should act as if it was
-  // given.
-  if (!Features[Fgpu::FeatureNoABICalls])
-    EFlags |= ELF::EF_FGPU_CPIC;
-
   if (Pic)
     EFlags |= ELF::EF_FGPU_PIC | ELF::EF_FGPU_CPIC;
 
@@ -956,31 +912,6 @@ void FgpuTargetELFStreamer::emitAssignment(MCSymbol *S, const MCExpr *Value) {
 
 MCELFStreamer &FgpuTargetELFStreamer::getStreamer() {
   return static_cast<MCELFStreamer &>(Streamer);
-}
-
-void FgpuTargetELFStreamer::emitDirectiveSetMicroFgpu() {
-  MicroFgpuEnabled = true;
-  forbidModuleDirective();
-}
-
-void FgpuTargetELFStreamer::emitDirectiveSetNoMicroFgpu() {
-  MicroFgpuEnabled = false;
-  forbidModuleDirective();
-}
-
-void FgpuTargetELFStreamer::setUsesMicroFgpu() {
-  MCAssembler &MCA = getStreamer().getAssembler();
-  unsigned Flags = MCA.getELFHeaderEFlags();
-  Flags |= ELF::EF_FGPU_MICROFGPU;
-  MCA.setELFHeaderEFlags(Flags);
-}
-
-void FgpuTargetELFStreamer::emitDirectiveSetFgpu16() {
-  MCAssembler &MCA = getStreamer().getAssembler();
-  unsigned Flags = MCA.getELFHeaderEFlags();
-  Flags |= ELF::EF_FGPU_ARCH_ASE_M16;
-  MCA.setELFHeaderEFlags(Flags);
-  forbidModuleDirective();
 }
 
 void FgpuTargetELFStreamer::emitDirectiveSetNoReorder() {

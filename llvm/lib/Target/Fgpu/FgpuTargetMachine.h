@@ -31,8 +31,6 @@ class FgpuTargetMachine : public LLVMTargetMachine {
   FgpuABIInfo ABI;
   const FgpuSubtarget *Subtarget;
   FgpuSubtarget DefaultSubtarget;
-  FgpuSubtarget NoFgpu16Subtarget;
-  FgpuSubtarget Fgpu16Subtarget;
 
   mutable StringMap<std::unique_ptr<FgpuSubtarget>> SubtargetMap;
 

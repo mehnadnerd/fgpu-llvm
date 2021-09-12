@@ -27,35 +27,18 @@ public:
 
   virtual void setPic(bool Value) {}
 
-  virtual void emitDirectiveSetMicroFgpu();
-  virtual void emitDirectiveSetNoMicroFgpu();
-  virtual void setUsesMicroFgpu();
-  virtual void emitDirectiveSetFgpu16();
-  virtual void emitDirectiveSetNoFgpu16();
-
   virtual void emitDirectiveSetReorder();
   virtual void emitDirectiveSetNoReorder();
   virtual void emitDirectiveSetMacro();
   virtual void emitDirectiveSetNoMacro();
-  virtual void emitDirectiveSetMsa();
-  virtual void emitDirectiveSetNoMsa();
-  virtual void emitDirectiveSetMt();
-  virtual void emitDirectiveSetNoMt();
-  virtual void emitDirectiveSetCRC();
-  virtual void emitDirectiveSetNoCRC();
-  virtual void emitDirectiveSetVirt();
-  virtual void emitDirectiveSetNoVirt();
-  virtual void emitDirectiveSetGINV();
-  virtual void emitDirectiveSetNoGINV();
+//  virtual void emitDirectiveSetGINV();
+//  virtual void emitDirectiveSetNoGINV();
   virtual void emitDirectiveSetAt();
   virtual void emitDirectiveSetAtWithArg(unsigned RegNo);
   virtual void emitDirectiveSetNoAt();
   virtual void emitDirectiveEnd(StringRef Name);
 
   virtual void emitDirectiveEnt(const MCSymbol &Symbol);
-  virtual void emitDirectiveAbiCalls();
-  virtual void emitDirectiveNaN2008();
-  virtual void emitDirectiveNaNLegacy();
   virtual void emitDirectiveOptionPic0();
   virtual void emitDirectiveOptionPic2();
   virtual void emitDirectiveInsn();
@@ -65,31 +48,8 @@ public:
   virtual void emitFMask(unsigned FPUBitmask, int FPUTopSavedRegOff);
 
   virtual void emitDirectiveSetArch(StringRef Arch);
-  virtual void emitDirectiveSetFgpu0();
-  virtual void emitDirectiveSetFgpu1();
-  virtual void emitDirectiveSetFgpu2();
-  virtual void emitDirectiveSetFgpu3();
-  virtual void emitDirectiveSetFgpu4();
-  virtual void emitDirectiveSetFgpu5();
-  virtual void emitDirectiveSetFgpu32();
-  virtual void emitDirectiveSetFgpu32R2();
-  virtual void emitDirectiveSetFgpu32R3();
-  virtual void emitDirectiveSetFgpu32R5();
-  virtual void emitDirectiveSetFgpu32R6();
-  virtual void emitDirectiveSetFgpu64();
-  virtual void emitDirectiveSetFgpu64R2();
-  virtual void emitDirectiveSetFgpu64R3();
-  virtual void emitDirectiveSetFgpu64R5();
-  virtual void emitDirectiveSetFgpu64R6();
-  virtual void emitDirectiveSetDsp();
-  virtual void emitDirectiveSetDspr2();
-  virtual void emitDirectiveSetNoDsp();
-  virtual void emitDirectiveSetFgpu3D();
-  virtual void emitDirectiveSetNoFgpu3D();
   virtual void emitDirectiveSetPop();
   virtual void emitDirectiveSetPush();
-  virtual void emitDirectiveSetSoftFloat();
-  virtual void emitDirectiveSetHardFloat();
 
   // PIC support
   virtual void emitDirectiveCpAdd(unsigned RegNo);
@@ -102,22 +62,6 @@ public:
                                     const MCSymbol &Sym, bool IsReg);
   virtual void emitDirectiveCpreturn(unsigned SaveLocation,
                                      bool SaveLocationIsRegister);
-
-  // FP abiflags directives
-  virtual void emitDirectiveModuleFP();
-  virtual void emitDirectiveModuleOddSPReg();
-  virtual void emitDirectiveModuleSoftFloat();
-  virtual void emitDirectiveModuleHardFloat();
-  virtual void emitDirectiveModuleMT();
-  virtual void emitDirectiveSetFp(FgpuABIFlagsSection::FpABIKind Value);
-  virtual void emitDirectiveSetOddSPReg();
-  virtual void emitDirectiveSetNoOddSPReg();
-  virtual void emitDirectiveModuleCRC();
-  virtual void emitDirectiveModuleNoCRC();
-  virtual void emitDirectiveModuleVirt();
-  virtual void emitDirectiveModuleNoVirt();
-  virtual void emitDirectiveModuleGINV();
-  virtual void emitDirectiveModuleNoGINV();
 
   void emitR(unsigned Opcode, unsigned Reg0, SMLoc IDLoc,
              const MCSubtargetInfo *STI);
@@ -210,10 +154,6 @@ class FgpuTargetAsmStreamer : public FgpuTargetStreamer {
 
 public:
   FgpuTargetAsmStreamer(MCStreamer &S, formatted_raw_ostream &OS);
-  void emitDirectiveSetMicroFgpu() override;
-  void emitDirectiveSetNoMicroFgpu() override;
-  void emitDirectiveSetFgpu16() override;
-  void emitDirectiveSetNoFgpu16() override;
 
   void emitDirectiveSetReorder() override;
   void emitDirectiveSetNoReorder() override;
@@ -311,12 +251,10 @@ public:
 
 // This part is for ELF object output
 class FgpuTargetELFStreamer : public FgpuTargetStreamer {
-  bool MicroFgpuEnabled;
   const MCSubtargetInfo &STI;
   bool Pic;
 
 public:
-  bool isMicroFgpuEnabled() const { return MicroFgpuEnabled; }
   MCELFStreamer &getStreamer();
   FgpuTargetELFStreamer(MCStreamer &S, const MCSubtargetInfo &STI);
 
@@ -326,10 +264,6 @@ public:
   void emitAssignment(MCSymbol *Symbol, const MCExpr *Value) override;
   void finish() override;
 
-  void emitDirectiveSetMicroFgpu() override;
-  void emitDirectiveSetNoMicroFgpu() override;
-  void setUsesMicroFgpu() override;
-  void emitDirectiveSetFgpu16() override;
 
   void emitDirectiveSetNoReorder() override;
   void emitDirectiveEnd(StringRef Name) override;

@@ -355,9 +355,6 @@ void FgpuAsmPrinter::emitFunctionEntryLabel() {
   if (Subtarget->isTargetNaCl())
     emitAlignment(std::max(MF->getAlignment(), FGPU_NACL_BUNDLE_ALIGN));
 
-  TS.emitDirectiveSetNoMicroFgpu();
-  TS.emitDirectiveSetNoFgpu16();
-
   TS.emitDirectiveEnt(*CurrentFnSym);
   OutStreamer->emitLabel(CurrentFnSym);
 }

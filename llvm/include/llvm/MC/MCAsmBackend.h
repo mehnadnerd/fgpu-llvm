@@ -210,6 +210,11 @@ public:
   virtual bool isMicroMips(const MCSymbol *Sym) const {
     return false;
   }
+
+  /// Check whether a given symbol has been flagged with MICROMIPS flag.
+  virtual bool isMicroFgpu(const MCSymbol *Sym) const {
+    return false;
+  }
 };
 
 } // end namespace llvm

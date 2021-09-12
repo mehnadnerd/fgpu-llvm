@@ -594,6 +594,98 @@ enum {
   ODK_PAGESIZE = 11   // Page size information
 };
 
+// Fgpu Specific e_flags
+enum : unsigned {
+  EF_FGPU_NOREORDER = 0x00000001, // Don't reorder instructions
+  EF_FGPU_PIC = 0x00000002,       // Position independent code
+  EF_FGPU_CPIC = 0x00000004,      // Call object with Position independent code
+  EF_FGPU_ABI2 = 0x00000020,      // File uses N32 ABI
+  EF_FGPU_32BITMODE = 0x00000100, // Code compiled for a 64-bit machine
+                                  // in 32-bit mode
+  EF_FGPU_FP64 = 0x00000200,      // Code compiled for a 32-bit machine
+                                  // but uses 64-bit FP registers
+  EF_FGPU_NAN2008 = 0x00000400,   // Uses IEE 754-2008 NaN encoding
+
+  // ABI flags
+  EF_FGPU_ABI_O32 = 0x00001000, // This file follows the first FGPU 32 bit ABI
+  EF_FGPU_ABI_O64 = 0x00002000, // O32 ABI extended for 64-bit architecture.
+  EF_FGPU_ABI_EABI32 = 0x00003000, // EABI in 32 bit mode.
+  EF_FGPU_ABI_EABI64 = 0x00004000, // EABI in 64 bit mode.
+  EF_FGPU_ABI = 0x0000f000,        // Mask for selecting EF_FGPU_ABI_ variant.
+
+  // FGPU machine variant
+  EF_FGPU_MACH_NONE = 0x00000000,    // A standard FGPU implementation.
+  EF_FGPU_MACH_3900 = 0x00810000,    // Toshiba R3900
+  EF_FGPU_MACH_4010 = 0x00820000,    // LSI R4010
+  EF_FGPU_MACH_4100 = 0x00830000,    // NEC VR4100
+  EF_FGPU_MACH_4650 = 0x00850000,    // FGPU R4650
+  EF_FGPU_MACH_4120 = 0x00870000,    // NEC VR4120
+  EF_FGPU_MACH_4111 = 0x00880000,    // NEC VR4111/VR4181
+  EF_FGPU_MACH_SB1 = 0x008a0000,     // Broadcom SB-1
+  EF_FGPU_MACH_OCTEON = 0x008b0000,  // Cavium Networks Octeon
+  EF_FGPU_MACH_XLR = 0x008c0000,     // RMI Xlr
+  EF_FGPU_MACH_OCTEON2 = 0x008d0000, // Cavium Networks Octeon2
+  EF_FGPU_MACH_OCTEON3 = 0x008e0000, // Cavium Networks Octeon3
+  EF_FGPU_MACH_5400 = 0x00910000,    // NEC VR5400
+  EF_FGPU_MACH_5900 = 0x00920000,    // FGPU R5900
+  EF_FGPU_MACH_5500 = 0x00980000,    // NEC VR5500
+  EF_FGPU_MACH_9000 = 0x00990000,    // Unknown
+  EF_FGPU_MACH_LS2E = 0x00a00000,    // ST Microelectronics Loongson 2E
+  EF_FGPU_MACH_LS2F = 0x00a10000,    // ST Microelectronics Loongson 2F
+  EF_FGPU_MACH_LS3A = 0x00a20000,    // Loongson 3A
+  EF_FGPU_MACH = 0x00ff0000,         // EF_FGPU_MACH_xxx selection mask
+
+  // ARCH_ASE
+  EF_FGPU_MICROFGPU = 0x02000000,     // microFGPU
+  EF_FGPU_ARCH_ASE_M16 = 0x04000000,  // Has Fgpu-16 ISA extensions
+  EF_FGPU_ARCH_ASE_MDMX = 0x08000000, // Has MDMX multimedia extensions
+  EF_FGPU_ARCH_ASE = 0x0f000000,      // Mask for EF_FGPU_ARCH_ASE_xxx flags
+
+  // ARCH
+  EF_FGPU_ARCH_1 = 0x00000000,    // FGPU1 instruction set
+  EF_FGPU_ARCH_2 = 0x10000000,    // FGPU2 instruction set
+  EF_FGPU_ARCH_3 = 0x20000000,    // FGPU3 instruction set
+  EF_FGPU_ARCH_4 = 0x30000000,    // FGPU4 instruction set
+  EF_FGPU_ARCH_5 = 0x40000000,    // FGPU5 instruction set
+  EF_FGPU_ARCH_32 = 0x50000000,   // FGPU32 instruction set per linux not elf.h
+  EF_FGPU_ARCH_64 = 0x60000000,   // FGPU64 instruction set per linux not elf.h
+  EF_FGPU_ARCH_32R2 = 0x70000000, // fgpu32r2, fgpu32r3, fgpu32r5
+  EF_FGPU_ARCH_64R2 = 0x80000000, // fgpu64r2, fgpu64r3, fgpu64r5
+  EF_FGPU_ARCH_32R6 = 0x90000000, // fgpu32r6
+  EF_FGPU_ARCH_64R6 = 0xa0000000, // fgpu64r6
+  EF_FGPU_ARCH = 0xf0000000       // Mask for applying EF_FGPU_ARCH_ variant
+};
+
+// ELF Relocation types for Fgpu
+enum {
+#include "ELFRelocs/Fgpu.def"
+};
+
+// Special values for the st_other field in the symbol table entry for FGPU.
+enum {
+  STO_FGPU_OPTIONAL = 0x04,  // Symbol whose definition is optional
+  STO_FGPU_PLT = 0x08,       // PLT entry related dynamic table record
+  STO_FGPU_PIC = 0x20,       // PIC func in an object mixes PIC/non-PIC
+  STO_FGPU_MICROFGPU = 0x80, // FGPU Specific ISA for MicroFgpu
+  STO_FGPU_FGPU16 = 0xf0     // FGPU Specific ISA for Fgpu16
+};
+//
+//// .FGPU.options section descriptor kinds
+//enum {
+//  ODK_NULL = 0,       // Undefined
+//  ODK_REGINFO = 1,    // Register usage information
+//  ODK_EXCEPTIONS = 2, // Exception processing options
+//  ODK_PAD = 3,        // Section padding options
+//  ODK_HWPATCH = 4,    // Hardware patches applied
+//  ODK_FILL = 5,       // Linker fill value
+//  ODK_TAGS = 6,       // Space for tool identification
+//  ODK_HWAND = 7,      // Hardware AND patches applied
+//  ODK_HWOR = 8,       // Hardware OR patches applied
+//  ODK_GP_GROUP = 9,   // GP group to use for text/data sections
+//  ODK_IDENT = 10,     // ID information
+//  ODK_PAGESIZE = 11   // Page size information
+//};
+
 // Hexagon-specific e_flags
 enum {
   // Object processor version flags, bits[11:0]

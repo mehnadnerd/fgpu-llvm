@@ -15,7 +15,7 @@ tablegen(LLVM FgpuGenMCPseudoLowering.inc -gen-pseudo-lowering)
 tablegen(LLVM FgpuGenRegisterBank.inc -gen-register-bank)
 tablegen(LLVM FgpuGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM FgpuGenSubtargetInfo.inc -gen-subtarget)
-tablegen(LLVM FgpuGenExegesis.inc -gen-exegesis)
+#tablegen(LLVM FgpuGenExegesis.inc -gen-exegesis)
 
 add_public_tablegen_target(FgpuCommonTableGen)
 

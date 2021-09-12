@@ -118,11 +118,7 @@ FgpuTargetMachine::FgpuTargetMachine(const Target &T, const Triple &TT,
                         getEffectiveCodeModel(CM, CodeModel::Small), OL),
       isLittle(isLittle), TLOF(std::make_unique<FgpuTargetObjectFile>()),
       ABI(FgpuABIInfo::computeTargetABI(TT, CPU, Options.MCOptions)),
-      Subtarget(nullptr), DefaultSubtarget(TT, CPU, FS, isLittle, *this, None),
-      NoFgpu16Subtarget(TT, CPU, FS.empty() ? "-fgpu16" : FS.str() + ",-fgpu16",
-                        isLittle, *this, None),
-      Fgpu16Subtarget(TT, CPU, FS.empty() ? "+fgpu16" : FS.str() + ",+fgpu16",
-                      isLittle, *this, None) {
+      Subtarget(nullptr), DefaultSubtarget(TT, CPU, FS, isLittle, *this, None) {
   Subtarget = &DefaultSubtarget;
   initAsmInfo();
 
@@ -161,25 +157,12 @@ FgpuTargetMachine::getSubtargetImpl(const Function &F) const {
       CPUAttr.isValid() ? CPUAttr.getValueAsString().str() : TargetCPU;
   std::string FS =
       FSAttr.isValid() ? FSAttr.getValueAsString().str() : TargetFS;
-  bool hasFgpu16Attr = F.getFnAttribute("fgpu16").isValid();
-  bool hasNoFgpu16Attr = F.getFnAttribute("nofgpu16").isValid();
-
-  bool HasMicroFgpuAttr = F.getFnAttribute("microfgpu").isValid();
-  bool HasNoMicroFgpuAttr = F.getFnAttribute("nomicrofgpu").isValid();
 
   // FIXME: This is related to the code below to reset the target options,
   // we need to know whether or not the soft float flag is set on the
   // function, so we can enable it as a subtarget feature.
   bool softFloat = F.getFnAttribute("use-soft-float").getValueAsBool();
 
-  if (hasFgpu16Attr)
-    FS += FS.empty() ? "+fgpu16" : ",+fgpu16";
-  else if (hasNoFgpu16Attr)
-    FS += FS.empty() ? "-fgpu16" : ",-fgpu16";
-  if (HasMicroFgpuAttr)
-    FS += FS.empty() ? "+microfgpu" : ",+microfgpu";
-  else if (HasNoMicroFgpuAttr)
-    FS += FS.empty() ? "-microfgpu" : ",-microfgpu";
   if (softFloat)
     FS += FS.empty() ? "+soft-float" : ",+soft-float";
 

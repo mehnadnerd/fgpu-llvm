@@ -9,7 +9,6 @@ add_llvm_component_library(LLVMFgpuDesc
   FgpuMCCodeEmitter.cpp
   FgpuMCExpr.cpp
   FgpuMCTargetDesc.cpp
-  FgpuNaClELFStreamer.cpp
   FgpuOptionRecord.cpp
   FgpuTargetStreamer.cpp
 

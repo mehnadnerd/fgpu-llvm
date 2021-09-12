@@ -755,6 +755,22 @@ public:
     return isMIPS32() || isMIPS64();
   }
 
+  /// Tests whether the target is MIPS 32-bit (little and big endian).
+  bool isFGPU32() const {
+    return getArch() == Triple::fgpu;
+  }
+
+  /// Tests whether the target is MIPS 64-bit (little and big endian).
+  bool isFGPU64() const {
+    return false;
+  }
+
+  /// Tests whether the target is MIPS (little and big endian, 32- or 64-bit).
+  bool isFGPU() const {
+    return isFGPU32() || isFGPU64();
+  }
+
+
   /// Tests whether the target is PowerPC (32- or 64-bit LE or BE).
   bool isPPC() const {
     return getArch() == Triple::ppc || getArch() == Triple::ppc64 ||
