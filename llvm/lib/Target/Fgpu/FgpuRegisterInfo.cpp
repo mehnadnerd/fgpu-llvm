@@ -39,27 +39,16 @@ using namespace llvm;
 #define GET_REGINFO_TARGET_DESC
 #include "FgpuGenRegisterInfo.inc"
 
-FgpuRegisterInfo::FgpuRegisterInfo() : FgpuGenRegisterInfo(Fgpu::RA) {}
+FgpuRegisterInfo::FgpuRegisterInfo() : FgpuGenRegisterInfo(Fgpu::LR) {}
 
-unsigned FgpuRegisterInfo::getPICCallReg() { return Fgpu::T9; }
+unsigned FgpuRegisterInfo::getPICCallReg() { return Fgpu::R25; }
 
 const TargetRegisterClass *
 FgpuRegisterInfo::getPointerRegClass(const MachineFunction &MF,
                                      unsigned Kind) const {
   FgpuABIInfo ABI = MF.getSubtarget<FgpuSubtarget>().getABI();
   FgpuPtrClass PtrClassKind = static_cast<FgpuPtrClass>(Kind);
-
-  switch (PtrClassKind) {
-  case FgpuPtrClass::Default:
-    return ABI.ArePtrs64bit() ? &Fgpu::GPR64RegClass : &Fgpu::GPR32RegClass;
-  case FgpuPtrClass::GPR16MM:
-    return &Fgpu::GPRMM16RegClass;
-  case FgpuPtrClass::StackPointer:
-    return ABI.ArePtrs64bit() ? &Fgpu::SP64RegClass : &Fgpu::SP32RegClass;
-  case FgpuPtrClass::GlobalPointer:
-    return ABI.ArePtrs64bit() ? &Fgpu::GP64RegClass : &Fgpu::GP32RegClass;
-  }
-
+  return &Fgpu::FgpuGPRRegClass; // only kind on this system
   llvm_unreachable("Unknown pointer kind");
 }
 
@@ -69,18 +58,12 @@ FgpuRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
   switch (RC->getID()) {
   default:
     return 0;
-  case Fgpu::GPR32RegClassID:
-  case Fgpu::GPR64RegClassID:
-  case Fgpu::DSPRRegClassID: {
-    const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
-    return 28 - TFI->hasFP(MF);
+  case Fgpu::FgpuGPRRegClassID: {
+    return 27; // TODO: don't make up
   }
-  case Fgpu::FGR32RegClassID:
-    return 32;
-  case Fgpu::AFGR64RegClassID:
+  case Fgpu::FgpuFPRRegClassID: {
     return 16;
-  case Fgpu::FGR64RegClassID:
-    return 32;
+  }
   }
 }
 
@@ -140,10 +123,6 @@ FgpuRegisterInfo::getCallPreservedMask(const MachineFunction &MF,
     return CSR_O32_FPXX_RegMask;
 
   return CSR_O32_RegMask;
-}
-
-const uint32_t *FgpuRegisterInfo::getFgpu16RetHelperMask() {
-  return CSR_Fgpu16RetHelper_RegMask;
 }
 
 BitVector FgpuRegisterInfo::
@@ -262,8 +241,6 @@ Register FgpuRegisterInfo::
 getFrameRegister(const MachineFunction &MF) const {
   const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
   const TargetFrameLowering *TFI = Subtarget.getFrameLowering();
-  bool IsN64 =
-      static_cast<const FgpuTargetMachine &>(MF.getTarget()).getABI().IsN64();
 
   return TFI->hasFP(MF) ? (IsN64 ? Fgpu::FP_64 : Fgpu::FP) :
                           (IsN64 ? Fgpu::SP_64 : Fgpu::SP);
@@ -281,8 +258,8 @@ bool FgpuRegisterInfo::canRealignStack(const MachineFunction &MF) const {
     return false;
 
   const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
-  unsigned FP = Subtarget.isGP32bit() ? Fgpu::FP : Fgpu::FP_64;
-  unsigned BP = Subtarget.isGP32bit() ? Fgpu::S7 : Fgpu::S7_64;
+  unsigned FP = Fgpu::FP;
+  unsigned BP = Fgpu::S7;
 
   // We can't perform dynamic stack realignment if we can't reserve the
   // frame pointer register.

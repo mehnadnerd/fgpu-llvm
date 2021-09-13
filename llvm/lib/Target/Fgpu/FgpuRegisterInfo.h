@@ -29,9 +29,6 @@ public:
   enum class FgpuPtrClass {
     /// The default register class for integer values.
     Default = 0,
-    /// The subset of registers permitted in certain microFGPU instructions
-    /// such as lw16.
-    GPR16MM = 1,
     /// The stack pointer only.
     StackPointer = 2,
     /// The global pointer only.
@@ -52,7 +49,6 @@ public:
   const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
   const uint32_t *getCallPreservedMask(const MachineFunction &MF,
                                        CallingConv::ID) const override;
-  static const uint32_t *getFgpu16RetHelperMask();
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 

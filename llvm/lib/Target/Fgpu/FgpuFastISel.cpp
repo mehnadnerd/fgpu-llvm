@@ -258,7 +258,7 @@ public:
         TII(*Subtarget->getInstrInfo()), TLI(*Subtarget->getTargetLowering()) {
     MFI = funcInfo.MF->getInfo<FgpuFunctionInfo>();
     Context = &funcInfo.Fn->getContext();
-    UnsupportedFPMode = Subtarget->isFP64bit() || Subtarget->useSoftFloat();
+    UnsupportedFPMode = false;
   }
 
   unsigned fastMaterializeAlloca(const AllocaInst *AI) override;
@@ -272,24 +272,12 @@ public:
 
 static bool CC_Fgpu(unsigned ValNo, MVT ValVT, MVT LocVT,
                     CCValAssign::LocInfo LocInfo, ISD::ArgFlagsTy ArgFlags,
-                    CCState &State) LLVM_ATTRIBUTE_UNUSED;
-
-static bool CC_FgpuO32_FP32(unsigned ValNo, MVT ValVT, MVT LocVT,
-                            CCValAssign::LocInfo LocInfo,
-                            ISD::ArgFlagsTy ArgFlags, CCState &State) {
-  llvm_unreachable("should not be called");
-}
-
-static bool CC_FgpuO32_FP64(unsigned ValNo, MVT ValVT, MVT LocVT,
-                            CCValAssign::LocInfo LocInfo,
-                            ISD::ArgFlagsTy ArgFlags, CCState &State) {
-  llvm_unreachable("should not be called");
-}
+                    CCState &State);
 
 #include "FgpuGenCallingConv.inc"
 
 CCAssignFn *FgpuFastISel::CCAssignFnForCall(CallingConv::ID CC) const {
-  return CC_FgpuO32;
+  return CC_Fgpu;
 }
 
 unsigned FgpuFastISel::emitLogicalOp(unsigned ISDOpc, MVT RetVT,
@@ -325,7 +313,7 @@ unsigned FgpuFastISel::emitLogicalOp(unsigned ISDOpc, MVT RetVT,
   if (!RHSReg)
     return 0;
 
-  unsigned ResultReg = createResultReg(&Fgpu::GPR32RegClass);
+  unsigned ResultReg = createResultReg(&Fgpu::FgpuGPRRegClass);
   if (!ResultReg)
     return 0;
 
@@ -341,7 +329,7 @@ unsigned FgpuFastISel::fastMaterializeAlloca(const AllocaInst *AI) {
       FuncInfo.StaticAllocaMap.find(AI);
 
   if (SI != FuncInfo.StaticAllocaMap.end()) {
-    unsigned ResultReg = createResultReg(&Fgpu::GPR32RegClass);
+    unsigned ResultReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     BuildMI(*FuncInfo.MBB, FuncInfo.InsertPt, DbgLoc, TII.get(Fgpu::LEA_ADDiu),
             ResultReg)
         .addFrameIndex(SI->second)
@@ -355,7 +343,7 @@ unsigned FgpuFastISel::fastMaterializeAlloca(const AllocaInst *AI) {
 unsigned FgpuFastISel::materializeInt(const Constant *C, MVT VT) {
   if (VT != MVT::i32 && VT != MVT::i16 && VT != MVT::i8 && VT != MVT::i1)
     return 0;
-  const TargetRegisterClass *RC = &Fgpu::GPR32RegClass;
+  const TargetRegisterClass *RC = &Fgpu::FgpuGPRRegClass;
   const ConstantInt *CI = cast<ConstantInt>(C);
   return materialize32BitInt(CI->getZExtValue(), RC);
 }
@@ -392,15 +380,15 @@ unsigned FgpuFastISel::materializeFP(const ConstantFP *CFP, MVT VT) {
   if (VT == MVT::f32) {
     const TargetRegisterClass *RC = &Fgpu::FGR32RegClass;
     unsigned DestReg = createResultReg(RC);
-    unsigned TempReg = materialize32BitInt(Imm, &Fgpu::GPR32RegClass);
+    unsigned TempReg = materialize32BitInt(Imm, &Fgpu::FgpuGPRRegClass);
     emitInst(Fgpu::MTC1, DestReg).addReg(TempReg);
     return DestReg;
   } else if (VT == MVT::f64) {
     const TargetRegisterClass *RC = &Fgpu::AFGR64RegClass;
     unsigned DestReg = createResultReg(RC);
-    unsigned TempReg1 = materialize32BitInt(Imm >> 32, &Fgpu::GPR32RegClass);
+    unsigned TempReg1 = materialize32BitInt(Imm >> 32, &Fgpu::FgpuGPRRegClass);
     unsigned TempReg2 =
-        materialize32BitInt(Imm & 0xFFFFFFFF, &Fgpu::GPR32RegClass);
+        materialize32BitInt(Imm & 0xFFFFFFFF, &Fgpu::FgpuGPRRegClass);
     emitInst(Fgpu::BuildPairF64, DestReg).addReg(TempReg2).addReg(TempReg1);
     return DestReg;
   }
@@ -411,7 +399,7 @@ unsigned FgpuFastISel::materializeGV(const GlobalValue *GV, MVT VT) {
   // For now 32-bit only.
   if (VT != MVT::i32)
     return 0;
-  const TargetRegisterClass *RC = &Fgpu::GPR32RegClass;
+  const TargetRegisterClass *RC = &Fgpu::FgpuGPRRegClass;
   unsigned DestReg = createResultReg(RC);
   const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV);
   bool IsThreadLocal = GVar && GVar->isThreadLocal();
@@ -433,7 +421,7 @@ unsigned FgpuFastISel::materializeGV(const GlobalValue *GV, MVT VT) {
 }
 
 unsigned FgpuFastISel::materializeExternalCallSym(MCSymbol *Sym) {
-  const TargetRegisterClass *RC = &Fgpu::GPR32RegClass;
+  const TargetRegisterClass *RC = &Fgpu::FgpuGPRRegClass;
   unsigned DestReg = createResultReg(RC);
   emitInst(Fgpu::LW, DestReg)
       .addReg(MFI->getGlobalBaseReg(*MF))
@@ -649,13 +637,13 @@ bool FgpuFastISel::emitCmp(unsigned ResultReg, const CmpInst *CI) {
   default:
     return false;
   case CmpInst::ICMP_EQ: {
-    unsigned TempReg = createResultReg(&Fgpu::GPR32RegClass);
+    unsigned TempReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     emitInst(Fgpu::XOR, TempReg).addReg(LeftReg).addReg(RightReg);
     emitInst(Fgpu::SLTiu, ResultReg).addReg(TempReg).addImm(1);
     break;
   }
   case CmpInst::ICMP_NE: {
-    unsigned TempReg = createResultReg(&Fgpu::GPR32RegClass);
+    unsigned TempReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     emitInst(Fgpu::XOR, TempReg).addReg(LeftReg).addReg(RightReg);
     emitInst(Fgpu::SLTu, ResultReg).addReg(Fgpu::ZERO).addReg(TempReg);
     break;
@@ -667,13 +655,13 @@ bool FgpuFastISel::emitCmp(unsigned ResultReg, const CmpInst *CI) {
     emitInst(Fgpu::SLTu, ResultReg).addReg(LeftReg).addReg(RightReg);
     break;
   case CmpInst::ICMP_UGE: {
-    unsigned TempReg = createResultReg(&Fgpu::GPR32RegClass);
+    unsigned TempReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     emitInst(Fgpu::SLTu, TempReg).addReg(LeftReg).addReg(RightReg);
     emitInst(Fgpu::XORi, ResultReg).addReg(TempReg).addImm(1);
     break;
   }
   case CmpInst::ICMP_ULE: {
-    unsigned TempReg = createResultReg(&Fgpu::GPR32RegClass);
+    unsigned TempReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     emitInst(Fgpu::SLTu, TempReg).addReg(RightReg).addReg(LeftReg);
     emitInst(Fgpu::XORi, ResultReg).addReg(TempReg).addImm(1);
     break;
@@ -685,13 +673,13 @@ bool FgpuFastISel::emitCmp(unsigned ResultReg, const CmpInst *CI) {
     emitInst(Fgpu::SLT, ResultReg).addReg(LeftReg).addReg(RightReg);
     break;
   case CmpInst::ICMP_SGE: {
-    unsigned TempReg = createResultReg(&Fgpu::GPR32RegClass);
+    unsigned TempReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     emitInst(Fgpu::SLT, TempReg).addReg(LeftReg).addReg(RightReg);
     emitInst(Fgpu::XORi, ResultReg).addReg(TempReg).addImm(1);
     break;
   }
   case CmpInst::ICMP_SLE: {
-    unsigned TempReg = createResultReg(&Fgpu::GPR32RegClass);
+    unsigned TempReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     emitInst(Fgpu::SLT, TempReg).addReg(RightReg).addReg(LeftReg);
     emitInst(Fgpu::XORi, ResultReg).addReg(TempReg).addImm(1);
     break;
@@ -737,8 +725,8 @@ bool FgpuFastISel::emitCmp(unsigned ResultReg, const CmpInst *CI) {
     default:
       llvm_unreachable("Only switching of a subset of CCs.");
     }
-    unsigned RegWithZero = createResultReg(&Fgpu::GPR32RegClass);
-    unsigned RegWithOne = createResultReg(&Fgpu::GPR32RegClass);
+    unsigned RegWithZero = createResultReg(&Fgpu::FgpuGPRRegClass);
+    unsigned RegWithOne = createResultReg(&Fgpu::FgpuGPRRegClass);
     emitInst(Fgpu::ADDiu, RegWithZero).addReg(Fgpu::ZERO).addImm(0);
     emitInst(Fgpu::ADDiu, RegWithOne).addReg(Fgpu::ZERO).addImm(1);
     emitInst(Opc).addReg(Fgpu::FCC0, RegState::Define).addReg(LeftReg)
@@ -761,15 +749,15 @@ bool FgpuFastISel::emitLoad(MVT VT, unsigned &ResultReg, Address &Addr,
   unsigned Opc;
   switch (VT.SimpleTy) {
   case MVT::i32:
-    ResultReg = createResultReg(&Fgpu::GPR32RegClass);
+    ResultReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     Opc = Fgpu::LW;
     break;
   case MVT::i16:
-    ResultReg = createResultReg(&Fgpu::GPR32RegClass);
+    ResultReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     Opc = Fgpu::LHu;
     break;
   case MVT::i8:
-    ResultReg = createResultReg(&Fgpu::GPR32RegClass);
+    ResultReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     Opc = Fgpu::LBu;
     break;
   case MVT::f32:
@@ -956,7 +944,7 @@ bool FgpuFastISel::selectBranch(const Instruction *I) {
   unsigned ZExtCondReg = 0;
   if (const CmpInst *CI = dyn_cast<CmpInst>(BI->getCondition())) {
     if (CI->hasOneUse() && CI->getParent() == I->getParent()) {
-      ZExtCondReg = createResultReg(&Fgpu::GPR32RegClass);
+      ZExtCondReg = createResultReg(&Fgpu::FgpuGPRRegClass);
       if (!emitCmp(ZExtCondReg, CI))
         return false;
     }
@@ -982,7 +970,7 @@ bool FgpuFastISel::selectBranch(const Instruction *I) {
 
 bool FgpuFastISel::selectCmp(const Instruction *I) {
   const CmpInst *CI = cast<CmpInst>(I);
-  unsigned ResultReg = createResultReg(&Fgpu::GPR32RegClass);
+  unsigned ResultReg = createResultReg(&Fgpu::FgpuGPRRegClass);
   if (!emitCmp(ResultReg, CI))
     return false;
   updateValueMap(I, ResultReg);
@@ -1029,7 +1017,7 @@ bool FgpuFastISel::selectSelect(const Instruction *I) {
 
   if (VT.isInteger() && !VT.isVector() && VT.getSizeInBits() <= 32) {
     CondMovOpc = Fgpu::MOVN_I_I;
-    RC = &Fgpu::GPR32RegClass;
+    RC = &Fgpu::FgpuGPRRegClass;
   } else if (VT == MVT::f32) {
     CondMovOpc = Fgpu::MOVN_I_S;
     RC = &Fgpu::FGR32RegClass;
@@ -1048,7 +1036,7 @@ bool FgpuFastISel::selectSelect(const Instruction *I) {
   if (!Src1Reg || !Src2Reg || !CondReg)
     return false;
 
-  unsigned ZExtCondReg = createResultReg(&Fgpu::GPR32RegClass);
+  unsigned ZExtCondReg = createResultReg(&Fgpu::FgpuGPRRegClass);
   if (!ZExtCondReg)
     return false;
 
@@ -1121,7 +1109,7 @@ bool FgpuFastISel::selectFPToInt(const Instruction *I, bool IsSigned) {
 
   // Determine the opcode for the conversion, which takes place
   // entirely within FPRs.
-  unsigned DestReg = createResultReg(&Fgpu::GPR32RegClass);
+  unsigned DestReg = createResultReg(&Fgpu::FgpuGPRRegClass);
   unsigned TempReg = createResultReg(&Fgpu::FGR32RegClass);
   unsigned Opc = (SrcVT == MVT::f32) ? Fgpu::TRUNC_W_S : Fgpu::TRUNC_W_D32;
 
@@ -1386,7 +1374,7 @@ bool FgpuFastISel::fastLowerArguments() {
       }
 
       LLVM_DEBUG(dbgs() << ".. .. GPR32(" << *NextGPR32 << ")\n");
-      Allocation.emplace_back(&Fgpu::GPR32RegClass, *NextGPR32++);
+      Allocation.emplace_back(&Fgpu::FgpuGPRRegClass, *NextGPR32++);
 
       // Allocating any GPR32 prohibits further use of floating point arguments.
       NextFGR32 = FGR32ArgRegs.end();
@@ -1406,7 +1394,7 @@ bool FgpuFastISel::fastLowerArguments() {
       }
 
       LLVM_DEBUG(dbgs() << ".. .. GPR32(" << *NextGPR32 << ")\n");
-      Allocation.emplace_back(&Fgpu::GPR32RegClass, *NextGPR32++);
+      Allocation.emplace_back(&Fgpu::FgpuGPRRegClass, *NextGPR32++);
 
       // Allocating any GPR32 prohibits further use of floating point arguments.
       NextFGR32 = FGR32ArgRegs.end();
@@ -1597,7 +1585,7 @@ bool FgpuFastISel::fastLowerIntrinsicCall(const IntrinsicInst *II) {
     unsigned SrcReg = getRegForValue(II->getOperand(0));
     if (SrcReg == 0)
       return false;
-    unsigned DestReg = createResultReg(&Fgpu::GPR32RegClass);
+    unsigned DestReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     if (DestReg == 0)
       return false;
     if (VT == MVT::i16) {
@@ -1608,7 +1596,7 @@ bool FgpuFastISel::fastLowerIntrinsicCall(const IntrinsicInst *II) {
       } else {
         unsigned TempReg[3];
         for (int i = 0; i < 3; i++) {
-          TempReg[i] = createResultReg(&Fgpu::GPR32RegClass);
+          TempReg[i] = createResultReg(&Fgpu::FgpuGPRRegClass);
           if (TempReg[i] == 0)
             return false;
         }
@@ -1621,7 +1609,7 @@ bool FgpuFastISel::fastLowerIntrinsicCall(const IntrinsicInst *II) {
       }
     } else if (VT == MVT::i32) {
       if (Subtarget->hasFgpu32r2()) {
-        unsigned TempReg = createResultReg(&Fgpu::GPR32RegClass);
+        unsigned TempReg = createResultReg(&Fgpu::FgpuGPRRegClass);
         emitInst(Fgpu::WSBH, TempReg).addReg(SrcReg);
         emitInst(Fgpu::ROTR, DestReg).addReg(TempReg).addImm(16);
         updateValueMap(II, DestReg);
@@ -1629,7 +1617,7 @@ bool FgpuFastISel::fastLowerIntrinsicCall(const IntrinsicInst *II) {
       } else {
         unsigned TempReg[8];
         for (int i = 0; i < 8; i++) {
-          TempReg[i] = createResultReg(&Fgpu::GPR32RegClass);
+          TempReg[i] = createResultReg(&Fgpu::FgpuGPRRegClass);
           if (TempReg[i] == 0)
             return false;
         }
@@ -1818,7 +1806,7 @@ bool FgpuFastISel::selectIntExt(const Instruction *I) {
 
   MVT SrcVT = SrcEVT.getSimpleVT();
   MVT DestVT = DestEVT.getSimpleVT();
-  unsigned ResultReg = createResultReg(&Fgpu::GPR32RegClass);
+  unsigned ResultReg = createResultReg(&Fgpu::FgpuGPRRegClass);
 
   if (!emitIntExt(SrcVT, SrcReg, DestVT, ResultReg, isZExt))
     return false;
@@ -1839,7 +1827,7 @@ bool FgpuFastISel::emitIntSExt32r1(MVT SrcVT, unsigned SrcReg, MVT DestVT,
     ShiftAmt = 16;
     break;
   }
-  unsigned TempReg = createResultReg(&Fgpu::GPR32RegClass);
+  unsigned TempReg = createResultReg(&Fgpu::FgpuGPRRegClass);
   emitInst(Fgpu::SLL, TempReg).addReg(SrcReg).addImm(ShiftAmt);
   emitInst(Fgpu::SRA, DestReg).addReg(TempReg).addImm(ShiftAmt);
   return true;
@@ -1907,7 +1895,7 @@ bool FgpuFastISel::emitIntExt(MVT SrcVT, unsigned SrcReg, MVT DestVT,
 
 unsigned FgpuFastISel::emitIntExt(MVT SrcVT, unsigned SrcReg, MVT DestVT,
                                   bool isZExt) {
-  unsigned DestReg = createResultReg(&Fgpu::GPR32RegClass);
+  unsigned DestReg = createResultReg(&Fgpu::FgpuGPRRegClass);
   bool Success = emitIntExt(SrcVT, SrcReg, DestVT, DestReg, isZExt);
   return Success ? DestReg : 0;
 }
@@ -1943,7 +1931,7 @@ bool FgpuFastISel::selectDivRem(const Instruction *I, unsigned ISDOpcode) {
   emitInst(DivOpc).addReg(Src0Reg).addReg(Src1Reg);
   emitInst(Fgpu::TEQ).addReg(Src1Reg).addReg(Fgpu::ZERO).addImm(7);
 
-  unsigned ResultReg = createResultReg(&Fgpu::GPR32RegClass);
+  unsigned ResultReg = createResultReg(&Fgpu::FgpuGPRRegClass);
   if (!ResultReg)
     return false;
 
@@ -1962,7 +1950,7 @@ bool FgpuFastISel::selectShift(const Instruction *I) {
   if (!isTypeSupported(I->getType(), RetVT))
     return false;
 
-  unsigned ResultReg = createResultReg(&Fgpu::GPR32RegClass);
+  unsigned ResultReg = createResultReg(&Fgpu::FgpuGPRRegClass);
   if (!ResultReg)
     return false;
 
@@ -1974,7 +1962,7 @@ bool FgpuFastISel::selectShift(const Instruction *I) {
 
   // If AShr or LShr, then we need to make sure the operand0 is sign extended.
   if (Opcode == Instruction::AShr || Opcode == Instruction::LShr) {
-    unsigned TempReg = createResultReg(&Fgpu::GPR32RegClass);
+    unsigned TempReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     if (!TempReg)
       return false;
 
@@ -2100,7 +2088,7 @@ unsigned FgpuFastISel::getRegEnsuringSimpleIntegerWidening(const Value *V,
     return 0;
 
   if ((VMVT == MVT::i8) || (VMVT == MVT::i16)) {
-    unsigned TempReg = createResultReg(&Fgpu::GPR32RegClass);
+    unsigned TempReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     if (!emitIntExt(VMVT, VReg, MVT::i32, TempReg, IsUnsigned))
       return 0;
     VReg = TempReg;
@@ -2111,8 +2099,8 @@ unsigned FgpuFastISel::getRegEnsuringSimpleIntegerWidening(const Value *V,
 void FgpuFastISel::simplifyAddress(Address &Addr) {
   if (!isInt<16>(Addr.getOffset())) {
     unsigned TempReg =
-        materialize32BitInt(Addr.getOffset(), &Fgpu::GPR32RegClass);
-    unsigned DestReg = createResultReg(&Fgpu::GPR32RegClass);
+        materialize32BitInt(Addr.getOffset(), &Fgpu::FgpuGPRRegClass);
+    unsigned DestReg = createResultReg(&Fgpu::FgpuGPRRegClass);
     emitInst(Fgpu::ADDu, DestReg).addReg(TempReg).addReg(Addr.getReg());
     Addr.setReg(DestReg);
     Addr.setOffset(0);
