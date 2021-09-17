@@ -536,20 +536,7 @@ FgpuTargetLowering::create(const FgpuTargetMachine &TM,
 FastISel *
 FgpuTargetLowering::createFastISel(FunctionLoweringInfo &funcInfo,
                                   const TargetLibraryInfo *libInfo) const {
-  const FgpuTargetMachine &TM =
-      static_cast<const FgpuTargetMachine &>(funcInfo.MF->getTarget());
-
-  // We support only the standard encoding [FGPU32,FGPU32R5] ISAs.
-  bool UseFastISel = TM.Options.EnableFastISel && Subtarget.hasFgpu32() &&
-                     !Subtarget.hasFgpu32r6();
-
-  // Disable if either of the following is true:
-  // We do not generate PIC, the ABI is not O32, XGOT is being used.
-  if (!TM.isPositionIndependent() || !TM.getABI().IsO32() ||
-      Subtarget.useXGOT())
-    UseFastISel = false;
-
-  return UseFastISel ? Fgpu::createFastISel(funcInfo, libInfo) : nullptr;
+  return nullptr;
 }
 
 EVT FgpuTargetLowering::getSetCCResultType(const DataLayout &, LLVMContext &,

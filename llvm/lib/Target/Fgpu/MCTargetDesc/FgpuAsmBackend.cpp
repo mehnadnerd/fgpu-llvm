@@ -573,14 +573,6 @@ bool FgpuAsmBackend::shouldForceRelocation(const MCAssembler &Asm,
   }
 }
 
-bool FgpuAsmBackend::isMicroFgpu(const MCSymbol *Sym) const {
-  if (const auto *ElfSym = dyn_cast<const MCSymbolELF>(Sym)) {
-    if (ElfSym->getOther() & ELF::STO_FGPU_MICROFGPU)
-      return true;
-  }
-  return false;
-}
-
 MCAsmBackend *llvm::createFgpuAsmBackend(const Target &T,
                                          const MCSubtargetInfo &STI,
                                          const MCRegisterInfo &MRI,
@@ -588,5 +580,5 @@ MCAsmBackend *llvm::createFgpuAsmBackend(const Target &T,
   FgpuABIInfo ABI = FgpuABIInfo::computeTargetABI(STI.getTargetTriple(),
                                                   STI.getCPU(), Options);
   return new FgpuAsmBackend(T, MRI, STI.getTargetTriple(), STI.getCPU(),
-                            ABI.IsN32());
+                            true);
 }

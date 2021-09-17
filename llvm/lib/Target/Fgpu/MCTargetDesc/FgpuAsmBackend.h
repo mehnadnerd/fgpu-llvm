@@ -67,8 +67,6 @@ public:
 
   bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
                              const MCValue &Target) override;
-
-  bool isMicroFgpu(const MCSymbol *Sym) const override;
 }; // class FgpuAsmBackend
 
 } // namespace

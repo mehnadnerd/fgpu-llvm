@@ -104,12 +104,6 @@ MCOperand FgpuMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
   case FgpuII::MO_GOT_OFST:
     TargetKind = FgpuMCExpr::MEK_GOT_OFST;
     break;
-  case FgpuII::MO_HIGHER:
-    TargetKind = FgpuMCExpr::MEK_HIGHER;
-    break;
-  case FgpuII::MO_HIGHEST:
-    TargetKind = FgpuMCExpr::MEK_HIGHEST;
-    break;
   case FgpuII::MO_CALL_HI16:
     TargetKind = FgpuMCExpr::MEK_CALL_HI16;
     break;
@@ -221,12 +215,6 @@ lowerLongBranchLUi(const MachineInstr *MI, MCInst &OutMI) const {
   FgpuMCExpr::FgpuExprKind Kind;
   unsigned TargetFlags = MI->getOperand(1).getTargetFlags();
   switch (TargetFlags) {
-  case FgpuII::MO_HIGHEST:
-    Kind = FgpuMCExpr::MEK_HIGHEST;
-    break;
-  case FgpuII::MO_HIGHER:
-    Kind = FgpuMCExpr::MEK_HIGHER;
-    break;
   case FgpuII::MO_ABS_HI:
     Kind = FgpuMCExpr::MEK_HI;
     break;
@@ -256,12 +244,6 @@ void FgpuMCInstLower::lowerLongBranchADDiu(const MachineInstr *MI,
   FgpuMCExpr::FgpuExprKind Kind;
   unsigned TargetFlags = MI->getOperand(2).getTargetFlags();
   switch (TargetFlags) {
-  case FgpuII::MO_HIGHEST:
-    Kind = FgpuMCExpr::MEK_HIGHEST;
-    break;
-  case FgpuII::MO_HIGHER:
-    Kind = FgpuMCExpr::MEK_HIGHER;
-    break;
   case FgpuII::MO_ABS_HI:
     Kind = FgpuMCExpr::MEK_HI;
     break;
@@ -296,19 +278,19 @@ bool FgpuMCInstLower::lowerLongBranch(const MachineInstr *MI,
   switch (MI->getOpcode()) {
   default:
     return false;
-  case Fgpu::LONG_BRANCH_LUi:
-  case Fgpu::LONG_BRANCH_LUi2Op:
-  case Fgpu::LONG_BRANCH_LUi2Op_64:
-    lowerLongBranchLUi(MI, OutMI);
-    return true;
-  case Fgpu::LONG_BRANCH_ADDiu:
-  case Fgpu::LONG_BRANCH_ADDiu2Op:
-    lowerLongBranchADDiu(MI, OutMI, Fgpu::ADDiu);
-    return true;
-  case Fgpu::LONG_BRANCH_DADDiu:
-  case Fgpu::LONG_BRANCH_DADDiu2Op:
-    lowerLongBranchADDiu(MI, OutMI, Fgpu::DADDiu);
-    return true;
+//  case Fgpu::LONG_BRANCH_LUi:
+//  case Fgpu::LONG_BRANCH_LUi2Op:
+//  case Fgpu::LONG_BRANCH_LUi2Op_64:
+//    lowerLongBranchLUi(MI, OutMI);
+//    return true;
+//  case Fgpu::LONG_BRANCH_ADDiu:
+//  case Fgpu::LONG_BRANCH_ADDiu2Op:
+//    lowerLongBranchADDiu(MI, OutMI, Fgpu::ADDiu);
+//    return true;
+//  case Fgpu::LONG_BRANCH_DADDiu:
+//  case Fgpu::LONG_BRANCH_DADDiu2Op:
+//    lowerLongBranchADDiu(MI, OutMI, Fgpu::DADDiu);
+//    return true;
   }
 }
 

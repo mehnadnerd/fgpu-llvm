@@ -173,8 +173,6 @@ FgpuIncomingValueHandler::assignCustomValue(CallLowering::ArgInfo &Arg,
 
   auto CopyLo = MIRBuilder.buildCopy(LLT::scalar(32), VALo.getLocReg());
   auto CopyHi = MIRBuilder.buildCopy(LLT::scalar(32), VAHi.getLocReg());
-  if (!STI.isLittle())
-    std::swap(CopyLo, CopyHi);
 
   Arg.OrigRegs.assign(Arg.Regs.begin(), Arg.Regs.end());
   Arg.Regs = { CopyLo.getReg(0), CopyHi.getReg(0) };
@@ -268,8 +266,6 @@ FgpuOutgoingValueHandler::assignCustomValue(CallLowering::ArgInfo &Arg,
 
   Arg.OrigRegs.assign(Arg.Regs.begin(), Arg.Regs.end());
   Arg.Regs = { Lo, Hi };
-  if (!STI.isLittle())
-    std::swap(Lo, Hi);
 
   MIRBuilder.buildCopy(VALo.getLocReg(), Lo);
   MIRBuilder.buildCopy(VAHi.getLocReg(), Hi);
@@ -302,7 +298,7 @@ bool FgpuCallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
                                    const Value *Val, ArrayRef<Register> VRegs,
                                    FunctionLoweringInfo &FLI) const {
 
-  MachineInstrBuilder Ret = MIRBuilder.buildInstrNoInsert(Fgpu::RetRA);
+  MachineInstrBuilder Ret = MIRBuilder.buildInstrNoInsert(Fgpu::RetLR);
 
   if (Val != nullptr && !isSupportedReturnType(Val->getType()))
     return false;
@@ -461,7 +457,9 @@ bool FgpuCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
       Info.Callee.isGlobal() && TM.isPositionIndependent();
 
   MachineInstrBuilder MIB = MIRBuilder.buildInstrNoInsert(
-      Info.Callee.isReg() || IsCalleeGlobalPIC ? Fgpu::JALRPseudo : Fgpu::JAL);
+      Info.Callee.isReg() || IsCalleeGlobalPIC ? Fgpu::JSUB : Fgpu::JSUB);
+  // TODO: TODO: Does jsub do what we want????
+  // TODO: JALR pseudo
   MIB.addDef(Fgpu::SP, RegState::Implicit);
   if (IsCalleeGlobalPIC) {
     Register CalleeReg =
@@ -521,9 +519,9 @@ bool FgpuCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
 
   if (IsCalleeGlobalPIC) {
     MIRBuilder.buildCopy(
-      Register(Fgpu::GP),
+      Register(Fgpu::R29),
       MF.getInfo<FgpuFunctionInfo>()->getGlobalBaseRegForGlobalISel(MF));
-    MIB.addDef(Fgpu::GP, RegState::Implicit);
+    MIB.addDef(Fgpu::R29, RegState::Implicit);
   }
   MIRBuilder.insertInstr(MIB);
   if (MIB->getOpcode() == Fgpu::JALRPseudo) {

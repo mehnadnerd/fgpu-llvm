@@ -47,9 +47,6 @@ using namespace llvm;
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeFgpuTarget() {
   // Register the target.
   RegisterTargetMachine<FgpuebTargetMachine> X(getTheFgpuTarget());
-  RegisterTargetMachine<FgpuelTargetMachine> Y(getTheFgpuelTarget());
-  RegisterTargetMachine<FgpuebTargetMachine> A(getTheFgpu64Target());
-  RegisterTargetMachine<FgpuelTargetMachine> B(getTheFgpu64elTarget());
 
   PassRegistry *PR = PassRegistry::getPassRegistry();
   initializeGlobalISel(*PR);
@@ -65,31 +62,14 @@ static std::string computeDataLayout(const Triple &TT, StringRef CPU,
   FgpuABIInfo ABI = FgpuABIInfo::computeTargetABI(TT, CPU, Options.MCOptions);
 
   // There are both little and big endian fgpu.
-  if (isLittle)
-    Ret += "e";
-  else
-    Ret += "E";
+  Ret += "e";
+  Ret += "-m:e";
 
-  if (ABI.IsO32())
-    Ret += "-m:m";
-  else
-    Ret += "-m:e";
-
-  // Pointers are 32 bit on some ABIs.
-  if (!ABI.IsN64())
-    Ret += "-p:32:32";
 
   // 8 and 16 bit integers only need to have natural alignment, but try to
   // align them to 32 bits. 64 bit integers have natural alignment.
   Ret += "-i8:8:32-i16:16:32-i64:64";
-
-  // 32 bit registers are always available and the stack is at least 64 bit
-  // aligned. On N64 64 bit registers are also available and the stack is
-  // 128 bit aligned.
-  if (ABI.IsN64() || ABI.IsN32())
-    Ret += "-n32:64-S128";
-  else
-    Ret += "-n32-S64";
+  Ret += "-n32-S64";
 
   return Ret;
 }
@@ -118,7 +98,7 @@ FgpuTargetMachine::FgpuTargetMachine(const Target &T, const Triple &TT,
                         getEffectiveCodeModel(CM, CodeModel::Small), OL),
       isLittle(isLittle), TLOF(std::make_unique<FgpuTargetObjectFile>()),
       ABI(FgpuABIInfo::computeTargetABI(TT, CPU, Options.MCOptions)),
-      Subtarget(nullptr), DefaultSubtarget(TT, CPU, FS, isLittle, *this, None) {
+      Subtarget(nullptr), DefaultSubtarget(TT, CPU, FS, *this, None) {
   Subtarget = &DefaultSubtarget;
   initAsmInfo();
 
@@ -173,7 +153,7 @@ FgpuTargetMachine::getSubtargetImpl(const Function &F) const {
     // function that reside in TargetOptions.
     resetTargetOptions(F);
     I = std::make_unique<FgpuSubtarget>(
-        TargetTriple, CPU, FS, isLittle, *this,
+        TargetTriple, CPU, FS, *this,
         MaybeAlign(F.getParent()->getOverrideStackAlignment()));
   }
   return I.get();

@@ -135,7 +135,7 @@ uint64_t FgpuFrameLowering::estimateStackSize(const MachineFunction &MF) const {
 MachineBasicBlock::iterator FgpuFrameLowering::
 eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I) const {
-  unsigned SP = STI.getABI().IsN64() ? Fgpu::SP_64 : Fgpu::SP;
+  unsigned SP = Fgpu::SP;
 
   if (!hasReservedCallFrame(MF)) {
     int64_t Amount = I->getOperand(0).getImm();

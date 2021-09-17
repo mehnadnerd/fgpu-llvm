@@ -40,8 +40,8 @@ class FgpuFPRReg<bits<16> num, string n> : FPRRegClass<n> {
 
 let Namespace = "Fgpu" in {
   //@ General Purpose Registers
-  def R0   : FgpuGPRReg<0,  "0">,    DwarfRegNum<[0]>;
-  def R1   : FgpuGPRReg<1,  "1">,    DwarfRegNum<[1]>;
+  def ZERO   : FgpuGPRReg<0,  "0">,    DwarfRegNum<[0]>;
+  def AT   : FgpuGPRReg<1,  "1">,    DwarfRegNum<[1]>;
   def R2   : FgpuGPRReg<2,  "2">,    DwarfRegNum<[2]>;
   def R3   : FgpuGPRReg<3,  "3">,    DwarfRegNum<[3]>;
   def R4   : FgpuGPRReg<4,  "4">,    DwarfRegNum<[4]>;
@@ -67,9 +67,9 @@ let Namespace = "Fgpu" in {
   def R24  : FgpuGPRReg<24, "24">,   DwarfRegNum<[24]>;
   def R25  : FgpuGPRReg<25, "25">,   DwarfRegNum<[25]>;
   def R26  : FgpuGPRReg<26, "26">,   DwarfRegNum<[26]>;
-  def R27  : FgpuGPRReg<27, "27">,   DwarfRegNum<[27]>;
-  def R28  : FgpuGPRReg<28, "28">,   DwarfRegNum<[28]>;
-  def R29  : FgpuGPRReg<29, "29">,   DwarfRegNum<[29]>;
+  def R27  : FgpuGPRReg<27, "27">,   DwarfRegNum<[27]>; // USed as BP
+  def R28  : FgpuGPRReg<28, "28">,   DwarfRegNum<[28]>; // Used as FP
+  def R29  : FgpuGPRReg<29, "29">,   DwarfRegNum<[29]>; // used as GP
   def LR  : FgpuGPRReg<30, "lr">,   DwarfRegNum<[30]>;
   def SP  : FgpuGPRReg<31, "sp">,   DwarfRegNum<[31]>;
 
@@ -82,11 +82,11 @@ let Namespace = "Fgpu" in {
 // Register Classes
 //===----------------------------------------------------------------------===//
 
-def ALURegs   : RegisterClass<"Fgpu", [i32], 32, (add R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, LR, SP)>;
+def ALURegs   : RegisterClass<"Fgpu", [i32], 32, (add ZERO, AT, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, LR, SP)>;
 
 //control registers
 def GPROut    : RegisterClass<"Fgpu", [i32, f32], 32, (add ALURegs)>;
-def FloatRegs : RegisterClass<"Fgpu", [f32], 32, (add R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29)>;
+def FloatRegs : RegisterClass<"Fgpu", [f32], 32, (add ZERO, AT, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29)>;
 
 def VecRegs   : RegisterClass<"Fgpu", [v128i8], 1024, (sequence "F%u", 0, 15)>;
 

@@ -34,12 +34,8 @@ static cl::opt<bool> RoundSectionSizes(
     cl::desc("Round section sizes up to the section alignment"), cl::Hidden);
 } // end anonymous namespace
 
-static bool isMicroFgpu(const MCSubtargetInfo *STI) {
-  return STI->getFeatureBits()[Fgpu::FeatureMicroFgpu];
-}
-
 FgpuTargetStreamer::FgpuTargetStreamer(MCStreamer &S)
-    : MCTargetStreamer(S), GPReg(Fgpu::GP), ModuleDirectiveAllowed(true) {
+    : MCTargetStreamer(S), GPReg(Fgpu::R29), ModuleDirectiveAllowed(true) {
   GPRInfoSet = FPRInfoSet = FrameInfoSet = false;
 }
 
@@ -47,16 +43,8 @@ void FgpuTargetStreamer::emitDirectiveSetReorder() { forbidModuleDirective(); }
 void FgpuTargetStreamer::emitDirectiveSetNoReorder() {}
 void FgpuTargetStreamer::emitDirectiveSetMacro() { forbidModuleDirective(); }
 void FgpuTargetStreamer::emitDirectiveSetNoMacro() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetMsa() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetNoMsa() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetMt() {}
-void FgpuTargetStreamer::emitDirectiveSetNoMt() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetCRC() {}
-void FgpuTargetStreamer::emitDirectiveSetNoCRC() {}
-void FgpuTargetStreamer::emitDirectiveSetVirt() {}
-void FgpuTargetStreamer::emitDirectiveSetNoVirt() {}
-void FgpuTargetStreamer::emitDirectiveSetGINV() {}
-void FgpuTargetStreamer::emitDirectiveSetNoGINV() {}
+//void FgpuTargetStreamer::emitDirectiveSetGINV() {}
+//void FgpuTargetStreamer::emitDirectiveSetNoGINV() {}
 void FgpuTargetStreamer::emitDirectiveSetAt() { forbidModuleDirective(); }
 void FgpuTargetStreamer::emitDirectiveSetAtWithArg(unsigned RegNo) {
   forbidModuleDirective();
@@ -64,9 +52,6 @@ void FgpuTargetStreamer::emitDirectiveSetAtWithArg(unsigned RegNo) {
 void FgpuTargetStreamer::emitDirectiveSetNoAt() { forbidModuleDirective(); }
 void FgpuTargetStreamer::emitDirectiveEnd(StringRef Name) {}
 void FgpuTargetStreamer::emitDirectiveEnt(const MCSymbol &Symbol) {}
-void FgpuTargetStreamer::emitDirectiveAbiCalls() {}
-void FgpuTargetStreamer::emitDirectiveNaN2008() {}
-void FgpuTargetStreamer::emitDirectiveNaNLegacy() {}
 void FgpuTargetStreamer::emitDirectiveOptionPic0() {}
 void FgpuTargetStreamer::emitDirectiveOptionPic2() {}
 void FgpuTargetStreamer::emitDirectiveInsn() { forbidModuleDirective(); }
@@ -78,35 +63,8 @@ void FgpuTargetStreamer::emitFMask(unsigned FPUBitmask, int FPUTopSavedRegOff) {
 void FgpuTargetStreamer::emitDirectiveSetArch(StringRef Arch) {
   forbidModuleDirective();
 }
-void FgpuTargetStreamer::emitDirectiveSetFgpu0() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu1() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu2() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu3() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu4() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu5() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu32() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu32R2() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu32R3() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu32R5() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu32R6() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu64() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu64R2() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu64R3() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu64R5() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu64R6() { forbidModuleDirective(); }
 void FgpuTargetStreamer::emitDirectiveSetPop() { forbidModuleDirective(); }
 void FgpuTargetStreamer::emitDirectiveSetPush() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetSoftFloat() {
-  forbidModuleDirective();
-}
-void FgpuTargetStreamer::emitDirectiveSetHardFloat() {
-  forbidModuleDirective();
-}
-void FgpuTargetStreamer::emitDirectiveSetDsp() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetDspr2() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetNoDsp() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetFgpu3D() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetNoFgpu3D() { forbidModuleDirective(); }
 void FgpuTargetStreamer::emitDirectiveCpAdd(unsigned RegNo) {}
 void FgpuTargetStreamer::emitDirectiveCpLoad(unsigned RegNo) {}
 void FgpuTargetStreamer::emitDirectiveCpLocal(unsigned RegNo) {
@@ -118,9 +76,6 @@ void FgpuTargetStreamer::emitDirectiveCpLocal(unsigned RegNo) {
   // expands to
   //   ld    $25, %call16(foo)($4)
   //   jalr  $25
-
-  if (!getABI().IsN32() && !getABI().IsN64())
-    return;
 
   GPReg = RegNo;
 
@@ -137,30 +92,6 @@ void FgpuTargetStreamer::emitDirectiveCpsetup(unsigned RegNo, int RegOrOffset,
 }
 void FgpuTargetStreamer::emitDirectiveCpreturn(unsigned SaveLocation,
                                                bool SaveLocationIsRegister) {}
-
-void FgpuTargetStreamer::emitDirectiveModuleFP() {}
-
-void FgpuTargetStreamer::emitDirectiveModuleOddSPReg() {
-  if (!ABIFlagsSection.OddSPReg && !ABIFlagsSection.Is32BitABI)
-    report_fatal_error("+nooddspreg is only valid for O32");
-}
-void FgpuTargetStreamer::emitDirectiveModuleSoftFloat() {}
-void FgpuTargetStreamer::emitDirectiveModuleHardFloat() {}
-void FgpuTargetStreamer::emitDirectiveModuleMT() {}
-void FgpuTargetStreamer::emitDirectiveModuleCRC() {}
-void FgpuTargetStreamer::emitDirectiveModuleNoCRC() {}
-void FgpuTargetStreamer::emitDirectiveModuleVirt() {}
-void FgpuTargetStreamer::emitDirectiveModuleNoVirt() {}
-void FgpuTargetStreamer::emitDirectiveModuleGINV() {}
-void FgpuTargetStreamer::emitDirectiveModuleNoGINV() {}
-void FgpuTargetStreamer::emitDirectiveSetFp(
-    FgpuABIFlagsSection::FpABIKind Value) {
-  forbidModuleDirective();
-}
-void FgpuTargetStreamer::emitDirectiveSetOddSPReg() { forbidModuleDirective(); }
-void FgpuTargetStreamer::emitDirectiveSetNoOddSPReg() {
-  forbidModuleDirective();
-}
 
 void FgpuTargetStreamer::emitR(unsigned Opcode, unsigned Reg0, SMLoc IDLoc,
                                const MCSubtargetInfo *STI) {
@@ -256,7 +187,7 @@ void FgpuTargetStreamer::emitRRIII(unsigned Opcode, unsigned Reg0,
 void FgpuTargetStreamer::emitAddu(unsigned DstReg, unsigned SrcReg,
                                   unsigned TrgReg, bool Is64Bit,
                                   const MCSubtargetInfo *STI) {
-  emitRRR(Is64Bit ? Fgpu::DADDu : Fgpu::ADDu, DstReg, SrcReg, TrgReg, SMLoc(),
+  emitRRR(Fgpu::ADDu, DstReg, SrcReg, TrgReg, SMLoc(),
           STI);
 }
 

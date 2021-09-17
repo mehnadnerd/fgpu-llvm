@@ -74,132 +74,43 @@ FgpuRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
 /// Fgpu Callee Saved Registers
 const MCPhysReg *
 FgpuRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  const FgpuSubtarget &Subtarget = MF->getSubtarget<FgpuSubtarget>();
-  const Function &F = MF->getFunction();
-  if (F.hasFnAttribute("interrupt")) {
-    if (Subtarget.hasFgpu64())
-      return Subtarget.hasFgpu64r6() ? CSR_Interrupt_64R6_SaveList
-                                     : CSR_Interrupt_64_SaveList;
-    else
-      return Subtarget.hasFgpu32r6() ? CSR_Interrupt_32R6_SaveList
-                                     : CSR_Interrupt_32_SaveList;
-  }
-
-  if (Subtarget.isSingleFloat())
-    return CSR_SingleFloatOnly_SaveList;
-
-  if (Subtarget.isABI_N64())
-    return CSR_N64_SaveList;
-
-  if (Subtarget.isABI_N32())
-    return CSR_N32_SaveList;
-
-  if (Subtarget.isFP64bit())
-    return CSR_O32_FP64_SaveList;
-
-  if (Subtarget.isFPXX())
-    return CSR_O32_FPXX_SaveList;
-
-  return CSR_O32_SaveList;
+  return Fgpu::CSR_CC_Fgpu;
 }
 
 const uint32_t *
 FgpuRegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                        CallingConv::ID) const {
-  const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
-  if (Subtarget.isSingleFloat())
-    return CSR_SingleFloatOnly_RegMask;
-
-  if (Subtarget.isABI_N64())
-    return CSR_N64_RegMask;
-
-  if (Subtarget.isABI_N32())
-    return CSR_N32_RegMask;
-
-  if (Subtarget.isFP64bit())
-    return CSR_O32_FP64_RegMask;
-
-  if (Subtarget.isFPXX())
-    return CSR_O32_FPXX_RegMask;
-
-  return CSR_O32_RegMask;
+  return CSR_CC_Fgpu_RegMask;
 }
 
 BitVector FgpuRegisterInfo::
 getReservedRegs(const MachineFunction &MF) const {
-  static const MCPhysReg ReservedGPR32[] = {
-    Fgpu::ZERO, Fgpu::K0, Fgpu::K1, Fgpu::SP
+  static const MCPhysReg ReservedCPURegs[] = {
+      Fgpu::ZERO, Fgpu::SP, Fgpu::LR
   };
-
-  static const MCPhysReg ReservedGPR64[] = {
-    Fgpu::ZERO_64, Fgpu::K0_64, Fgpu::K1_64, Fgpu::SP_64
-  };
-
   BitVector Reserved(getNumRegs());
   const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
 
-  for (unsigned I = 0; I < array_lengthof(ReservedGPR32); ++I)
-    Reserved.set(ReservedGPR32[I]);
+  for (unsigned I = 0; I < array_lengthof(ReservedCPURegs); ++I)
+    Reserved.set(ReservedCPURegs[I]);
 
-  // Reserve registers for the NaCl sandbox.
-  if (Subtarget.isTargetNaCl()) {
-    Reserved.set(Fgpu::T6);   // Reserved for control flow mask.
-    Reserved.set(Fgpu::T7);   // Reserved for memory access mask.
-    Reserved.set(Fgpu::T8);   // Reserved for thread pointer.
-  }
 
-  for (unsigned I = 0; I < array_lengthof(ReservedGPR64); ++I)
-    Reserved.set(ReservedGPR64[I]);
 
-  // For mno-abicalls, GP is a program invariant!
-  if (!Subtarget.isABICalls()) {
-    Reserved.set(Fgpu::GP);
-    Reserved.set(Fgpu::GP_64);
-  }
-
-  if (Subtarget.isFP64bit()) {
-    // Reserve all registers in AFGR64.
-    for (MCPhysReg Reg : Fgpu::AFGR64RegClass)
-      Reserved.set(Reg);
-  } else {
-    // Reserve all registers in FGR64.
-    for (MCPhysReg Reg : Fgpu::FGR64RegClass)
-      Reserved.set(Reg);
-  }
   // Reserve FP if this function should have a dedicated frame pointer register.
   if (Subtarget.getFrameLowering()->hasFP(MF)) {
-
     Reserved.set(Fgpu::FP);
-    Reserved.set(Fgpu::FP_64);
 
     // Reserve the base register if we need to both realign the stack and
     // allocate variable-sized objects at runtime. This should test the
     // same conditions as FgpuFrameLowering::hasBP().
     if (hasStackRealignment(MF) && MF.getFrameInfo().hasVarSizedObjects()) {
-      Reserved.set(Fgpu::S7);
-      Reserved.set(Fgpu::S7_64);
+      Reserved.set(Fgpu::S7); // Base PTR
     }
-
   }
-
-  // Reserve hardware registers.
-  Reserved.set(Fgpu::HWR29);
-
-  // Reserve DSP control register.
-  Reserved.set(Fgpu::DSPPos);
-  Reserved.set(Fgpu::DSPSCount);
-  Reserved.set(Fgpu::DSPCarry);
-  Reserved.set(Fgpu::DSPEFI);
-  Reserved.set(Fgpu::DSPOutFlag);
-
-  // Reserve MSA control registers.
-  for (MCPhysReg Reg : Fgpu::MSACtrlRegClass)
-    Reserved.set(Reg);
 
   // Reserve GP if small section is used.
   if (Subtarget.useSmallSection()) {
     Reserved.set(Fgpu::GP);
-    Reserved.set(Fgpu::GP_64);
   }
 
   return Reserved;
@@ -242,8 +153,8 @@ getFrameRegister(const MachineFunction &MF) const {
   const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
   const TargetFrameLowering *TFI = Subtarget.getFrameLowering();
 
-  return TFI->hasFP(MF) ? (IsN64 ? Fgpu::FP_64 : Fgpu::FP) :
-                          (IsN64 ? Fgpu::SP_64 : Fgpu::SP);
+  return TFI->hasFP(MF) ? (Fgpu::FP) :
+                          (Fgpu::SP);
 }
 
 bool FgpuRegisterInfo::canRealignStack(const MachineFunction &MF) const {

@@ -159,25 +159,14 @@ public:
   void emitDirectiveSetNoReorder() override;
   void emitDirectiveSetMacro() override;
   void emitDirectiveSetNoMacro() override;
-  void emitDirectiveSetMsa() override;
-  void emitDirectiveSetNoMsa() override;
-  void emitDirectiveSetMt() override;
-  void emitDirectiveSetNoMt() override;
-  void emitDirectiveSetCRC() override;
-  void emitDirectiveSetNoCRC() override;
-  void emitDirectiveSetVirt() override;
-  void emitDirectiveSetNoVirt() override;
-  void emitDirectiveSetGINV() override;
-  void emitDirectiveSetNoGINV() override;
+//  void emitDirectiveSetGINV() override;
+//  void emitDirectiveSetNoGINV() override;
   void emitDirectiveSetAt() override;
   void emitDirectiveSetAtWithArg(unsigned RegNo) override;
   void emitDirectiveSetNoAt() override;
   void emitDirectiveEnd(StringRef Name) override;
 
   void emitDirectiveEnt(const MCSymbol &Symbol) override;
-  void emitDirectiveAbiCalls() override;
-  void emitDirectiveNaN2008() override;
-  void emitDirectiveNaNLegacy() override;
   void emitDirectiveOptionPic0() override;
   void emitDirectiveOptionPic2() override;
   void emitDirectiveInsn() override;
@@ -187,31 +176,8 @@ public:
   void emitFMask(unsigned FPUBitmask, int FPUTopSavedRegOff) override;
 
   void emitDirectiveSetArch(StringRef Arch) override;
-  void emitDirectiveSetFgpu0() override;
-  void emitDirectiveSetFgpu1() override;
-  void emitDirectiveSetFgpu2() override;
-  void emitDirectiveSetFgpu3() override;
-  void emitDirectiveSetFgpu4() override;
-  void emitDirectiveSetFgpu5() override;
-  void emitDirectiveSetFgpu32() override;
-  void emitDirectiveSetFgpu32R2() override;
-  void emitDirectiveSetFgpu32R3() override;
-  void emitDirectiveSetFgpu32R5() override;
-  void emitDirectiveSetFgpu32R6() override;
-  void emitDirectiveSetFgpu64() override;
-  void emitDirectiveSetFgpu64R2() override;
-  void emitDirectiveSetFgpu64R3() override;
-  void emitDirectiveSetFgpu64R5() override;
-  void emitDirectiveSetFgpu64R6() override;
-  void emitDirectiveSetDsp() override;
-  void emitDirectiveSetDspr2() override;
-  void emitDirectiveSetNoDsp() override;
-  void emitDirectiveSetFgpu3D() override;
-  void emitDirectiveSetNoFgpu3D() override;
   void emitDirectiveSetPop() override;
   void emitDirectiveSetPush() override;
-  void emitDirectiveSetSoftFloat() override;
-  void emitDirectiveSetHardFloat() override;
 
   // PIC support
   void emitDirectiveCpAdd(unsigned RegNo) override;
@@ -233,20 +199,6 @@ public:
                              bool SaveLocationIsRegister) override;
 
   // FP abiflags directives
-  void emitDirectiveModuleFP() override;
-  void emitDirectiveModuleOddSPReg() override;
-  void emitDirectiveModuleSoftFloat() override;
-  void emitDirectiveModuleHardFloat() override;
-  void emitDirectiveModuleMT() override;
-  void emitDirectiveModuleCRC() override;
-  void emitDirectiveModuleNoCRC() override;
-  void emitDirectiveModuleVirt() override;
-  void emitDirectiveModuleNoVirt() override;
-  void emitDirectiveModuleGINV() override;
-  void emitDirectiveModuleNoGINV() override;
-  void emitDirectiveSetFp(FgpuABIFlagsSection::FpABIKind Value) override;
-  void emitDirectiveSetOddSPReg() override;
-  void emitDirectiveSetNoOddSPReg() override;
 };
 
 // This part is for ELF object output
@@ -269,9 +221,6 @@ public:
   void emitDirectiveEnd(StringRef Name) override;
 
   void emitDirectiveEnt(const MCSymbol &Symbol) override;
-  void emitDirectiveAbiCalls() override;
-  void emitDirectiveNaN2008() override;
-  void emitDirectiveNaNLegacy() override;
   void emitDirectiveOptionPic0() override;
   void emitDirectiveOptionPic2() override;
   void emitDirectiveInsn() override;
@@ -293,5 +242,5 @@ public:
 
   void emitFgpuAbiFlags();
 };
-}
+} // namespace llvm
 #endif

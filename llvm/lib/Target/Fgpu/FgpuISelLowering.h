@@ -55,201 +55,50 @@ class TargetRegisterClass;
   namespace FgpuISD {
 
     enum NodeType : unsigned {
-      // Start the numbering from where ISD NodeType finishes.
-      FIRST_NUMBER = ISD::BUILTIN_OP_END,
+    // Start the numbering from where ISD NodeType finishes.
+    FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
-      // Jump and link (call)
-      JmpLink,
+    // Jump and link (call)
+    JmpLink,
 
-      // Tail call
-      TailCall,
+    // Tail call
+    TailCall,
 
-      // Get the Highest (63-48) 16 bits from a 64-bit immediate
-      Highest,
+    // Get the Higher 16 bits from a 32-bit immediate
+    // No relation with Fgpu Hi register
+    LUi,
+    // Get the Lower 16 bits from a 32-bit immediate
+    // No relation with Fgpu Lo register
+    Li,
 
-      // Get the Higher (47-32) 16 bits from a 64-bit immediate
-      Higher,
+    // higher 16 bits of 320bitimm for accessing GOT TODO: confirm
+    GotHi,
 
-      // Get the High 16 bits from a 32/64-bit immediate
-      // No relation with Fgpu Hi register
-      Hi,
+    // Handle gp_rel (small data/bss sections) relocation.
+    GPRel,
 
-      // Get the Lower 16 bits from a 32/64-bit immediate
-      // No relation with Fgpu Lo register
-      Lo,
+    // Thread Pointer
+    ThreadPointer,
 
-      // Get the High 16 bits from a 32 bit immediate for accessing the GOT.
-      GotHi,
-
-      // Get the High 16 bits from a 32-bit immediate for accessing TLS.
-      TlsHi,
-
-      // Handle gp_rel (small data/bss sections) relocation.
-      GPRel,
-
-      // Thread Pointer
-      ThreadPointer,
-
-      // Vector Floating Point Multiply and Subtract
-      FMS,
-
-      // Floating Point Branch Conditional
-      FPBrcond,
-
-      // Floating Point Compare
-      FPCmp,
-
-      // Floating point select
-      FSELECT,
-
-      // Node used to generate an MTC1 i32 to f64 instruction
-      MTC1_D64,
-
-      // Floating Point Conditional Moves
-      CMovFP_T,
-      CMovFP_F,
-
-      // FP-to-int truncation node.
-      TruncIntFP,
-
-      // Return
-      Ret,
-
-      // Interrupt, exception, error trap Return
-      ERet,
-
-      // Software Exception Return.
-      EH_RETURN,
-
-      // Node used to extract integer from accumulator.
-      MFHI,
-      MFLO,
-
-      // Node used to insert integers to accumulator.
-      MTLOHI,
-
-      // Mult nodes.
-      Mult,
-      Multu,
-
-      // MAdd/Sub nodes
-      MAdd,
-      MAddu,
-      MSub,
-      MSubu,
-
-      // DivRem(u)
-      DivRem,
-      DivRemU,
-      DivRem16,
-      DivRemU16,
-
-      BuildPairF64,
-      ExtractElementF64,
-
-      Wrapper,
-
-      DynAlloc,
-
-      Sync,
-
-      Ext,
-      Ins,
-      CIns,
-
-      // EXTR.W instrinsic nodes.
-      EXTP,
-      EXTPDP,
-      EXTR_S_H,
-      EXTR_W,
-      EXTR_R_W,
-      EXTR_RS_W,
-      SHILO,
-      MTHLIP,
-
-      // DPA.W intrinsic nodes.
-      MULSAQ_S_W_PH,
-      MAQ_S_W_PHL,
-      MAQ_S_W_PHR,
-      MAQ_SA_W_PHL,
-      MAQ_SA_W_PHR,
-      DPAU_H_QBL,
-      DPAU_H_QBR,
-      DPSU_H_QBL,
-      DPSU_H_QBR,
-      DPAQ_S_W_PH,
-      DPSQ_S_W_PH,
-      DPAQ_SA_L_W,
-      DPSQ_SA_L_W,
-      DPA_W_PH,
-      DPS_W_PH,
-      DPAQX_S_W_PH,
-      DPAQX_SA_W_PH,
-      DPAX_W_PH,
-      DPSX_W_PH,
-      DPSQX_S_W_PH,
-      DPSQX_SA_W_PH,
-      MULSA_W_PH,
-
-      MULT,
-      MULTU,
-      MADD_DSP,
-      MADDU_DSP,
-      MSUB_DSP,
-      MSUBU_DSP,
-
-      // DSP shift nodes.
-      SHLL_DSP,
-      SHRA_DSP,
-      SHRL_DSP,
-
-      // DSP setcc and select_cc nodes.
-      SETCC_DSP,
-      SELECT_CC_DSP,
-
-      // Vector comparisons.
-      // These take a vector and return a boolean.
-      VALL_ZERO,
-      VANY_ZERO,
-      VALL_NONZERO,
-      VANY_NONZERO,
-
-      // These take a vector and return a vector bitmask.
-      VCEQ,
-      VCLE_S,
-      VCLE_U,
-      VCLT_S,
-      VCLT_U,
-
-      // Vector Shuffle with mask as an operand
-      VSHF,  // Generic shuffle
-      SHF,   // 4-element set shuffle.
-      ILVEV, // Interleave even elements
-      ILVOD, // Interleave odd elements
-      ILVL,  // Interleave left elements
-      ILVR,  // Interleave right elements
-      PCKEV, // Pack even elements
-      PCKOD, // Pack odd elements
-
-      // Vector Lane Copy
-      INSVE, // Copy element from one vector to another
-
-      // Combined (XOR (OR $a, $b), -1)
-      VNOR,
-
-      // Extended vector element extraction
-      VEXTRACT_SEXT_ELT,
-      VEXTRACT_ZEXT_ELT,
-
-      // Load/Store Left/Right nodes.
-      LWL = ISD::FIRST_TARGET_MEMORY_OPCODE,
-      LWR,
-      SWL,
-      SWR,
-      LDL,
-      LDR,
-      SDL,
-      SDR
+    // FGPU special instructions
+    RET,
+    LP,
+    WGOFF,
+    WGID,
+    LID,
+    WGSIZE,
+    SIZE,
+    DOT,
+    AADD,
+    AMAX,
+    RELU,
+    SLW,
+    SLWC,
+    SSW,
+    SSWC,
+    Wrapper,
+    DynAlloc,
+    Sync
     };
 
   } // ene namespace FgpuISD
@@ -257,7 +106,9 @@ class TargetRegisterClass;
   //===--------------------------------------------------------------------===//
   // TargetLowering Implementation
   //===--------------------------------------------------------------------===//
-
+  namespace FGPU {
+  bool isKernelFunction(const Function &F);
+  }
   class FgpuTargetLowering : public TargetLowering  {
 
   public:
@@ -348,14 +199,14 @@ class TargetRegisterClass;
     /// exception address on entry to an EH pad.
     Register
     getExceptionPointerRegister(const Constant *PersonalityFn) const override {
-      return ABI.IsN64() ? Fgpu::A0_64 : Fgpu::A0;
+      return Fgpu::R4;
     }
 
     /// If a physical register, this returns the register that receives the
     /// exception typeid on entry to a landing pad.
     Register
     getExceptionSelectorRegister(const Constant *PersonalityFn) const override {
-      return ABI.IsN64() ? Fgpu::A1_64 : Fgpu::A1;
+      return Fgpu::R5;
     }
 
     bool isJumpTableRelative() const override {
@@ -383,7 +234,7 @@ class TargetRegisterClass;
           DAG.getLoad(Ty, DL, DAG.getEntryNode(), GOT,
                       MachinePointerInfo::getGOT(DAG.getMachineFunction()));
       unsigned LoFlag = IsN32OrN64 ? FgpuII::MO_GOT_OFST : FgpuII::MO_ABS_LO;
-      SDValue Lo = DAG.getNode(FgpuISD::Lo, DL, Ty,
+      SDValue Lo = DAG.getNode(FgpuISD::Li, DL, Ty,
                                getTargetNode(N, Ty, DAG, LoFlag));
       return DAG.getNode(ISD::ADD, DL, Ty, Load, Lo);
     }
@@ -430,38 +281,8 @@ class TargetRegisterClass;
       SDValue Hi = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_HI);
       SDValue Lo = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_LO);
       return DAG.getNode(ISD::ADD, DL, Ty,
-                         DAG.getNode(FgpuISD::Hi, DL, Ty, Hi),
-                         DAG.getNode(FgpuISD::Lo, DL, Ty, Lo));
-   }
-
-   // This method creates the following nodes, which are necessary for
-   // computing a symbol's address in non-PIC mode for N64.
-   //
-   // (add (shl (add (shl (add %highest(sym), %higher(sim)), 16), %high(sym)),
-   //            16), %lo(%sym))
-   //
-   // FIXME: This method is not efficent for (micro)FGPU64R6.
-   template <class NodeTy>
-   SDValue getAddrNonPICSym64(NodeTy *N, const SDLoc &DL, EVT Ty,
-                          SelectionDAG &DAG) const {
-      SDValue Hi = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_HI);
-      SDValue Lo = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_LO);
-
-      SDValue Highest =
-          DAG.getNode(FgpuISD::Highest, DL, Ty,
-                      getTargetNode(N, Ty, DAG, FgpuII::MO_HIGHEST));
-      SDValue Higher = getTargetNode(N, Ty, DAG, FgpuII::MO_HIGHER);
-      SDValue HigherPart =
-          DAG.getNode(ISD::ADD, DL, Ty, Highest,
-                      DAG.getNode(FgpuISD::Higher, DL, Ty, Higher));
-      SDValue Cst = DAG.getConstant(16, DL, MVT::i32);
-      SDValue Shift = DAG.getNode(ISD::SHL, DL, Ty, HigherPart, Cst);
-      SDValue Add = DAG.getNode(ISD::ADD, DL, Ty, Shift,
-                                DAG.getNode(FgpuISD::Hi, DL, Ty, Hi));
-      SDValue Shift2 = DAG.getNode(ISD::SHL, DL, Ty, Add, Cst);
-
-      return DAG.getNode(ISD::ADD, DL, Ty, Shift2,
-                         DAG.getNode(FgpuISD::Lo, DL, Ty, Lo));
+                         DAG.getNode(FgpuISD::LUi, DL, Ty, Hi),
+                         DAG.getNode(FgpuISD::Li, DL, Ty, Lo));
    }
 
     // This method creates the following nodes, which are necessary for
@@ -471,10 +292,11 @@ class TargetRegisterClass;
     template <class NodeTy>
     SDValue getAddrGPRel(NodeTy *N, const SDLoc &DL, EVT Ty,
                          SelectionDAG &DAG, bool IsN64) const {
+      assert(!IsN64 && "Cannnot be 64-bit");
       SDValue GPRel = getTargetNode(N, Ty, DAG, FgpuII::MO_GPREL);
       return DAG.getNode(
           ISD::ADD, DL, Ty,
-          DAG.getRegister(IsN64 ? Fgpu::GP_64 : Fgpu::GP, Ty),
+          DAG.getRegister(Fgpu::R29, Ty),
           DAG.getNode(FgpuISD::GPRel, DL, DAG.getVTList(Ty), GPRel));
     }
 

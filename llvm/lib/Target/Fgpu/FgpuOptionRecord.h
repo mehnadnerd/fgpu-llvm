@@ -44,15 +44,7 @@ public:
     ri_gp_value = 0;
 
     const MCRegisterInfo *TRI = Context.getRegisterInfo();
-    GPR32RegClass = &(TRI->getRegClass(Fgpu::GPR32RegClassID));
-    GPR64RegClass = &(TRI->getRegClass(Fgpu::GPR64RegClassID));
-    FGR32RegClass = &(TRI->getRegClass(Fgpu::FGR32RegClassID));
-    FGR64RegClass = &(TRI->getRegClass(Fgpu::FGR64RegClassID));
-    AFGR64RegClass = &(TRI->getRegClass(Fgpu::AFGR64RegClassID));
-    MSA128BRegClass = &(TRI->getRegClass(Fgpu::MSA128BRegClassID));
-    COP0RegClass = &(TRI->getRegClass(Fgpu::COP0RegClassID));
-    COP2RegClass = &(TRI->getRegClass(Fgpu::COP2RegClassID));
-    COP3RegClass = &(TRI->getRegClass(Fgpu::COP3RegClassID));
+    GPRRegClass = &(TRI->getRegClass(Fgpu::GPROutClassID));
   }
 
   ~FgpuRegInfoRecord() override = default;
@@ -63,15 +55,7 @@ public:
 private:
   FgpuELFStreamer *Streamer;
   MCContext &Context;
-  const MCRegisterClass *GPR32RegClass;
-  const MCRegisterClass *GPR64RegClass;
-  const MCRegisterClass *FGR32RegClass;
-  const MCRegisterClass *FGR64RegClass;
-  const MCRegisterClass *AFGR64RegClass;
-  const MCRegisterClass *MSA128BRegClass;
-  const MCRegisterClass *COP0RegClass;
-  const MCRegisterClass *COP2RegClass;
-  const MCRegisterClass *COP3RegClass;
+  const MCRegisterClass *GPRRegClass;
   uint32_t ri_gprmask;
   uint32_t ri_cprmask[4];
   int64_t ri_gp_value;

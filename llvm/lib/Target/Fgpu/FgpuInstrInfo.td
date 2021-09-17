@@ -695,6 +695,16 @@ class JmpLink<bits<8> op, string instr_asm>:
   let isCall=1;
 }
 
+//def SDT_FgpuJmpLinkRegister      : SDTypeProfile<0, 2, [SDTCisVT<0, iPTR>, SDTCisInt<0>]>;
+//def FgpuJmpLinkRegister : SDNode<"FgpuISD::JmpLinkRegister",SDT_FgpuJmpLinkRegister,
+//                         [SDNPHasChain, SDNPOutGlue, SDNPOptInGlue,
+//                          SDNPVariadic]>;
+//class JmpLinkRegister<bits<8> op, string instr_asm>:
+//  FRI<op, (outs), (ins ALURegs:$rd, uimm14:$imm14, variable_ops),
+//     !strconcat(instr_asm, "\t$rd, $imm14"),
+//      [(FgpuJmpLinkRegister ALURegs:$rd, imm:$imm14)], IIBranch>{
+//  let isCall=1;
+//}
 
 class SetSync_<bits<8> op, string instr_asm>:
   FI<op, (outs), (ins calltarget:$imm14, variable_ops),
@@ -724,20 +734,22 @@ def SIZE_Pseudo   : SDNode<"FgpuISD::SIZE"    , SDTRTMInst, [SDNPHasChain]>;
 
 def DOT_Pseudo    : SDNode<"FgpuISD::DOT" , SDTypeProfile<1, 3, []>, []>;
 
+def NOP_Pseudo    : SDNode<"FgpuISD::NOP"      , SDTRTMInst, []>;
+
 
 def AADD_Pseudo   : SDNode<"FgpuISD::AADD"  , SDTAto, [SDNPHasChain, SDNPMayStore, SDNPMayLoad, SDNPMemOperand]>;
 def AMAX_Pseudo   : SDNode<"FgpuISD::AMAX"  , SDTAto, [SDNPHasChain, SDNPMayStore, SDNPMayLoad, SDNPMemOperand]>;
 
-def SDT_FgpuCallSeqStart : SDCallSeqStart<[SDTCisVT<0, i32>]>;
+def SDT_FgpuCallSeqStart : SDCallSeqStart<[SDTCisVT<0, i32>, SDTCisVT<1, i32>]>;
 def SDT_FgpuCallSeqEnd   : SDCallSeqEnd<[SDTCisVT<0, i32>, SDTCisVT<1, i32>]>;
 def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_FgpuCallSeqStart,
                            [SDNPHasChain, SDNPOutGlue]>;
 def callseq_end   : SDNode<"ISD::CALLSEQ_END", SDT_FgpuCallSeqEnd,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 
-//def ADJCALLSTACKDOWN : FgpuPseudo<(outs), (ins uimm14:$amt),
-//                                  "!ADJCALLSTACKDOWN $amt",
-//                                  [(callseq_start timm:$amt)]>;
+def ADJCALLSTACKDOWN : FgpuPseudo<(outs), (ins uimm14:$amt1, uimm14:$amt2),
+                                  "!ADJCALLSTACKDOWN $amt1",
+                                  [(callseq_start timm:$amt1, timm:$amt2)]>;
 def ADJCALLSTACKUP   : FgpuPseudo<(outs), (ins uimm14:$amt1, uimm14:$amt2),
                                   "!ADJCALLSTACKUP $amt1",
                                   [(callseq_end timm:$amt1, timm:$amt2)]>;
@@ -753,7 +765,7 @@ def LLWI : Load_Frame<0xD4, "llwi", load_a, ALURegs>;
 
 
 // map load without index, i.e. lw rd, rt[0]
-def : Pat<(load_a ALURegs:$in), (LW R0,ALURegs:$in )>;
+def : Pat<(load_a ALURegs:$in), (LW ZERO,ALURegs:$in )>;
 def SW : Store_Word<0x7C, "sw", store_a, ALURegs>;
 def SH : Store_Half<0x7A, "sh", truncstorei16, ALURegs>;
 def SB : Store_Byte<0x79, "sb", truncstorei8, ALURegs>;
@@ -763,9 +775,9 @@ def LSWI : Store_Frame<0xDC, "lswi", store_a, ALURegs>;
 
 
 // map store without index, i.e. sw rd, rt[0]
-def : Pat<(store_a ALURegs:$rd, ALURegs:$addr), (SW ALURegs:$rd, R0, ALURegs:$addr)>;
-def : Pat<(truncstorei16 ALURegs:$rd, ALURegs:$addr), (SH ALURegs:$rd, R0, ALURegs:$addr)>;
-def : Pat<(truncstorei8 ALURegs:$rd, ALURegs:$addr), (SB ALURegs:$rd, R0, ALURegs:$addr)>;
+def : Pat<(store_a ALURegs:$rd, ALURegs:$addr), (SW ALURegs:$rd, ZERO, ALURegs:$addr)>;
+def : Pat<(truncstorei16 ALURegs:$rd, ALURegs:$addr), (SH ALURegs:$rd, ZERO, ALURegs:$addr)>;
+def : Pat<(truncstorei8 ALURegs:$rd, ALURegs:$addr), (SB ALURegs:$rd, ZERO, ALURegs:$addr)>;
 
 /// Arithmetic Instructions (ALU Immediate)
 def ADDi    : ArithLogicI<0x11, "addi", add, simm14, immSExt14>;
@@ -805,52 +817,52 @@ def FSUB    : FPInsn<0xC8, "fsub", fsub, IIAlu, FloatRegs, 0>;
 
 def LWC : Load_LWC<0x77, "lwc", load_a, VecRegs>;
 def : Pat<( v128i8 (load_a (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7)))),        (LWC ALURegs:$rt, ALURegs:$rs, 0)>;
-def : Pat<( v128i8 (load_a (add ALURegs:$rt, immSExt16:$imm))),                     (LWC ALURegs:$rt, R0, immSExt16:$imm)>;
-def : Pat<( v128i8 (load_a ALURegs:$rt)),                                           (LWC ALURegs:$rt, R0, 0)>;
+def : Pat<( v128i8 (load_a (add ALURegs:$rt, immSExt16:$imm))),                     (LWC ALURegs:$rt, ZERO, immSExt16:$imm)>;
+def : Pat<( v128i8 (load_a ALURegs:$rt)),                                           (LWC ALURegs:$rt, ZERO, 0)>;
 
 //def LLWC : Load_LLWC<0xD7, "llwc", load_a, FloatRegs>;
 //def : Pat<( f32 (load_a (add ALURegs:$rs, ALURegs:$rt))),                       (LLWC ALURegs:$rt, ALURegs:$rs, 0)>;
-//def : Pat<( f32 (load_a (add ALURegs:$rs, immSExt6:$imm6))),                    (LLWC R0, ALURegs:$rs, immSExt6:$imm6)>;
-//def : Pat<( f32 (load_a ALURegs:$rs)),                                          (LLWC R0, ALURegs:$rs, 0)>;
+//def : Pat<( f32 (load_a (add ALURegs:$rs, immSExt6:$imm6))),                    (LLWC ZERO, ALURegs:$rs, immSExt6:$imm6)>;
+//def : Pat<( f32 (load_a ALURegs:$rs)),                                          (LLWC ZERO, ALURegs:$rs, 0)>;
 
 
 
 def SWC : SWC_<0x7F, "swc">;
 //def SWC : Store_SWC<0x7F, "swc", store_a, VecRegs>;
 //def : Pat<(store_a VecRegs:$rd, (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7))),  (SWC VecRegs:$rd, ALURegs:$rt, ALURegs:$rs, 0)>;
-//def : Pat<(store_a VecRegs:$rd, (add ALURegs:$rt, immSExt16:$imm)),               (SWC VecRegs:$rd, ALURegs:$rt, R0, immSExt16:$imm)>;
-//def : Pat<(store_a VecRegs:$rd, ALURegs:$rt),                                     (SWC VecRegs:$rd, ALURegs:$rt, R0, 0)>;
+//def : Pat<(store_a VecRegs:$rd, (add ALURegs:$rt, immSExt16:$imm)),               (SWC VecRegs:$rd, ALURegs:$rt, ZERO, immSExt16:$imm)>;
+//def : Pat<(store_a VecRegs:$rd, ALURegs:$rt),                                     (SWC VecRegs:$rd, ALURegs:$rt, ZERO, 0)>;
 
 //def LSWC : Store_LSWC<0xDF, "lswc", store_a, FloatRegs>;
 //def : Pat<(store_a FloatRegs:$rs, (add ALURegs:$addr, ALURegs:$rt)),                       (LSWC FloatRegs:$rs, ALURegs:$rt, ALURegs:$addr, 0)>;
-//def : Pat<(store_a FloatRegs:$rs, (add ALURegs:$addr, immSExt6:$imm6)),                    (LSWC FloatRegs:$rs, R0, ALURegs:$addr, immSExt6:$imm6)>;
-//def : Pat<(store_a FloatRegs:$rs, ALURegs:$addr),                                          (LSWC FloatRegs:$rs, R0, ALURegs:$addr, 0)>;
+//def : Pat<(store_a FloatRegs:$rs, (add ALURegs:$addr, immSExt6:$imm6)),                    (LSWC FloatRegs:$rs, ZERO, ALURegs:$addr, immSExt6:$imm6)>;
+//def : Pat<(store_a FloatRegs:$rs, ALURegs:$addr),                                          (LSWC FloatRegs:$rs, ZERO, ALURegs:$addr, 0)>;
 
 
 def SLWC : Load_SLWC<0xD7, "slwc", shr_load, VecRegs>;
 def : Pat<( v128i8 (shr_load (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7)))),        (SLWC ALURegs:$rt, ALURegs:$rs, 0)>;
-def : Pat<( v128i8 (shr_load (add ALURegs:$rt, immSExt16:$imm))),                     (SLWC ALURegs:$rt, R0, immSExt16:$imm)>;
-def : Pat<( v128i8 (shr_load ALURegs:$rt)),                                           (SLWC ALURegs:$rt, R0, 0)>;
+def : Pat<( v128i8 (shr_load (add ALURegs:$rt, immSExt16:$imm))),                     (SLWC ALURegs:$rt, ZERO, immSExt16:$imm)>;
+def : Pat<( v128i8 (shr_load ALURegs:$rt)),                                           (SLWC ALURegs:$rt, ZERO, 0)>;
 
 def SSWC : SWC_<0xDF, "sswc">;
 //def SSWC : Store_SSWC<0xDF, "sswc", store_a, VecRegs>;
 //def : Pat<(store_a VecRegs:$rs, (add ALURegs:$addr, ALURegs:$rt)),                (SSWC VecRegs:$rs, ALURegs:$rt, ALURegs:$addr, 0)>;
-//def : Pat<(store_a VecRegs:$rs, (add ALURegs:$addr, immSExt9:$imm6)),             (SSWC VecRegs:$rs, R0, ALURegs:$addr, immSExt9:$imm6)>;
-//def : Pat<(store_a VecRegs:$rs, ALURegs:$addr),                                   (SSWC VecRegs:$rs, R0, ALURegs:$addr, 0)>;
+//def : Pat<(store_a VecRegs:$rs, (add ALURegs:$addr, immSExt9:$imm6)),             (SSWC VecRegs:$rs, ZERO, ALURegs:$addr, immSExt9:$imm6)>;
+//def : Pat<(store_a VecRegs:$rs, ALURegs:$addr),                                   (SSWC VecRegs:$rs, ZERO, ALURegs:$addr, 0)>;
 
 def SLW : Load_SLW<0xD5, "slw", shr_load, ALURegs>;
 def : Pat<(i32 (shr_load (add ALURegs:$rt, ALURegs:$rs))),                                 (SLW $rt, $rs, 0)>;
-def : Pat<(i32 (shr_load ALURegs:$rt)),                                                    (SLW $rt, R0, 0)>;
+def : Pat<(i32 (shr_load ALURegs:$rt)),                                                    (SLW $rt, ZERO, 0)>;
 def : Pat<(f32 (shr_load (add ALURegs:$rt, (add ALURegs:$rs, immSExt9:$imm)))),            (COPY_TO_REGCLASS (SLW $rt, $rs, $imm), FloatRegs)>;
 def : Pat<(f32 (shr_load (add ALURegs:$rt, ALURegs:$rs))),                                 (COPY_TO_REGCLASS (SLW $rt, $rs, 0), FloatRegs)>;
-def : Pat<(f32 (shr_load ALURegs:$rt)),                                                    (COPY_TO_REGCLASS (SLW $rt, R0, 0), FloatRegs)>;
+def : Pat<(f32 (shr_load ALURegs:$rt)),                                                    (COPY_TO_REGCLASS (SLW $rt, ZERO, 0), FloatRegs)>;
 
 def SSW : Store_SSW<0xDD, "ssw", shr_store, ALURegs>;
 def : Pat<(shr_store ALURegs:$rd, (add ALURegs:$rt, ALURegs:$rs)),                         (SSW $rd, $rt, $rs, 0)>;
-def : Pat<(shr_store ALURegs:$rd, ALURegs:$rt),                                            (SSW $rd, $rt, R0, 0)>;
+def : Pat<(shr_store ALURegs:$rd, ALURegs:$rt),                                            (SSW $rd, $rt, ZERO, 0)>;
 def : Pat<(shr_store FloatRegs:$rd, (add ALURegs:$rt, (add ALURegs:$rs, immSExt9:$imm))),  (SSW (i32 (COPY_TO_REGCLASS $rd, ALURegs)), $rt, $rs, $imm)>;
 def : Pat<(shr_store FloatRegs:$rd, (add ALURegs:$rt, ALURegs:$rs)),                       (SSW (i32 (COPY_TO_REGCLASS $rd, ALURegs)), $rt, $rs, 0)>;
-def : Pat<(shr_store FloatRegs:$rd, ALURegs:$rt),                                          (SSW (i32 (COPY_TO_REGCLASS $rd, ALURegs)), $rt, R0, 0)>;
+def : Pat<(shr_store FloatRegs:$rd, ALURegs:$rt),                                          (SSW (i32 (COPY_TO_REGCLASS $rd, ALURegs)), $rt, ZERO, 0)>;
 
 def SUB     : ArithLogicR<0x12, "sub", sub, IIAlu, ALURegs, 0>;
 def MUL     : ArithLogicR<0x51, "mul", mul, IIAlu, ALURegs, 1>;
@@ -887,11 +899,12 @@ def LP      : RTMInstr<0xA8, "lp", LP_Pseudo, imm32, uimm4>;
 
 //def RELU    : ArithOneARG<0xE0, "relu", RELU_Pseudo, IIAlu, FloatRegs, 0>;
 
-def : Pat<(i32 immSExt14:$in), (ADDi R0, imm:$in)>;
-def : Pat<(f32 fpimm0), (COPY_TO_REGCLASS (ADDi R0, 0), ALURegs)>;
+def : Pat<(i32 immSExt14:$in), (ADDi ZERO, imm:$in)>;
+def : Pat<(f32 fpimm0), (COPY_TO_REGCLASS (ADDi ZERO, 0), ALURegs)>;
 def Li32    : FgpuPseudo<(outs ALURegs:$rd), (ins imm32:$src), "Li32",
               [(set ALURegs:$rd, (imm:$src))]>;
 
+def NOP     : FgpuPseudo<(outs), (ins), "nop", []>, PseudoInstExpansion<(SLL ZERO, ZERO, 0)>;
 
 let isReturn=1, isTerminator=1, isBarrier=1, hasCtrlDep=1 in
   def RetLR : FgpuPseudo<(outs), (ins), "", [(FgpuRET)]>;
@@ -909,7 +922,9 @@ def PDOM_BEQ   : Branch<0x65, "pdom_beq", seteq, brtarget7, ALURegs>;
 def PDOM_BNE   : Branch<0x66, "pdom_bne", setne, brtarget7, ALURegs>;
 
 def JSUB  : JmpLink<0x64, "jsub">;
-def : Pat<(br bb:$addr), (BEQ R0, R0, bb:$addr)>;
+def : Pat<(br bb:$addr), (BEQ ZERO, ZERO, bb:$addr)>;
+
+//def JALR  : JmpLinkRegister<0x67, "jalr">;
 
 //def : Pat<(shl (load_a (add ALURegs:$base, (shl ALURegs:$offset, imm_eq_1))), (shl (xor (add ALURegs:$base, (shl ALURegs:$offset, imm_eq_1)), imm_eq_31), imm_eq_4)),
 //           (SLL (LH ALURegs:$offset, ALURegs:$base), (SLLi (XORi ALURegs:$offset, 31), 4))>;
@@ -933,7 +948,7 @@ def SLTiu   : CondI<0xB7, "sltiu", setult, uimm14, immSExt14>;
 def : Pat<(seteq ALURegs:$lhs, ALURegs:$rhs), (SLTiu (XOR ALURegs:$lhs, ALURegs:$rhs), 1)>;
 def : Pat<(setoeq FloatRegs:$lhs, FloatRegs:$rhs), (NOR (FSLT FloatRegs:$lhs, FloatRegs:$rhs), (FSLT FloatRegs:$rhs, FloatRegs:$lhs))>;
 // a != b
-def : Pat<(setne ALURegs:$lhs, ALURegs:$rhs), (SLTu R0, (XOR ALURegs:$lhs, ALURegs:$rhs))>;
+def : Pat<(setne ALURegs:$lhs, ALURegs:$rhs), (SLTu ZERO, (XOR ALURegs:$lhs, ALURegs:$rhs))>;
 def : Pat<(setone FloatRegs:$lhs, FloatRegs:$rhs), (OR (FSLT FloatRegs:$lhs, FloatRegs:$rhs), (FSLT FloatRegs:$rhs, FloatRegs:$lhs))>;
 def : Pat<(setune FloatRegs:$lhs, FloatRegs:$rhs), (OR (FSLT FloatRegs:$lhs, FloatRegs:$rhs), (FSLT FloatRegs:$rhs, FloatRegs:$lhs))>;
 // a <= b
@@ -1021,9 +1036,9 @@ def : Pat<(select (i32 (setne ALURegs:$lhs, 0)), FloatRegs:$T, FloatRegs:$F),
 // brcond for slt instruction
 
 def : Pat<(brcond (i32 (setne ALURegs:$lhs, 0)), bb:$dst),
-              (BNE ALURegs:$lhs, R0, bb:$dst)>;
+              (BNE ALURegs:$lhs, ZERO, bb:$dst)>;
 def : Pat<(brcond (i32 (seteq ALURegs:$lhs, 0)), bb:$dst),
-              (BEQ ALURegs:$lhs, R0, bb:$dst)>;
+              (BEQ ALURegs:$lhs, ZERO, bb:$dst)>;
 
 def : Pat<(brcond (i32 (seteq ALURegs:$lhs, ALURegs:$rhs)), bb:$dst),
               (BEQ ALURegs:$lhs, ALURegs:$rhs, bb:$dst)>;
@@ -1034,24 +1049,24 @@ def : Pat<(brcond (i32 (setne ALURegs:$lhs, ALURegs:$rhs)), bb:$dst),
 def : Pat<(brcond (i32 (setune ALURegs:$lhs, ALURegs:$rhs)), bb:$dst),
               (BNE ALURegs:$lhs, ALURegs:$rhs, bb:$dst)>;
 def : Pat<(brcond (i32 (setlt ALURegs:$lhs, ALURegs:$rhs)), bb:$dst),
-              (BNE (SLT ALURegs:$lhs, ALURegs:$rhs), R0, bb:$dst)>;
+              (BNE (SLT ALURegs:$lhs, ALURegs:$rhs), ZERO, bb:$dst)>;
 def : Pat<(brcond (i32 (setult ALURegs:$lhs, ALURegs:$rhs)), bb:$dst),
-              (BNE (SLTu ALURegs:$lhs, ALURegs:$rhs), R0, bb:$dst)>;
+              (BNE (SLTu ALURegs:$lhs, ALURegs:$rhs), ZERO, bb:$dst)>;
 def : Pat<(brcond (i32 (setgt ALURegs:$lhs, ALURegs:$rhs)), bb:$dst),
-              (BNE (SLT ALURegs:$rhs, ALURegs:$lhs), R0, bb:$dst)>;
+              (BNE (SLT ALURegs:$rhs, ALURegs:$lhs), ZERO, bb:$dst)>;
 def : Pat<(brcond (i32 (setugt ALURegs:$lhs, ALURegs:$rhs)), bb:$dst),
-              (BNE (SLTu ALURegs:$rhs, ALURegs:$lhs), R0, bb:$dst)>;
+              (BNE (SLTu ALURegs:$rhs, ALURegs:$lhs), ZERO, bb:$dst)>;
 def : Pat<(brcond (i32 (setle ALURegs:$lhs, ALURegs:$rhs)), bb:$dst),
-              (BEQ (SLT ALURegs:$rhs, ALURegs:$lhs), R0, bb:$dst)>;
+              (BEQ (SLT ALURegs:$rhs, ALURegs:$lhs), ZERO, bb:$dst)>;
 def : Pat<(brcond (i32 (setule ALURegs:$lhs, ALURegs:$rhs)), bb:$dst),
-              (BEQ (SLTu ALURegs:$rhs, ALURegs:$lhs), R0, bb:$dst)>;
+              (BEQ (SLTu ALURegs:$rhs, ALURegs:$lhs), ZERO, bb:$dst)>;
 def : Pat<(brcond (i32 (setge ALURegs:$lhs, ALURegs:$rhs)), bb:$dst),
-              (BEQ (SLT ALURegs:$lhs, ALURegs:$rhs), R0, bb:$dst)>;
+              (BEQ (SLT ALURegs:$lhs, ALURegs:$rhs), ZERO, bb:$dst)>;
 def : Pat<(brcond (i32 (setuge ALURegs:$lhs, ALURegs:$rhs)), bb:$dst),
-              (BEQ (SLTu ALURegs:$lhs, ALURegs:$rhs), R0, bb:$dst)>;
+              (BEQ (SLTu ALURegs:$lhs, ALURegs:$rhs), ZERO, bb:$dst)>;
 
 def : Pat<(brcond ALURegs:$cond, bb:$dst),
-              (BNE ALURegs:$cond, R0, bb:$dst)>;
+              (BNE ALURegs:$cond, ZERO, bb:$dst)>;
 
 
 def : Pat<(FgpuJmpLink (i32 globaladdr:$dst)),
@@ -1068,13 +1083,13 @@ return CurDAG->getTargetConstant(
 
 def : Pat<( f32 fpimm:$in),
       (COPY_TO_REGCLASS (Li32 (bitcast_fpimm_to_i32 f32:$in)), ALURegs)>;
-def : Pat<( f32 (load_a ALURegs:$in)), (COPY_TO_REGCLASS (LW R0,ALURegs:$in), FloatRegs)>;
+def : Pat<( f32 (load_a ALURegs:$in)), (COPY_TO_REGCLASS (LW ZERO,ALURegs:$in), FloatRegs)>;
 def : Pat<( f32 (load_a  (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_2)))),
           (COPY_TO_REGCLASS (LW $rs,$rt), FloatRegs)>;
 def : Pat<( store_a (f32 FloatRegs:$rd), (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_2))),
           (SW ( i32 (COPY_TO_REGCLASS $rd, ALURegs)), $rs, $rt)>;
 def : Pat<( store_a (f32 FloatRegs:$rd), ALURegs:$in),
-          (SW ( i32 (COPY_TO_REGCLASS $rd, ALURegs)), R0, $in)>;
+          (SW ( i32 (COPY_TO_REGCLASS $rd, ALURegs)), ZERO, $in)>;
 def : Pat<( f32 (bitconvert (i32 ALURegs:$Xn))), (COPY_TO_REGCLASS ALURegs:$Xn, FloatRegs)>;
 def : Pat<( i32 (bitconvert (f32 FloatRegs:$Xn))), (COPY_TO_REGCLASS FloatRegs:$Xn, ALURegs)>;
 // def : Pat<(f32 (bitconvert (i32 ALURegs:$Xn))),

@@ -21,7 +21,7 @@ class StringRef;
 
 class FgpuABIInfo {
 public:
-  enum class ABI { Unknown };
+  enum class ABI { Unknown, CC_Fgpu };
 
 protected:
   ABI ThisABI;
@@ -30,6 +30,7 @@ public:
   FgpuABIInfo(ABI ThisABI) : ThisABI(ThisABI) {}
 
   static FgpuABIInfo Unknown() { return FgpuABIInfo(ABI::Unknown); }
+  static FgpuABIInfo CC_Fgpu() { return FgpuABIInfo(ABI::CC_Fgpu); }
   static FgpuABIInfo computeTargetABI(const Triple &TT, StringRef CPU,
                                       const MCTargetOptions &Options);
 

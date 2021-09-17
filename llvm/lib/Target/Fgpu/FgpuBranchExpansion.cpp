@@ -73,7 +73,6 @@
 
 #include "MCTargetDesc/FgpuABIInfo.h"
 #include "MCTargetDesc/FgpuBaseInfo.h"
-#include "MCTargetDesc/FgpuMCNaCl.h"
 #include "MCTargetDesc/FgpuMCTargetDesc.h"
 #include "Fgpu.h"
 #include "FgpuInstrInfo.h"
@@ -374,28 +373,29 @@ void FgpuBranchExpansion::replaceBranch(MachineBasicBlock &MBB, Iter Br,
 bool FgpuBranchExpansion::buildProperJumpMI(MachineBasicBlock *MBB,
                                             MachineBasicBlock::iterator Pos,
                                             DebugLoc DL) {
-  bool HasR6 = ABI.IsN64() ? STI->hasFgpu64r6() : STI->hasFgpu32r6();
-  bool AddImm = HasR6 && !STI->useIndirectJumpsHazard();
-
-  unsigned JR = ABI.IsN64() ? Fgpu::JR64 : Fgpu::JR;
-  unsigned JIC = ABI.IsN64() ? Fgpu::JIC64 : Fgpu::JIC;
-  unsigned JR_HB = ABI.IsN64() ? Fgpu::JR_HB64 : Fgpu::JR_HB;
-  unsigned JR_HB_R6 = ABI.IsN64() ? Fgpu::JR_HB64_R6 : Fgpu::JR_HB_R6;
-
-  unsigned JumpOp;
-  if (STI->useIndirectJumpsHazard())
-    JumpOp = HasR6 ? JR_HB_R6 : JR_HB;
-  else
-    JumpOp = HasR6 ? JIC : JR;
-
-
-  unsigned ATReg = ABI.IsN64() ? Fgpu::AT_64 : Fgpu::AT;
-  MachineInstrBuilder Instr =
-      BuildMI(*MBB, Pos, DL, TII->get(JumpOp)).addReg(ATReg);
-  if (AddImm)
-    Instr.addImm(0);
-
-  return !AddImm;
+  return false;
+//  bool HasR6 = ABI.IsN64() ? STI->hasFgpu64r6() : STI->hasFgpu32r6();
+//  bool AddImm = HasR6 && !STI->useIndirectJumpsHazard();
+//
+//  unsigned JR = ABI.IsN64() ? Fgpu::JR64 : Fgpu::JR;
+//  unsigned JIC = ABI.IsN64() ? Fgpu::JIC64 : Fgpu::JIC;
+//  unsigned JR_HB = ABI.IsN64() ? Fgpu::JR_HB64 : Fgpu::JR_HB;
+//  unsigned JR_HB_R6 = ABI.IsN64() ? Fgpu::JR_HB64_R6 : Fgpu::JR_HB_R6;
+//
+//  unsigned JumpOp;
+//  if (STI->useIndirectJumpsHazard())
+//    JumpOp = HasR6 ? JR_HB_R6 : JR_HB;
+//  else
+//    JumpOp = HasR6 ? JIC : JR;
+//
+//
+//  unsigned ATReg = ABI.IsN64() ? Fgpu::AT_64 : Fgpu::AT;
+//  MachineInstrBuilder Instr =
+//      BuildMI(*MBB, Pos, DL, TII->get(JumpOp)).addReg(ATReg);
+//  if (AddImm)
+//    Instr.addImm(0);
+//
+//  return !AddImm;
 }
 
 // Expand branch instructions to long branches.
@@ -728,52 +728,19 @@ static void emitGPDisp(MachineFunction &F, const FgpuInstrInfo *TII) {
   MachineBasicBlock &MBB = F.front();
   MachineBasicBlock::iterator I = MBB.begin();
   DebugLoc DL = MBB.findDebugLoc(MBB.begin());
-  BuildMI(MBB, I, DL, TII->get(Fgpu::LUi), Fgpu::V0)
+  BuildMI(MBB, I, DL, TII->get(Fgpu::LUi), Fgpu::R2)
       .addExternalSymbol("_gp_disp", FgpuII::MO_ABS_HI);
-  BuildMI(MBB, I, DL, TII->get(Fgpu::ADDiu), Fgpu::V0)
-      .addReg(Fgpu::V0)
+  BuildMI(MBB, I, DL, TII->get(Fgpu::Li), Fgpu::R3)
       .addExternalSymbol("_gp_disp", FgpuII::MO_ABS_LO);
-  MBB.removeLiveIn(Fgpu::V0);
+  BuildMI(MBB, I, DL, TII->get(Fgpu::OR), Fgpu::R3)
+      .addReg(Fgpu::R2).addReg(Fgpu::R2).addReg(Fgpu::R3);
+  MBB.removeLiveIn(Fgpu::R2);
+  MBB.removeLiveIn(Fgpu::R3);
+  //TODO: handle this better???
 }
 
 bool FgpuBranchExpansion::handleForbiddenSlot() {
-  // Forbidden slot hazards are only defined for FGPUR6 but not microFGPUR6.
-  if (!STI->hasFgpu32r6())
-    return false;
-
-  bool Changed = false;
-
-  for (MachineFunction::iterator FI = MFp->begin(); FI != MFp->end(); ++FI) {
-    for (Iter I = FI->begin(); I != FI->end(); ++I) {
-
-      // Forbidden slot hazard handling. Use lookahead over state.
-      if (!TII->HasForbiddenSlot(*I))
-        continue;
-
-      Iter Inst;
-      bool LastInstInFunction =
-          std::next(I) == FI->end() && std::next(FI) == MFp->end();
-      if (!LastInstInFunction) {
-        std::pair<Iter, bool> Res = getNextMachineInstr(std::next(I), &*FI);
-        LastInstInFunction |= Res.second;
-        Inst = Res.first;
-      }
-
-      if (LastInstInFunction || !TII->SafeInForbiddenSlot(*Inst)) {
-
-        MachineBasicBlock::instr_iterator Iit = I->getIterator();
-        if (std::next(Iit) == FI->end() ||
-            std::next(Iit)->getOpcode() != Fgpu::NOP) {
-          Changed = true;
-          MIBundleBuilder(&*I).append(
-              BuildMI(*MFp, I->getDebugLoc(), TII->get(Fgpu::NOP)));
-          NumInsertedNops++;
-        }
-      }
-    }
-  }
-
-  return Changed;
+  return false;
 }
 
 bool FgpuBranchExpansion::handlePossibleLongBranch() {
@@ -800,14 +767,6 @@ bool FgpuBranchExpansion::handlePossibleLongBranch() {
           (Br->isConditionalBranch() ||
            (Br->isUnconditionalBranch() && IsPIC))) {
         int64_t Offset = computeOffset(&*Br);
-
-        if (STI->isTargetNaCl()) {
-          // The offset calculation does not include sandboxing instructions
-          // that will be added later in the MC layer.  Since at this point we
-          // don't know the exact amount of code that "sandboxing" will add, we
-          // conservatively estimate that code will not grow more than 100%.
-          Offset *= 2;
-        }
 
         if (ForceLongBranchFirstPass ||
             !TII->isBranchOffsetInRange(Br->getOpcode(), Offset)) {
@@ -845,7 +804,7 @@ bool FgpuBranchExpansion::runOnMachineFunction(MachineFunction &MF) {
   STI = &static_cast<const FgpuSubtarget &>(MF.getSubtarget());
   TII = static_cast<const FgpuInstrInfo *>(STI->getInstrInfo());
 
-  if (IsPIC && ABI.IsO32() &&
+  if (IsPIC &&
       MF.getInfo<FgpuFunctionInfo>()->globalBaseRegSet())
     emitGPDisp(MF, TII);
 

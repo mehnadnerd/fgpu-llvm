@@ -15,7 +15,6 @@
 #include "MCTargetDesc/FgpuABIInfo.h"
 #include "MCTargetDesc/FgpuBaseInfo.h"
 #include "MCTargetDesc/FgpuInstPrinter.h"
-#include "MCTargetDesc/FgpuMCNaCl.h"
 #include "MCTargetDesc/FgpuMCTargetDesc.h"
 #include "Fgpu.h"
 #include "FgpuMCInstLower.h"
@@ -81,10 +80,6 @@ bool FgpuAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   FgpuFI = MF.getInfo<FgpuFunctionInfo>();
   MCP = MF.getConstantPool();
 
-  // In NaCl, all indirect jump targets must be aligned to bundle size.
-  if (Subtarget->isTargetNaCl())
-    NaClAlignIndirectJumpTargets(MF);
-
   AsmPrinter::runOnMachineFunction(MF);
 
   emitXRayTable();
@@ -105,7 +100,7 @@ void FgpuAsmPrinter::emitPseudoIndirectBranch(MCStreamer &OutStreamer,
                                               const MachineInstr *MI) {
   bool HasLinkReg = false;
   MCInst TmpInst0;
-
+  //TODO: make work
   if (Subtarget->hasFgpu64r6()) {
     // FGPU64r6 should use (JALR64 ZERO_64, $rs)
     TmpInst0.setOpcode(Fgpu::JALR64);
@@ -122,7 +117,7 @@ void FgpuAsmPrinter::emitPseudoIndirectBranch(MCStreamer &OutStreamer,
   MCOperand MCOp;
 
   if (HasLinkReg) {
-    unsigned ZeroReg = Subtarget->isGP64bit() ? Fgpu::ZERO_64 : Fgpu::ZERO;
+    unsigned ZeroReg = Fgpu::ZERO;
     TmpInst0.addOperand(MCOperand::createReg(ZeroReg));
   }
 

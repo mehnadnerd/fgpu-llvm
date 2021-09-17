@@ -73,15 +73,6 @@ void FgpuELFStreamer::createPendingLabelRelocs() {
   FgpuTargetELFStreamer *ELFTargetStreamer =
       static_cast<FgpuTargetELFStreamer *>(getTargetStreamer());
 
-  // FIXME: Also mark labels when in FGPU16 mode.
-  if (ELFTargetStreamer->isMicroFgpuEnabled()) {
-    for (auto *L : Labels) {
-      auto *Label = cast<MCSymbolELF>(L);
-      getAssembler().registerSymbol(*Label);
-      Label->setOther(ELF::STO_MIPS_MICROMIPS);
-    }
-  }
-
   Labels.clear();
 }
 

@@ -80,10 +80,10 @@ namespace FgpuII {
     MO_GOT_PAGE,
     MO_GOT_OFST,
 
-    /// MO_HIGHER/HIGHEST - Represents the highest or higher half word of a
-    /// 64-bit symbol address.
-    MO_HIGHER,
-    MO_HIGHEST,
+    ///// MO_HIGHER/HIGHEST - Represents the highest or higher half word of a
+    ///// 64-bit symbol address.
+    //MO_HIGHER,
+    //MO_HIGHEST,
 
     /// MO_GOT_HI16/LO16, MO_CALL_HI16/LO16 - Relocations used for large GOTs.
     MO_GOT_HI16,
@@ -104,28 +104,17 @@ namespace FgpuII {
     // Pseudo - This represents an instruction that is a pseudo instruction
     // or one that has not been implemented yet.  It is illegal to code generate
     // it, but tolerated for intermediate implementation stages.
-    Pseudo   = 0,
+    FrmPseudo = 0,
 
-    /// FrmR - This form is for instructions of the format R.
-    FrmR  = 1,
-    /// FrmI - This form is for instructions of the format I.
-    FrmI  = 2,
-    /// FrmJ - This form is for instructions of the format J.
-    FrmJ  = 3,
-    /// FrmFR - This form is for instructions of the format FR.
-    FrmFR = 4,
-    /// FrmFI - This form is for instructions of the format FI.
-    FrmFI = 5,
+    /// This form is for instructions of the format RRR.
+    FrmRRR  = 1,
+    /// This form is for instructions of the format RRI.
+    FrmRRI  = 2,
     /// FrmOther - This form is for instructions that have no specific format.
-    FrmOther = 6,
-
-    FormMask = 15,
-    /// IsCTI - Instruction is a Control Transfer Instruction.
-    IsCTI = 1 << 4,
-    /// HasForbiddenSlot - Instruction has a forbidden slot.
-    HasForbiddenSlot = 1 << 5,
-    /// HasFCCRegOperand - Instruction uses an $fcc<x> register.
-    HasFCCRegOperand = 1 << 6
+    FrmRI = 3,
+    // ret operation
+    FrmCtrl = 4,
+    FrmMask = 15
 
   };
 
@@ -134,7 +123,7 @@ namespace FgpuII {
     OPERAND_MEM_SIMM9 = OPERAND_FIRST_FGPU_MEM_IMM,
     OPERAND_LAST_FGPU_MEM_IMM = OPERAND_MEM_SIMM9
   };
-}
-}
+} // namespace FgpuII
+} // namespace llvm
 
 #endif

@@ -147,7 +147,7 @@ bool FgpuInstructionSelector::materialize32BitImm(Register DestReg, APInt Imm,
   // Ori zero extends immediate. Used for values with zeros in high 16 bits.
   if (Imm.getHiBits(16).isNullValue()) {
     MachineInstr *Inst =
-        B.buildInstr(Fgpu::ORi, {DestReg}, {Register(Fgpu::ZERO)})
+        B.buildInstr(Fgpu::Li, {DestReg}, {Register(Fgpu::ZERO)})
             .addImm(Imm.getLoBits(16).getLimitedValue());
     return constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
   }
@@ -157,22 +157,15 @@ bool FgpuInstructionSelector::materialize32BitImm(Register DestReg, APInt Imm,
                              .addImm(Imm.getHiBits(16).getLimitedValue());
     return constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
   }
-  // ADDiu sign extends immediate. Used for values with 1s in high 17 bits.
-  if (Imm.isSignedIntN(16)) {
-    MachineInstr *Inst =
-        B.buildInstr(Fgpu::ADDiu, {DestReg}, {Register(Fgpu::ZERO)})
-            .addImm(Imm.getLoBits(16).getLimitedValue());
-    return constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
-  }
   // Values that cannot be materialized with single immediate instruction.
-  Register LUiReg = B.getMRI()->createVirtualRegister(&Fgpu::GPR32RegClass);
+  Register LUiReg = B.getMRI()->createVirtualRegister(&Fgpu::GPROutRegClass);
   MachineInstr *LUi = B.buildInstr(Fgpu::LUi, {LUiReg}, {})
                           .addImm(Imm.getHiBits(16).getLimitedValue());
-  MachineInstr *ORi = B.buildInstr(Fgpu::ORi, {DestReg}, {LUiReg})
+  MachineInstr *Li = B.buildInstr(Fgpu::Li, {DestReg}, {LUiReg})
                           .addImm(Imm.getLoBits(16).getLimitedValue());
   if (!constrainSelectedInstRegOperands(*LUi, TII, TRI, RBI))
     return false;
-  if (!constrainSelectedInstRegOperands(*ORi, TII, TRI, RBI))
+  if (!constrainSelectedInstRegOperands(*Li, TII, TRI, RBI))
     return false;
   return true;
 }
@@ -192,6 +185,7 @@ FgpuInstructionSelector::selectLoadStoreOpCode(MachineInstr &I,
     assert(((Ty.isScalar() && TySize == 32) ||
             (Ty.isPointer() && TySize == 32 && MemSizeInBytes == 4)) &&
            "Unsupported register bank, LLT, MemSizeInBytes combination");
+    assert(!G_SEXTLOAD && "SEXT loads not supported");
     (void)TySize;
     if (isStore)
       switch (MemSizeInBytes) {
@@ -210,9 +204,9 @@ FgpuInstructionSelector::selectLoadStoreOpCode(MachineInstr &I,
       case 4:
         return Fgpu::LW;
       case 2:
-        return Opc == TargetOpcode::G_SEXTLOAD ? Fgpu::LH : Fgpu::LHu;
+        return Fgpu::LH;
       case 1:
-        return Opc == TargetOpcode::G_SEXTLOAD ? Fgpu::LB : Fgpu::LBu;
+        return Fgpu::LB;
       default:
         return Opc;
       }
