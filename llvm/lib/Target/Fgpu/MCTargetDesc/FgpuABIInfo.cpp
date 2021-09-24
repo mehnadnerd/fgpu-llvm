@@ -76,15 +76,15 @@ unsigned FgpuABIInfo::GetZeroReg() const {
 }
 
 unsigned FgpuABIInfo::GetPtrAdduOp() const {
-  return Fgpu::ADDu;
+  return Fgpu::ADD;
 }
 
 unsigned FgpuABIInfo::GetPtrAddiuOp() const {
-  return Fgpu::ADDiu;
+  return Fgpu::ADDi;
 }
 
 unsigned FgpuABIInfo::GetPtrSubuOp() const {
-  return Fgpu::SUBu;
+  return Fgpu::SUB;
 }
 
 unsigned FgpuABIInfo::GetPtrAndOp() const {

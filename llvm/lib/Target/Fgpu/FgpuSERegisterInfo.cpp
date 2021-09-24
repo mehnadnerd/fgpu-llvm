@@ -52,11 +52,7 @@ requiresFrameIndexScavenging(const MachineFunction &MF) const {
 
 const TargetRegisterClass *
 FgpuSERegisterInfo::intRegClass(unsigned Size) const {
-  if (Size == 4)
-    return &Fgpu::GPR32RegClass;
-
-  assert(Size == 8);
-  return &Fgpu::GPR64RegClass;
+  return &Fgpu::GPROutRegClass;
 }
 
 /// Get the size of the offset supported by the given load/store/inline asm.
@@ -65,34 +61,15 @@ FgpuSERegisterInfo::intRegClass(unsigned Size) const {
 static inline unsigned getLoadStoreOffsetSizeInBits(const unsigned Opcode,
                                                     MachineOperand MO) {
   switch (Opcode) {
-  case Fgpu::LD_B:
-  case Fgpu::ST_B:
+  case Fgpu::LB:
+  case Fgpu::SB:
     return 10;
-  case Fgpu::LD_H:
-  case Fgpu::ST_H:
+  case Fgpu::LH:
+  case Fgpu::SH:
     return 10 + 1 /* scale factor */;
-  case Fgpu::LD_W:
-  case Fgpu::ST_W:
+  case Fgpu::LW:
+  case Fgpu::SW:
     return 10 + 2 /* scale factor */;
-  case Fgpu::LD_D:
-  case Fgpu::ST_D:
-    return 10 + 3 /* scale factor */;
-  case Fgpu::LL:
-  case Fgpu::LL64:
-  case Fgpu::LLD:
-  case Fgpu::LLE:
-  case Fgpu::SC:
-  case Fgpu::SC64:
-  case Fgpu::SCD:
-  case Fgpu::SCE:
-    return 16;
-  case Fgpu::LL64_R6:
-  case Fgpu::LL_R6:
-  case Fgpu::LLD_R6:
-  case Fgpu::SC64_R6:
-  case Fgpu::SCD_R6:
-  case Fgpu::SC_R6:
-    return 9;
   case Fgpu::INLINEASM: {
     unsigned ConstraintID = InlineAsm::getMemoryConstraintID(MO.getImm());
     switch (ConstraintID) {
@@ -101,9 +78,6 @@ static inline unsigned getLoadStoreOffsetSizeInBits(const unsigned Opcode,
                                            ->getParent()
                                            ->getParent()
                                            ->getSubtarget<FgpuSubtarget>();
-
-      if (Subtarget.hasFgpu32r6())
-        return 9;
 
       return 16;
     }
@@ -119,15 +93,12 @@ static inline unsigned getLoadStoreOffsetSizeInBits(const unsigned Opcode,
 /// Get the scale factor applied to the immediate in the given load/store.
 static inline unsigned getLoadStoreOffsetAlign(const unsigned Opcode) {
   switch (Opcode) {
-  case Fgpu::LD_H:
-  case Fgpu::ST_H:
+  case Fgpu::LH:
+  case Fgpu::SH:
     return 2;
-  case Fgpu::LD_W:
-  case Fgpu::ST_W:
+  case Fgpu::LW:
+  case Fgpu::SW:
     return 4;
-  case Fgpu::LD_D:
-  case Fgpu::ST_D:
-    return 8;
   default:
     return 1;
   }
@@ -210,8 +181,7 @@ void FgpuSERegisterInfo::eliminateFI(MachineBasicBlock::iterator II,
       // (where n < 16) and doesn't, but does fit into 16-bits then use an ADDiu
       MachineBasicBlock &MBB = *MI.getParent();
       DebugLoc DL = II->getDebugLoc();
-      const TargetRegisterClass *PtrRC =
-          ABI.ArePtrs64bit() ? &Fgpu::GPR64RegClass : &Fgpu::GPR32RegClass;
+      const TargetRegisterClass *PtrRC = &Fgpu::GPROutRegClass;
       MachineRegisterInfo &RegInfo = MBB.getParent()->getRegInfo();
       Register Reg = RegInfo.createVirtualRegister(PtrRC);
       const FgpuSEInstrInfo &TII =

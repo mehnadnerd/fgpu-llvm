@@ -100,19 +100,21 @@ void FgpuAsmPrinter::emitPseudoIndirectBranch(MCStreamer &OutStreamer,
                                               const MachineInstr *MI) {
   bool HasLinkReg = false;
   MCInst TmpInst0;
+  assert(false && "I haven't implemented this");
+  return;
   //TODO: make work
-  if (Subtarget->hasFgpu64r6()) {
-    // FGPU64r6 should use (JALR64 ZERO_64, $rs)
-    TmpInst0.setOpcode(Fgpu::JALR64);
-    HasLinkReg = true;
-  } else if (Subtarget->hasFgpu32r6()) {
-    // FGPU32r6 should use (JALR ZERO, $rs)
-    TmpInst0.setOpcode(Fgpu::JALR);
-    HasLinkReg = true;
-  } else {
-    // Everything else should use (JR $rs)
-    TmpInst0.setOpcode(Fgpu::JR);
-  }
+  //if (Subtarget->hasFgpu64r6()) {
+  //  // FGPU64r6 should use (JALR64 ZERO_64, $rs)
+  //  TmpInst0.setOpcode(Fgpu::JALR64);
+  //  HasLinkReg = true;
+  //} else if (Subtarget->hasFgpu32r6()) {
+  //  // FGPU32r6 should use (JALR ZERO, $rs)
+  //  TmpInst0.setOpcode(Fgpu::JALR);
+  //  HasLinkReg = true;
+  //} else {
+  //  // Everything else should use (JR $rs)
+  //  TmpInst0.setOpcode(Fgpu::JR);
+  //}
 
   MCOperand MCOp;
 
@@ -205,15 +207,16 @@ void FgpuAsmPrinter::emitInstruction(const MachineInstr *MI) {
     if (I->isBundle())
       continue;
 
-    if (I->getOpcode() == Fgpu::PseudoReturn ||
-        I->getOpcode() == Fgpu::PseudoReturn64 ||
-        I->getOpcode() == Fgpu::PseudoIndirectBranch ||
-        I->getOpcode() == Fgpu::PseudoIndirectBranch64 ||
-        I->getOpcode() == Fgpu::TAILCALLREG ||
-        I->getOpcode() == Fgpu::TAILCALLREG64) {
-      emitPseudoIndirectBranch(*OutStreamer, &*I);
-      continue;
-    }
+    //TODO: add these back if should
+    //if (I->getOpcode() == Fgpu::PseudoReturn ||
+    //    I->getOpcode() == Fgpu::PseudoReturn64 ||
+    //    I->getOpcode() == Fgpu::PseudoIndirectBranch ||
+    //    I->getOpcode() == Fgpu::PseudoIndirectBranch64 ||
+    //    I->getOpcode() == Fgpu::TAILCALLREG ||
+    //    I->getOpcode() == Fgpu::TAILCALLREG64) {
+    //  emitPseudoIndirectBranch(*OutStreamer, &*I);
+    //  continue;
+    //}
 
     // The inFgpu16Mode() test is not permanent.
     // Some instructions are marked as pseudo right now which
@@ -279,32 +282,25 @@ void FgpuAsmPrinter::printSavedRegsBitmask() {
   const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
   const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
   // size of stack area to which FP callee-saved regs are saved.
-  unsigned CPURegSize = TRI->getRegSizeInBits(Fgpu::GPR32RegClass) / 8;
-  unsigned FGR32RegSize = TRI->getRegSizeInBits(Fgpu::FGR32RegClass) / 8;
-  unsigned AFGR64RegSize = TRI->getRegSizeInBits(Fgpu::AFGR64RegClass) / 8;
-  bool HasAFGR64Reg = false;
+  unsigned CPURegSize = TRI->getRegSizeInBits(Fgpu::GPROutRegClass) / 8;
+  unsigned FPURegSize = TRI->getRegSizeInBits(Fgpu::VecRegsRegClass) / 8;
   unsigned CSFPRegsSize = 0;
 
   for (const auto &I : CSI) {
-    unsigned Reg = I.getReg();
+    Register Reg = I.getReg();
     unsigned RegNum = TRI->getEncodingValue(Reg);
 
     // If it's a floating point register, set the FPU Bitmask.
     // If it's a general purpose register, set the CPU Bitmask.
-    if (Fgpu::FGR32RegClass.contains(Reg)) {
+    if (Fgpu::VecRegsRegClass.contains(Reg)) {
       FPUBitmask |= (1 << RegNum);
-      CSFPRegsSize += FGR32RegSize;
-    } else if (Fgpu::AFGR64RegClass.contains(Reg)) {
-      FPUBitmask |= (3 << RegNum);
-      CSFPRegsSize += AFGR64RegSize;
-      HasAFGR64Reg = true;
-    } else if (Fgpu::GPR32RegClass.contains(Reg))
+      CSFPRegsSize += FPURegSize;
+    } else if (Fgpu::GPROutRegClass.contains(Reg))
       CPUBitmask |= (1 << RegNum);
   }
 
   // FP Regs are saved right below where the virtual frame pointer points to.
-  FPUTopSavedRegOff = FPUBitmask ?
-    (HasAFGR64Reg ? -AFGR64RegSize : -FGR32RegSize) : 0;
+  FPUTopSavedRegOff = FPUBitmask ? -FPURegSize : 0;
 
   // CPU Regs are saved below FP Regs.
   CPUTopSavedRegOff = CPUBitmask ? -CSFPRegsSize - CPURegSize : 0;
@@ -335,20 +331,13 @@ void FgpuAsmPrinter::emitFrameDirective() {
 /// Emit Set directives.
 const char *FgpuAsmPrinter::getCurrentABIString() const {
   switch (static_cast<FgpuTargetMachine &>(TM).getABI().GetEnumValue()) {
-  case FgpuABIInfo::ABI::O32:  return "abi32";
-  case FgpuABIInfo::ABI::N32:  return "abiN32";
-  case FgpuABIInfo::ABI::N64:  return "abi64";
+  case FgpuABIInfo::ABI::CC_Fgpu:  return "cc_fgpu";
   default: llvm_unreachable("Unknown Fgpu ABI");
   }
 }
 
 void FgpuAsmPrinter::emitFunctionEntryLabel() {
   FgpuTargetStreamer &TS = getTargetStreamer();
-
-  // NaCl sandboxing requires that indirect call instructions are masked.
-  // This means that function entry points should be bundle-aligned.
-  if (Subtarget->isTargetNaCl())
-    emitAlignment(std::max(MF->getAlignment(), FGPU_NACL_BUNDLE_ALIGN));
 
   TS.emitDirectiveEnt(*CurrentFnSym);
   OutStreamer->emitLabel(CurrentFnSym);
@@ -503,24 +492,19 @@ bool FgpuAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNum,
       // Number of registers represented by this operand. We are looking
       // for 2 for 32 bit mode and 1 for 64 bit mode.
       if (NumVals != 2) {
-        if (Subtarget->isGP64bit() && NumVals == 1 && MO.isReg()) {
-          Register Reg = MO.getReg();
-          O << '$' << FgpuInstPrinter::getRegisterName(Reg);
-          return false;
-        }
         return true;
       }
 
       unsigned RegOp = OpNum;
-      if (!Subtarget->isGP64bit()){
+      if (true){
         // Endianness reverses which register holds the high or low value
         // between M and L.
         switch(ExtraCode[0]) {
         case 'M':
-          RegOp = (Subtarget->isLittle()) ? OpNum + 1 : OpNum;
+          RegOp = OpNum + 1;
           break;
         case 'L':
-          RegOp = (Subtarget->isLittle()) ? OpNum : OpNum + 1;
+          RegOp = OpNum;
           break;
         case 'D': // Always the second part
           RegOp = OpNum + 1;
@@ -568,12 +552,9 @@ bool FgpuAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
       Offset += 4;
       break;
     case 'M':
-      if (Subtarget->isLittle())
-        Offset += 4;
+      Offset += 4;
       break;
     case 'L':
-      if (!Subtarget->isLittle())
-        Offset += 4;
       break;
     default:
       return true; // Unknown modifier.
@@ -600,8 +581,6 @@ void FgpuAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
   case FgpuII::MO_GOT:      O << "%got(";    break;
   case FgpuII::MO_ABS_HI:   O << "%hi(";     break;
   case FgpuII::MO_ABS_LO:   O << "%lo(";     break;
-  case FgpuII::MO_HIGHER:   O << "%higher("; break;
-  case FgpuII::MO_HIGHEST:  O << "%highest(("; break;
   case FgpuII::MO_TLSGD:    O << "%tlsgd(";  break;
   case FgpuII::MO_GOTTPREL: O << "%gottprel("; break;
   case FgpuII::MO_TPREL_HI: O << "%tprel_hi("; break;
@@ -711,17 +690,17 @@ void FgpuAsmPrinter::emitStartOfAsmFile(Module &M) {
   StringRef CPU = FGPU_MC::selectFgpuCPU(TT, TM.getTargetCPU());
   StringRef FS = TM.getTargetFeatureString();
   const FgpuTargetMachine &MTM = static_cast<const FgpuTargetMachine &>(TM);
-  const FgpuSubtarget STI(TT, CPU, FS, MTM.isLittleEndian(), MTM, None);
+  const FgpuSubtarget STI(TT, CPU, FS, MTM, None);
 
-  bool IsABICalls = STI.isABICalls();
+  bool IsABICalls = false;//STI.isABICalls();
   const FgpuABIInfo &ABI = MTM.getABI();
   if (IsABICalls) {
-    TS.emitDirectiveAbiCalls();
+    //TS.emitDirectiveAbiCalls(); // TODO: what is this supposed to do?
     // FIXME: This condition should be a lot more complicated that it is here.
     //        Ideally it should test for properties of the ABI and not the ABI
     //        itself.
     //        For the moment, I'm only correcting enough to make FGPU-IV work.
-    if (!isPositionIndependent() && STI.hasSym32())
+    if (!isPositionIndependent())
       TS.emitDirectiveOptionPic0();
   }
 
@@ -730,28 +709,9 @@ void FgpuAsmPrinter::emitStartOfAsmFile(Module &M) {
   OutStreamer->SwitchSection(
       OutContext.getELFSection(SectionName, ELF::SHT_PROGBITS, 0));
 
-  // NaN: At the moment we only support:
-  // 1. .nan legacy (default)
-  // 2. .nan 2008
-  STI.isNaN2008() ? TS.emitDirectiveNaN2008()
-                  : TS.emitDirectiveNaNLegacy();
-
   // TODO: handle O64 ABI
 
   TS.updateABIInfo(STI);
-
-  // We should always emit a '.module fp=...' but binutils 2.24 does not accept
-  // it. We therefore emit it when it contradicts the ABI defaults (-mfpxx or
-  // -mfp64) and omit it otherwise.
-  if ((ABI.IsO32() && (STI.isABI_FPXX() || STI.isFP64bit())) ||
-      STI.useSoftFloat())
-    TS.emitDirectiveModuleFP();
-
-  // We should always emit a '.module [no]oddspreg' but binutils 2.24 does not
-  // accept it. We therefore emit it when it contradicts the default or an
-  // option has changed the default (i.e. FPXX) and omit it otherwise.
-  if (ABI.IsO32() && (!STI.useOddSPReg() || STI.isABI_FPXX()))
-    TS.emitDirectiveModuleOddSPReg();
 
   // Switch to the .text section.
   OutStreamer->SwitchSection(getObjFileLowering().getTextSection());
@@ -781,7 +741,7 @@ void FgpuAsmPrinter::emitInlineAsmEnd(const MCSubtargetInfo &StartInfo,
 
 void FgpuAsmPrinter::EmitJal(const MCSubtargetInfo &STI, MCSymbol *Symbol) {
   MCInst I;
-  I.setOpcode(Fgpu::JAL);
+  I.setOpcode(Fgpu::JSUB);
   I.addOperand(
       MCOperand::createExpr(MCSymbolRefExpr::create(Symbol, OutContext)));
   OutStreamer->emitInstruction(I, STI);
@@ -804,11 +764,11 @@ void FgpuAsmPrinter::EmitInstrRegReg(const MCSubtargetInfo &STI,
   // appear backwards from their normal assembly order. It's not a trivial
   // change to fix this in the td file so we adjust for it here.
   //
-  if (Opcode == Fgpu::MTC1) {
-    unsigned Temp = Reg1;
-    Reg1 = Reg2;
-    Reg2 = Temp;
-  }
+  //if (Opcode == Fgpu::MTC1) {
+  //  unsigned Temp = Reg1;
+  //  Reg1 = Reg2;
+  //  Reg2 = Temp;
+  //}
   I.setOpcode(Opcode);
   I.addOperand(MCOperand::createReg(Reg1));
   I.addOperand(MCOperand::createReg(Reg2));
@@ -845,7 +805,7 @@ void FgpuAsmPrinter::emitEndOfAsmFile(Module &M) {
 }
 
 void FgpuAsmPrinter::EmitSled(const MachineInstr &MI, SledKind Kind) {
-  const uint8_t NoopsInSledCount = Subtarget->isGP64bit() ? 15 : 11;
+  const uint8_t NoopsInSledCount = 11;
   // For fgpu32 we want to emit the following pattern:
   //
   // .Lxray_sled_N:
@@ -931,13 +891,11 @@ void FgpuAsmPrinter::EmitSled(const MachineInstr &MI, SledKind Kind) {
 
   OutStreamer->emitLabel(Target);
 
-  if (!Subtarget->isGP64bit()) {
     EmitToStreamer(*OutStreamer,
-                   MCInstBuilder(Fgpu::ADDiu)
-                       .addReg(Fgpu::T9)
-                       .addReg(Fgpu::T9)
+                   MCInstBuilder(Fgpu::ADDi)
+                       .addReg(Fgpu::R21)
+                       .addReg(Fgpu::R21)
                        .addImm(0x34));
-  }
 
   recordSled(CurSled, MI, Kind, 2);
 }
@@ -980,41 +938,18 @@ void FgpuAsmPrinter::emitDebugValue(const MCExpr *Value, unsigned Size) const {
   AsmPrinter::emitDebugValue(Value, Size);
 }
 
-// Align all targets of indirect branches on bundle size.  Used only if target
-// is NaCl.
-void FgpuAsmPrinter::NaClAlignIndirectJumpTargets(MachineFunction &MF) {
-  // Align all blocks that are jumped to through jump table.
-  if (MachineJumpTableInfo *JtInfo = MF.getJumpTableInfo()) {
-    const std::vector<MachineJumpTableEntry> &JT = JtInfo->getJumpTables();
-    for (unsigned I = 0; I < JT.size(); ++I) {
-      const std::vector<MachineBasicBlock*> &MBBs = JT[I].MBBs;
-
-      for (unsigned J = 0; J < MBBs.size(); ++J)
-        MBBs[J]->setAlignment(FGPU_NACL_BUNDLE_ALIGN);
-    }
-  }
-
-  // If basic block address is taken, block can be target of indirect branch.
-  for (auto &MBB : MF) {
-    if (MBB.hasAddressTaken())
-      MBB.setAlignment(FGPU_NACL_BUNDLE_ALIGN);
-  }
-}
-
 bool FgpuAsmPrinter::isLongBranchPseudo(int Opcode) const {
-  return (Opcode == Fgpu::LONG_BRANCH_LUi
-          || Opcode == Fgpu::LONG_BRANCH_LUi2Op
-          || Opcode == Fgpu::LONG_BRANCH_LUi2Op_64
-          || Opcode == Fgpu::LONG_BRANCH_ADDiu
-          || Opcode == Fgpu::LONG_BRANCH_ADDiu2Op
-          || Opcode == Fgpu::LONG_BRANCH_DADDiu
-          || Opcode == Fgpu::LONG_BRANCH_DADDiu2Op);
+  return false;
+//  return (Opcode == Fgpu::LONG_BRANCH_LUi
+//          || Opcode == Fgpu::LONG_BRANCH_LUi2Op
+//          || Opcode == Fgpu::LONG_BRANCH_LUi2Op_64
+//          || Opcode == Fgpu::LONG_BRANCH_ADDiu
+//          || Opcode == Fgpu::LONG_BRANCH_ADDiu2Op
+//          || Opcode == Fgpu::LONG_BRANCH_DADDiu
+//          || Opcode == Fgpu::LONG_BRANCH_DADDiu2Op);
 }
 
 // Force static initialization.
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeFgpuAsmPrinter() {
   RegisterAsmPrinter<FgpuAsmPrinter> X(getTheFgpuTarget());
-  RegisterAsmPrinter<FgpuAsmPrinter> Y(getTheFgpuelTarget());
-  RegisterAsmPrinter<FgpuAsmPrinter> A(getTheFgpu64Target());
-  RegisterAsmPrinter<FgpuAsmPrinter> B(getTheFgpu64elTarget());
 }

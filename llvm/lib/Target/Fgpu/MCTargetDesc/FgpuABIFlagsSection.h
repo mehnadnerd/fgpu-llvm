@@ -20,7 +20,7 @@ class MCStreamer;
 
 struct FgpuABIFlagsSection {
   // Internal representation of the fp_abi related values used in .module.
-  enum class FpABIKind { ANY, XX, S32, S64, SOFT };
+  enum class FpABIKind { ANY };
 
   // Version of flags structure.
   uint16_t Version = 0;
@@ -81,108 +81,37 @@ public:
 
   template <class PredicateLibrary>
   void setISALevelAndRevisionFromPredicates(const PredicateLibrary &P) {
-    if (P.hasFgpu64()) {
-      ISALevel = 64;
-      if (P.hasFgpu64r6())
-        ISARevision = 6;
-      else if (P.hasFgpu64r5())
-        ISARevision = 5;
-      else if (P.hasFgpu64r3())
-        ISARevision = 3;
-      else if (P.hasFgpu64r2())
-        ISARevision = 2;
-      else
-        ISARevision = 1;
-    } else if (P.hasFgpu32()) {
       ISALevel = 32;
-      if (P.hasFgpu32r6())
-        ISARevision = 6;
-      else if (P.hasFgpu32r5())
-        ISARevision = 5;
-      else if (P.hasFgpu32r3())
-        ISARevision = 3;
-      else if (P.hasFgpu32r2())
-        ISARevision = 2;
-      else
-        ISARevision = 1;
-    } else {
-      ISARevision = 0;
-      if (P.hasFgpu5())
-        ISALevel = 5;
-      else if (P.hasFgpu4())
-        ISALevel = 4;
-      else if (P.hasFgpu3())
-        ISALevel = 3;
-      else if (P.hasFgpu2())
-        ISALevel = 2;
-      else if (P.hasFgpu1())
-        ISALevel = 1;
-      else
-        llvm_unreachable("Unknown ISA level!");
-    }
+      ISARevision = 1;
   }
 
   template <class PredicateLibrary>
   void setGPRSizeFromPredicates(const PredicateLibrary &P) {
-    GPRSize = P.isGP64bit() ? Fgpu::AFL_REG_64 : Fgpu::AFL_REG_32;
+    GPRSize = Fgpu::AFL_REG_32;
   }
 
   template <class PredicateLibrary>
   void setCPR1SizeFromPredicates(const PredicateLibrary &P) {
-    if (P.useSoftFloat())
-      CPR1Size = Fgpu::AFL_REG_NONE;
-    else if (P.hasMSA())
-      CPR1Size = Fgpu::AFL_REG_128;
-    else
-      CPR1Size = P.isFP64bit() ? Fgpu::AFL_REG_64 : Fgpu::AFL_REG_32;
+    CPR1Size = Fgpu::AFL_REG_32;
   }
 
   template <class PredicateLibrary>
   void setISAExtensionFromPredicates(const PredicateLibrary &P) {
-    if (P.hasCnFgpuP())
-      ISAExtension = Fgpu::AFL_EXT_OCTEONP;
-    else if (P.hasCnFgpu())
-      ISAExtension = Fgpu::AFL_EXT_OCTEON;
-    else
-      ISAExtension = Fgpu::AFL_EXT_NONE;
+    ISAExtension = Fgpu::AFL_EXT_NONE;
   }
 
   template <class PredicateLibrary>
   void setASESetFromPredicates(const PredicateLibrary &P) {
     ASESet = 0;
-    if (P.hasDSP())
-      ASESet |= Fgpu::AFL_ASE_DSP;
-    if (P.hasDSPR2())
-      ASESet |= Fgpu::AFL_ASE_DSPR2;
-    if (P.hasMSA())
-      ASESet |= Fgpu::AFL_ASE_MSA;
-    if (P.hasMT())
-      ASESet |= Fgpu::AFL_ASE_MT;
-    if (P.hasCRC())
-      ASESet |= Fgpu::AFL_ASE_CRC;
-    if (P.hasVirt())
-      ASESet |= Fgpu::AFL_ASE_VIRT;
-    if (P.hasGINV())
-      ASESet |= Fgpu::AFL_ASE_GINV;
+//    if (P.hasGINV())
+//      ASESet |= Fgpu::AFL_ASE_GINV;
   }
 
   template <class PredicateLibrary>
   void setFpAbiFromPredicates(const PredicateLibrary &P) {
-    Is32BitABI = P.isABI_O32();
+    Is32BitABI = true;
 
     FpABI = FpABIKind::ANY;
-    if (P.useSoftFloat())
-      FpABI = FpABIKind::SOFT;
-    else if (P.isABI_N32() || P.isABI_N64())
-      FpABI = FpABIKind::S64;
-    else if (P.isABI_O32()) {
-      if (P.isABI_FPXX())
-        FpABI = FpABIKind::XX;
-      else if (P.isFP64bit())
-        FpABI = FpABIKind::S64;
-      else
-        FpABI = FpABIKind::S32;
-    }
   }
 
   template <class PredicateLibrary>
@@ -193,7 +122,7 @@ public:
     setISAExtensionFromPredicates(P);
     setASESetFromPredicates(P);
     setFpAbiFromPredicates(P);
-    OddSPReg = P.useOddSPReg();
+    OddSPReg = false;
   }
 };
 

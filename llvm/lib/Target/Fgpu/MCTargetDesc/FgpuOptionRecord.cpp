@@ -25,37 +25,11 @@ void FgpuRegInfoRecord::EmitFgpuOptionRecord() {
       static_cast<FgpuTargetStreamer *>(Streamer->getTargetStreamer());
 
   Streamer->PushSection();
-
-  // We need to distinguish between N64 and the rest because at the moment
-  // we don't emit .Fgpu.options for other ELFs other than N64.
-  // Since .reginfo has the same information as .Fgpu.options (ODK_REGINFO),
-  // we can use the same abstraction (FgpuRegInfoRecord class) to handle both.
-  if (MTS->getABI().IsN64()) {
-    // The EntrySize value of 1 seems strange since the records are neither
-    // 1-byte long nor fixed length but it matches the value GAS emits.
-    MCSectionELF *Sec =
-        Context.getELFSection(".FGPU.options", ELF::SHT_MIPS_OPTIONS,
-                              ELF::SHF_ALLOC | ELF::SHF_MIPS_NOSTRIP, 1);
-    MCA.registerSection(*Sec);
-    Sec->setAlignment(Align(8));
-    Streamer->SwitchSection(Sec);
-
-    Streamer->emitInt8(ELF::ODK_REGINFO); // kind
-    Streamer->emitInt8(40);               // size
-    Streamer->emitInt16(0);               // section
-    Streamer->emitInt32(0);               // info
-    Streamer->emitInt32(ri_gprmask);
-    Streamer->emitInt32(0); // pad
-    Streamer->emitInt32(ri_cprmask[0]);
-    Streamer->emitInt32(ri_cprmask[1]);
-    Streamer->emitInt32(ri_cprmask[2]);
-    Streamer->emitInt32(ri_cprmask[3]);
-    Streamer->emitIntValue(ri_gp_value, 8);
-  } else {
+  {
     MCSectionELF *Sec = Context.getELFSection(".reginfo", ELF::SHT_MIPS_REGINFO,
                                               ELF::SHF_ALLOC, 24);
     MCA.registerSection(*Sec);
-    Sec->setAlignment(MTS->getABI().IsN32() ? Align(8) : Align(4));
+    Sec->setAlignment(Align(8));
     Streamer->SwitchSection(Sec);
 
     Streamer->emitInt32(ri_gprmask);
@@ -78,19 +52,10 @@ void FgpuRegInfoRecord::SetPhysRegUsed(unsigned Reg,
     unsigned EncVal = MCRegInfo->getEncodingValue(SubReg);
     Value |= 1 << EncVal;
 
-    if (GPR32RegClass->contains(SubReg) || GPR64RegClass->contains(SubReg))
+    if (GPRRegClass->contains(SubReg))
       ri_gprmask |= Value;
-    else if (COP0RegClass->contains(SubReg))
-      ri_cprmask[0] |= Value;
     // FGPU COP1 is the FPU.
-    else if (FGR32RegClass->contains(SubReg) ||
-             FGR64RegClass->contains(SubReg) ||
-             AFGR64RegClass->contains(SubReg) ||
-             MSA128BRegClass->contains(SubReg))
+    else if (VFPRegClass->contains(SubReg))
       ri_cprmask[1] |= Value;
-    else if (COP2RegClass->contains(SubReg))
-      ri_cprmask[2] |= Value;
-    else if (COP3RegClass->contains(SubReg))
-      ri_cprmask[3] |= Value;
   }
 }

@@ -97,8 +97,6 @@ private:
                         unsigned Reg1, unsigned Reg2, unsigned FPReg1,
                         unsigned FPReg2, bool LE);
 
-  void NaClAlignIndirectJumpTargets(MachineFunction &MF);
-
   bool isLongBranchPseudo(int Opcode) const;
 
 public:

@@ -184,23 +184,14 @@ void FgpuTargetStreamer::emitRRIII(unsigned Opcode, unsigned Reg0,
   getStreamer().emitInstruction(TmpInst, *STI);
 }
 
-void FgpuTargetStreamer::emitAddu(unsigned DstReg, unsigned SrcReg,
+void FgpuTargetStreamer::emitAdd(unsigned DstReg, unsigned SrcReg,
                                   unsigned TrgReg, bool Is64Bit,
                                   const MCSubtargetInfo *STI) {
-  emitRRR(Fgpu::ADDu, DstReg, SrcReg, TrgReg, SMLoc(),
+  assert(!Is64Bit);
+  emitRRR(Fgpu::ADD, DstReg, SrcReg, TrgReg, SMLoc(),
           STI);
 }
 
-void FgpuTargetStreamer::emitDSLL(unsigned DstReg, unsigned SrcReg,
-                                  int16_t ShiftAmount, SMLoc IDLoc,
-                                  const MCSubtargetInfo *STI) {
-  if (ShiftAmount >= 32) {
-    emitRRI(Fgpu::DSLL32, DstReg, SrcReg, ShiftAmount - 32, IDLoc, STI);
-    return;
-  }
-
-  emitRRI(Fgpu::DSLL, DstReg, SrcReg, ShiftAmount, IDLoc, STI);
-}
 
 void FgpuTargetStreamer::emitEmptyDelaySlot(bool hasShortDelaySlot, SMLoc IDLoc,
                                             const MCSubtargetInfo *STI) {
@@ -246,7 +237,7 @@ void FgpuTargetStreamer::emitStoreWithImmOffset(
   // Generate the base address in ATReg.
   emitRI(Fgpu::LUi, ATReg, HiOffset, IDLoc, STI);
   if (BaseReg != Fgpu::ZERO)
-    emitRRR(Fgpu::ADDu, ATReg, ATReg, BaseReg, IDLoc, STI);
+    emitRRR(Fgpu::ADD, ATReg, ATReg, BaseReg, IDLoc, STI);
   // Emit the store with the adjusted base and offset.
   emitRRI(Opcode, SrcReg, ATReg, LoOffset, IDLoc, STI);
 }
@@ -282,7 +273,7 @@ void FgpuTargetStreamer::emitLoadWithImmOffset(unsigned Opcode, unsigned DstReg,
   // Generate the base address in TmpReg.
   emitRI(Fgpu::LUi, TmpReg, HiOffset, IDLoc, STI);
   if (BaseReg != Fgpu::ZERO)
-    emitRRR(Fgpu::ADDu, TmpReg, TmpReg, BaseReg, IDLoc, STI);
+    emitRRR(Fgpu::ADD, TmpReg, TmpReg, BaseReg, IDLoc, STI);
   // Emit the load with the adjusted base and offset.
   emitRRI(Opcode, DstReg, TmpReg, LoOffset, IDLoc, STI);
 }
@@ -311,56 +302,6 @@ void FgpuTargetAsmStreamer::emitDirectiveSetNoMacro() {
   FgpuTargetStreamer::emitDirectiveSetNoMacro();
 }
 
-void FgpuTargetAsmStreamer::emitDirectiveSetMsa() {
-  OS << "\t.set\tmsa\n";
-  FgpuTargetStreamer::emitDirectiveSetMsa();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetNoMsa() {
-  OS << "\t.set\tnomsa\n";
-  FgpuTargetStreamer::emitDirectiveSetNoMsa();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetMt() {
-  OS << "\t.set\tmt\n";
-  FgpuTargetStreamer::emitDirectiveSetMt();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetNoMt() {
-  OS << "\t.set\tnomt\n";
-  FgpuTargetStreamer::emitDirectiveSetNoMt();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetCRC() {
-  OS << "\t.set\tcrc\n";
-  FgpuTargetStreamer::emitDirectiveSetCRC();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetNoCRC() {
-  OS << "\t.set\tnocrc\n";
-  FgpuTargetStreamer::emitDirectiveSetNoCRC();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetVirt() {
-  OS << "\t.set\tvirt\n";
-  FgpuTargetStreamer::emitDirectiveSetVirt();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetNoVirt() {
-  OS << "\t.set\tnovirt\n";
-  FgpuTargetStreamer::emitDirectiveSetNoVirt();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetGINV() {
-  OS << "\t.set\tginv\n";
-  FgpuTargetStreamer::emitDirectiveSetGINV();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetNoGINV() {
-  OS << "\t.set\tnoginv\n";
-  FgpuTargetStreamer::emitDirectiveSetNoGINV();
-}
-
 void FgpuTargetAsmStreamer::emitDirectiveSetAt() {
   OS << "\t.set\tat\n";
   FgpuTargetStreamer::emitDirectiveSetAt();
@@ -382,14 +323,6 @@ void FgpuTargetAsmStreamer::emitDirectiveEnd(StringRef Name) {
 
 void FgpuTargetAsmStreamer::emitDirectiveEnt(const MCSymbol &Symbol) {
   OS << "\t.ent\t" << Symbol.getName() << '\n';
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveAbiCalls() { OS << "\t.abicalls\n"; }
-
-void FgpuTargetAsmStreamer::emitDirectiveNaN2008() { OS << "\t.nan\t2008\n"; }
-
-void FgpuTargetAsmStreamer::emitDirectiveNaNLegacy() {
-  OS << "\t.nan\tlegacy\n";
 }
 
 void FgpuTargetAsmStreamer::emitDirectiveOptionPic0() {
@@ -418,111 +351,6 @@ void FgpuTargetAsmStreamer::emitDirectiveSetArch(StringRef Arch) {
   FgpuTargetStreamer::emitDirectiveSetArch(Arch);
 }
 
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu0() {
-  OS << "\t.set\tfgpu0\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu0();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu1() {
-  OS << "\t.set\tfgpu1\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu1();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu2() {
-  OS << "\t.set\tfgpu2\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu2();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu3() {
-  OS << "\t.set\tfgpu3\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu3();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu4() {
-  OS << "\t.set\tfgpu4\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu4();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu5() {
-  OS << "\t.set\tfgpu5\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu5();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu32() {
-  OS << "\t.set\tfgpu32\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu32();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu32R2() {
-  OS << "\t.set\tfgpu32r2\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu32R2();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu32R3() {
-  OS << "\t.set\tfgpu32r3\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu32R3();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu32R5() {
-  OS << "\t.set\tfgpu32r5\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu32R5();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu32R6() {
-  OS << "\t.set\tfgpu32r6\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu32R6();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu64() {
-  OS << "\t.set\tfgpu64\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu64();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu64R2() {
-  OS << "\t.set\tfgpu64r2\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu64R2();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu64R3() {
-  OS << "\t.set\tfgpu64r3\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu64R3();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu64R5() {
-  OS << "\t.set\tfgpu64r5\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu64R5();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu64R6() {
-  OS << "\t.set\tfgpu64r6\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu64R6();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetDsp() {
-  OS << "\t.set\tdsp\n";
-  FgpuTargetStreamer::emitDirectiveSetDsp();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetDspr2() {
-  OS << "\t.set\tdspr2\n";
-  FgpuTargetStreamer::emitDirectiveSetDspr2();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetNoDsp() {
-  OS << "\t.set\tnodsp\n";
-  FgpuTargetStreamer::emitDirectiveSetNoDsp();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFgpu3D() {
-  OS << "\t.set\tfgpu3d\n";
-  FgpuTargetStreamer::emitDirectiveSetFgpu3D();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetNoFgpu3D() {
-  OS << "\t.set\tnofgpu3d\n";
-  FgpuTargetStreamer::emitDirectiveSetNoFgpu3D();
-}
-
 void FgpuTargetAsmStreamer::emitDirectiveSetPop() {
   OS << "\t.set\tpop\n";
   FgpuTargetStreamer::emitDirectiveSetPop();
@@ -531,16 +359,6 @@ void FgpuTargetAsmStreamer::emitDirectiveSetPop() {
 void FgpuTargetAsmStreamer::emitDirectiveSetPush() {
  OS << "\t.set\tpush\n";
  FgpuTargetStreamer::emitDirectiveSetPush();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetSoftFloat() {
-  OS << "\t.set\tsoftfloat\n";
-  FgpuTargetStreamer::emitDirectiveSetSoftFloat();
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetHardFloat() {
-  OS << "\t.set\thardfloat\n";
-  FgpuTargetStreamer::emitDirectiveSetHardFloat();
 }
 
 // Print a 32 bit hex number with all numbers.
@@ -615,74 +433,6 @@ void FgpuTargetAsmStreamer::emitDirectiveCpreturn(unsigned SaveLocation,
   forbidModuleDirective();
 }
 
-void FgpuTargetAsmStreamer::emitDirectiveModuleFP() {
-  FgpuABIFlagsSection::FpABIKind FpABI = ABIFlagsSection.getFpABI();
-  if (FpABI == FgpuABIFlagsSection::FpABIKind::SOFT)
-    OS << "\t.module\tsoftfloat\n";
-  else
-    OS << "\t.module\tfp=" << ABIFlagsSection.getFpABIString(FpABI) << "\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetFp(
-    FgpuABIFlagsSection::FpABIKind Value) {
-  FgpuTargetStreamer::emitDirectiveSetFp(Value);
-
-  OS << "\t.set\tfp=";
-  OS << ABIFlagsSection.getFpABIString(Value) << "\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveModuleOddSPReg() {
-  FgpuTargetStreamer::emitDirectiveModuleOddSPReg();
-
-  OS << "\t.module\t" << (ABIFlagsSection.OddSPReg ? "" : "no") << "oddspreg\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetOddSPReg() {
-  FgpuTargetStreamer::emitDirectiveSetOddSPReg();
-  OS << "\t.set\toddspreg\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveSetNoOddSPReg() {
-  FgpuTargetStreamer::emitDirectiveSetNoOddSPReg();
-  OS << "\t.set\tnooddspreg\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveModuleSoftFloat() {
-  OS << "\t.module\tsoftfloat\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveModuleHardFloat() {
-  OS << "\t.module\thardfloat\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveModuleMT() {
-  OS << "\t.module\tmt\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveModuleCRC() {
-  OS << "\t.module\tcrc\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveModuleNoCRC() {
-  OS << "\t.module\tnocrc\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveModuleVirt() {
-  OS << "\t.module\tvirt\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveModuleNoVirt() {
-  OS << "\t.module\tnovirt\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveModuleGINV() {
-  OS << "\t.module\tginv\n";
-}
-
-void FgpuTargetAsmStreamer::emitDirectiveModuleNoGINV() {
-  OS << "\t.module\tnoginv\n";
-}
-
 // This part is for ELF object output.
 FgpuTargetELFStreamer::FgpuTargetELFStreamer(MCStreamer &S,
                                              const MCSubtargetInfo &STI)
@@ -718,46 +468,10 @@ FgpuTargetELFStreamer::FgpuTargetELFStreamer(MCStreamer &S,
   // fully, but any external user of the API that uses the MCTargetStreamer
   // would otherwise crash on assertion failure.
 
-  ABI = FgpuABIInfo(
-              STI.getTargetTriple().getArch() == Triple::ArchType::fgpu
-          ? FgpuABIInfo::O32()
-          : FgpuABIInfo::N64());
+  ABI = FgpuABIInfo(FgpuABIInfo::CC_Fgpu());
 
-  // Architecture
-  if (Features[Fgpu::FeatureFgpu64r6])
-    EFlags |= ELF::EF_FGPU_ARCH_64R6;
-  else if (Features[Fgpu::FeatureFgpu64r2] ||
-           Features[Fgpu::FeatureFgpu64r3] ||
-           Features[Fgpu::FeatureFgpu64r5])
-    EFlags |= ELF::EF_FGPU_ARCH_64R2;
-  else if (Features[Fgpu::FeatureFgpu64])
-    EFlags |= ELF::EF_FGPU_ARCH_64;
-  else if (Features[Fgpu::FeatureFgpu5])
-    EFlags |= ELF::EF_FGPU_ARCH_5;
-  else if (Features[Fgpu::FeatureFgpu4])
-    EFlags |= ELF::EF_FGPU_ARCH_4;
-  else if (Features[Fgpu::FeatureFgpu3])
-    EFlags |= ELF::EF_FGPU_ARCH_3;
-  else if (Features[Fgpu::FeatureFgpu32r6])
-    EFlags |= ELF::EF_FGPU_ARCH_32R6;
-  else if (Features[Fgpu::FeatureFgpu32r2] ||
-           Features[Fgpu::FeatureFgpu32r3] ||
-           Features[Fgpu::FeatureFgpu32r5])
-    EFlags |= ELF::EF_FGPU_ARCH_32R2;
-  else if (Features[Fgpu::FeatureFgpu32])
-    EFlags |= ELF::EF_FGPU_ARCH_32;
-  else if (Features[Fgpu::FeatureFgpu2])
-    EFlags |= ELF::EF_FGPU_ARCH_2;
-  else
     EFlags |= ELF::EF_FGPU_ARCH_1;
 
-  // Machine
-  if (Features[Fgpu::FeatureCnFgpu])
-    EFlags |= ELF::EF_FGPU_MACH_OCTEON;
-
-  // Other options.
-  if (Features[Fgpu::FeatureNaN2008])
-    EFlags |= ELF::EF_FGPU_NAN2008;
 
   MCA.setELFHeaderEFlags(EFlags);
 }
@@ -909,27 +623,6 @@ void FgpuTargetELFStreamer::emitDirectiveEnt(const MCSymbol &Symbol) {
   static_cast<const MCSymbolELF &>(Symbol).setType(ELF::STT_FUNC);
 }
 
-void FgpuTargetELFStreamer::emitDirectiveAbiCalls() {
-  MCAssembler &MCA = getStreamer().getAssembler();
-  unsigned Flags = MCA.getELFHeaderEFlags();
-  Flags |= ELF::EF_FGPU_CPIC | ELF::EF_FGPU_PIC;
-  MCA.setELFHeaderEFlags(Flags);
-}
-
-void FgpuTargetELFStreamer::emitDirectiveNaN2008() {
-  MCAssembler &MCA = getStreamer().getAssembler();
-  unsigned Flags = MCA.getELFHeaderEFlags();
-  Flags |= ELF::EF_FGPU_NAN2008;
-  MCA.setELFHeaderEFlags(Flags);
-}
-
-void FgpuTargetELFStreamer::emitDirectiveNaNLegacy() {
-  MCAssembler &MCA = getStreamer().getAssembler();
-  unsigned Flags = MCA.getELFHeaderEFlags();
-  Flags &= ~ELF::EF_FGPU_NAN2008;
-  MCA.setELFHeaderEFlags(Flags);
-}
-
 void FgpuTargetELFStreamer::emitDirectiveOptionPic0() {
   MCAssembler &MCA = getStreamer().getAssembler();
   unsigned Flags = MCA.getELFHeaderEFlags();
@@ -989,7 +682,7 @@ void FgpuTargetELFStreamer::emitDirectiveCpAdd(unsigned RegNo) {
   if (!Pic)
     return;
 
-  emitAddu(RegNo, RegNo, GPReg, getABI().IsN64(), &STI);
+  emitAdd(RegNo, RegNo, GPReg, false, &STI);
   forbidModuleDirective();
 }
 
@@ -1028,7 +721,7 @@ void FgpuTargetELFStreamer::emitDirectiveCpLoad(unsigned RegNo) {
 
   TmpInst.clear();
 
-  TmpInst.setOpcode(Fgpu::ADDiu);
+  TmpInst.setOpcode(Fgpu::ADDi);
   TmpInst.addOperand(MCOperand::createReg(GPReg));
   TmpInst.addOperand(MCOperand::createReg(GPReg));
   const MCExpr *LoSym = FgpuMCExpr::create(
@@ -1041,7 +734,7 @@ void FgpuTargetELFStreamer::emitDirectiveCpLoad(unsigned RegNo) {
 
   TmpInst.clear();
 
-  TmpInst.setOpcode(Fgpu::ADDu);
+  TmpInst.setOpcode(Fgpu::ADD);
   TmpInst.addOperand(MCOperand::createReg(GPReg));
   TmpInst.addOperand(MCOperand::createReg(GPReg));
   TmpInst.addOperand(MCOperand::createReg(RegNo));
@@ -1067,7 +760,7 @@ bool FgpuTargetELFStreamer::emitDirectiveCpRestore(
 
   // Note that .cprestore is ignored if used with the N32 and N64 ABIs or if it
   // is used in non-PIC mode.
-  if (!Pic || (getABI().IsN32() || getABI().IsN64()))
+  if (!Pic)
     return true;
 
   // Store the $gp on the stack.
@@ -1081,82 +774,83 @@ void FgpuTargetELFStreamer::emitDirectiveCpsetup(unsigned RegNo,
                                                  const MCSymbol &Sym,
                                                  bool IsReg) {
   // Only N32 and N64 emit anything for .cpsetup iff PIC is set.
-  if (!Pic || !(getABI().IsN32() || getABI().IsN64()))
+
+  //if (!Pic || !(getABI().IsN32() || getABI().IsN64()))
     return;
-
-  forbidModuleDirective();
-
-  MCAssembler &MCA = getStreamer().getAssembler();
-  MCInst Inst;
-
-  // Either store the old $gp in a register or on the stack
-  if (IsReg) {
-    // move $save, $gpreg
-    emitRRR(Fgpu::OR64, RegOrOffset, GPReg, Fgpu::ZERO, SMLoc(), &STI);
-  } else {
-    // sd $gpreg, offset($sp)
-    emitRRI(Fgpu::SD, GPReg, Fgpu::SP, RegOrOffset, SMLoc(), &STI);
-  }
-
-  if (getABI().IsN32()) {
-    MCSymbol *GPSym = MCA.getContext().getOrCreateSymbol("__gnu_local_gp");
-    const FgpuMCExpr *HiExpr = FgpuMCExpr::create(
-        FgpuMCExpr::MEK_HI, MCSymbolRefExpr::create(GPSym, MCA.getContext()),
-        MCA.getContext());
-    const FgpuMCExpr *LoExpr = FgpuMCExpr::create(
-        FgpuMCExpr::MEK_LO, MCSymbolRefExpr::create(GPSym, MCA.getContext()),
-        MCA.getContext());
-
-    // lui $gp, %hi(__gnu_local_gp)
-    emitRX(Fgpu::LUi, GPReg, MCOperand::createExpr(HiExpr), SMLoc(), &STI);
-
-    // addiu  $gp, $gp, %lo(__gnu_local_gp)
-    emitRRX(Fgpu::ADDiu, GPReg, GPReg, MCOperand::createExpr(LoExpr), SMLoc(),
-            &STI);
-
-    return;
-  }
-
-  const FgpuMCExpr *HiExpr = FgpuMCExpr::createGpOff(
-      FgpuMCExpr::MEK_HI, MCSymbolRefExpr::create(&Sym, MCA.getContext()),
-      MCA.getContext());
-  const FgpuMCExpr *LoExpr = FgpuMCExpr::createGpOff(
-      FgpuMCExpr::MEK_LO, MCSymbolRefExpr::create(&Sym, MCA.getContext()),
-      MCA.getContext());
-
-  // lui $gp, %hi(%neg(%gp_rel(funcSym)))
-  emitRX(Fgpu::LUi, GPReg, MCOperand::createExpr(HiExpr), SMLoc(), &STI);
-
-  // addiu  $gp, $gp, %lo(%neg(%gp_rel(funcSym)))
-  emitRRX(Fgpu::ADDiu, GPReg, GPReg, MCOperand::createExpr(LoExpr), SMLoc(),
-          &STI);
-
-  // daddu  $gp, $gp, $funcreg
-  emitRRR(Fgpu::DADDu, GPReg, GPReg, RegNo, SMLoc(), &STI);
+//
+//  forbidModuleDirective();
+//
+//  MCAssembler &MCA = getStreamer().getAssembler();
+//  MCInst Inst;
+//
+//  // Either store the old $gp in a register or on the stack
+//  if (IsReg) {
+//    // move $save, $gpreg
+//    emitRRR(Fgpu::OR64, RegOrOffset, GPReg, Fgpu::ZERO, SMLoc(), &STI);
+//  } else {
+//    // sd $gpreg, offset($sp)
+//    emitRRI(Fgpu::SD, GPReg, Fgpu::SP, RegOrOffset, SMLoc(), &STI);
+//  }
+//
+//  if (getABI().IsN32()) {
+//    MCSymbol *GPSym = MCA.getContext().getOrCreateSymbol("__gnu_local_gp");
+//    const FgpuMCExpr *HiExpr = FgpuMCExpr::create(
+//        FgpuMCExpr::MEK_HI, MCSymbolRefExpr::create(GPSym, MCA.getContext()),
+//        MCA.getContext());
+//    const FgpuMCExpr *LoExpr = FgpuMCExpr::create(
+//        FgpuMCExpr::MEK_LO, MCSymbolRefExpr::create(GPSym, MCA.getContext()),
+//        MCA.getContext());
+//
+//    // lui $gp, %hi(__gnu_local_gp)
+//    emitRX(Fgpu::LUi, GPReg, MCOperand::createExpr(HiExpr), SMLoc(), &STI);
+//
+//    // addiu  $gp, $gp, %lo(__gnu_local_gp)
+//    emitRRX(Fgpu::ADDiu, GPReg, GPReg, MCOperand::createExpr(LoExpr), SMLoc(),
+//            &STI);
+//
+//    return;
+//  }
+//
+//  const FgpuMCExpr *HiExpr = FgpuMCExpr::createGpOff(
+//      FgpuMCExpr::MEK_HI, MCSymbolRefExpr::create(&Sym, MCA.getContext()),
+//      MCA.getContext());
+//  const FgpuMCExpr *LoExpr = FgpuMCExpr::createGpOff(
+//      FgpuMCExpr::MEK_LO, MCSymbolRefExpr::create(&Sym, MCA.getContext()),
+//      MCA.getContext());
+//
+//  // lui $gp, %hi(%neg(%gp_rel(funcSym)))
+//  emitRX(Fgpu::LUi, GPReg, MCOperand::createExpr(HiExpr), SMLoc(), &STI);
+//
+//  // addiu  $gp, $gp, %lo(%neg(%gp_rel(funcSym)))
+//  emitRRX(Fgpu::ADDiu, GPReg, GPReg, MCOperand::createExpr(LoExpr), SMLoc(),
+//          &STI);
+//
+//  // daddu  $gp, $gp, $funcreg
+//  emitRRR(Fgpu::DADDu, GPReg, GPReg, RegNo, SMLoc(), &STI);
 }
 
 void FgpuTargetELFStreamer::emitDirectiveCpreturn(unsigned SaveLocation,
                                                   bool SaveLocationIsRegister) {
   // Only N32 and N64 emit anything for .cpreturn iff PIC is set.
-  if (!Pic || !(getABI().IsN32() || getABI().IsN64()))
+//  if (!Pic || !(getABI().IsN32() || getABI().IsN64()))
     return;
 
-  MCInst Inst;
-  // Either restore the old $gp from a register or on the stack
-  if (SaveLocationIsRegister) {
-    Inst.setOpcode(Fgpu::OR);
-    Inst.addOperand(MCOperand::createReg(GPReg));
-    Inst.addOperand(MCOperand::createReg(SaveLocation));
-    Inst.addOperand(MCOperand::createReg(Fgpu::ZERO));
-  } else {
-    Inst.setOpcode(Fgpu::LD);
-    Inst.addOperand(MCOperand::createReg(GPReg));
-    Inst.addOperand(MCOperand::createReg(Fgpu::SP));
-    Inst.addOperand(MCOperand::createImm(SaveLocation));
-  }
-  getStreamer().emitInstruction(Inst, STI);
-
-  forbidModuleDirective();
+//  MCInst Inst;
+//  // Either restore the old $gp from a register or on the stack
+//  if (SaveLocationIsRegister) {
+//    Inst.setOpcode(Fgpu::OR);
+//    Inst.addOperand(MCOperand::createReg(GPReg));
+//    Inst.addOperand(MCOperand::createReg(SaveLocation));
+//    Inst.addOperand(MCOperand::createReg(Fgpu::ZERO));
+//  } else {
+//    Inst.setOpcode(Fgpu::LD);
+//    Inst.addOperand(MCOperand::createReg(GPReg));
+//    Inst.addOperand(MCOperand::createReg(Fgpu::SP));
+//    Inst.addOperand(MCOperand::createImm(SaveLocation));
+//  }
+//  getStreamer().emitInstruction(Inst, STI);
+//
+//  forbidModuleDirective();
 }
 
 void FgpuTargetELFStreamer::emitFgpuAbiFlags() {

@@ -9,5 +9,5 @@
 //
 //===----------------------------------------------------------------------===//
 
-//def GPRBRegBank : RegisterBank<"GPRB", [GPR32]>;
-
+def GPRBRegBank : RegisterBank<"GPRB", [GPROut]>;
+def VFPRegBank : RegisterBank<"VFP", [VecRegs]>;

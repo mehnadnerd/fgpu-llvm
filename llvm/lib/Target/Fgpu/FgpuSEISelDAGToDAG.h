@@ -29,11 +29,6 @@ private:
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 
-  void addDSPCtrlRegOperands(bool IsDef, MachineInstr &MI,
-                             MachineFunction &MF);
-
-  unsigned getMSACtrlReg(const SDValue RegIdx) const;
-
   bool replaceUsesWithZeroReg(MachineRegisterInfo *MRI, const MachineInstr&);
 
   std::pair<SDNode *, SDNode *> selectMULT(SDNode *N, unsigned Opc,

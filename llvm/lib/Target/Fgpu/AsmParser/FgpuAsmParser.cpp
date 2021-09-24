@@ -119,15 +119,7 @@ private:
 } // end anonymous namespace
 
 const FeatureBitset FgpuAssemblerOptions::AllArchRelatedMask = {
-    Fgpu::FeatureFgpu1, Fgpu::FeatureFgpu2, Fgpu::FeatureFgpu3,
-    Fgpu::FeatureFgpu3_32, Fgpu::FeatureFgpu3_32r2, Fgpu::FeatureFgpu4,
-    Fgpu::FeatureFgpu4_32, Fgpu::FeatureFgpu4_32r2, Fgpu::FeatureFgpu5,
-    Fgpu::FeatureFgpu5_32r2, Fgpu::FeatureFgpu32, Fgpu::FeatureFgpu32r2,
-    Fgpu::FeatureFgpu32r3, Fgpu::FeatureFgpu32r5, Fgpu::FeatureFgpu32r6,
-    Fgpu::FeatureFgpu64, Fgpu::FeatureFgpu64r2, Fgpu::FeatureFgpu64r3,
-    Fgpu::FeatureFgpu64r5, Fgpu::FeatureFgpu64r6, Fgpu::FeatureCnFgpu,
-    Fgpu::FeatureCnFgpuP, Fgpu::FeatureFP64Bit, Fgpu::FeatureGP64Bit,
-    Fgpu::FeatureNaN2008
+//    Fgpu::FeatureFgpu1
 };
 
 namespace {
@@ -378,26 +370,10 @@ class FgpuAsmParser : public MCTargetAsmParser {
   bool parseSetNoAtDirective();
   bool parseSetMacroDirective();
   bool parseSetNoMacroDirective();
-  bool parseSetMsaDirective();
-  bool parseSetNoMsaDirective();
-  bool parseSetNoDspDirective();
-  bool parseSetNoFgpu3DDirective();
   bool parseSetReorderDirective();
   bool parseSetNoReorderDirective();
-  bool parseSetFgpu16Directive();
-  bool parseSetNoFgpu16Directive();
-  bool parseSetFpDirective();
-  bool parseSetOddSPRegDirective();
-  bool parseSetNoOddSPRegDirective();
   bool parseSetPopDirective();
   bool parseSetPushDirective();
-  bool parseSetSoftFloatDirective();
-  bool parseSetHardFloatDirective();
-  bool parseSetMtDirective();
-  bool parseSetNoMtDirective();
-  bool parseSetNoCRCDirective();
-  bool parseSetNoVirtDirective();
-  bool parseSetNoGINVDirective();
 
   bool parseSetAssignment();
 
@@ -422,14 +398,6 @@ class FgpuAsmParser : public MCTargetAsmParser {
 
   int matchFPURegisterName(StringRef Name);
 
-  int matchFCCRegisterName(StringRef Name);
-
-  int matchACRegisterName(StringRef Name);
-
-  int matchMSA128RegisterName(StringRef Name);
-
-  int matchMSA128CtrlRegisterName(StringRef Name);
-
   unsigned getReg(int RC, int RegNo);
 
   /// Returns the internal register number for the current AT. Also checks if
@@ -441,11 +409,6 @@ class FgpuAsmParser : public MCTargetAsmParser {
 
   bool processInstruction(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                           const MCSubtargetInfo *STI);
-
-  // Helper function that checks if the value of a vector index is within the
-  // boundaries of accepted values for each RegisterKind
-  // Example: INSERT.B $w0[n], $1 => 16 > n >= 0
-  bool validateMSAIndex(int Val, int RegKind);
 
   // Selects a new architecture by updating the FeatureBits with the necessary
   // info including implied dependencies.
@@ -549,8 +512,6 @@ public:
 
     getTargetStreamer().updateABIInfo(*this);
 
-    if (!isABI_O32() && !useOddSPReg() != 0)
-      report_fatal_error("-mno-odd-spreg requires the O32 ABI");
 
     CurrentFn = nullptr;
 
@@ -564,17 +525,6 @@ public:
     IsLittleEndian = TheTriple.isLittleEndian();
   }
 
-  /// True if all of $fcc0 - $fcc7 exist for the current ISA.
-  bool hasEightFccRegisters() const { return hasFgpu4() || hasFgpu32(); }
-
-  bool isGP64bit() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureGP64Bit];
-  }
-
-  bool isFP64bit() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFP64Bit];
-  }
-
   bool isJalrRelocAvailable(const MCExpr *JalExpr) {
     if (!EmitJalrReloc)
       return false;
@@ -584,136 +534,25 @@ public:
     if (Res.getSymB() != nullptr)
       return false;
     if (Res.getConstant() != 0)
-      return ABI.IsN32() || ABI.IsN64();
+      return false;
     return true;
   }
 
   const FgpuABIInfo &getABI() const { return ABI; }
-  bool isABI_N32() const { return ABI.IsN32(); }
-  bool isABI_N64() const { return ABI.IsN64(); }
-  bool isABI_O32() const { return ABI.IsO32(); }
-  bool isABI_FPXX() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFPXX];
-  }
-
-  bool useOddSPReg() const {
-    return !(getSTI().getFeatureBits()[Fgpu::FeatureNoOddSPReg]);
-  }
-
-  bool hasFgpu1() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu1];
-  }
-
-  bool hasFgpu2() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu2];
-  }
-
-  bool hasFgpu3() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu3];
-  }
-
-  bool hasFgpu4() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu4];
-  }
-
-  bool hasFgpu5() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu5];
-  }
-
-  bool hasFgpu32() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu32];
-  }
-
-  bool hasFgpu64() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu64];
-  }
-
-  bool hasFgpu32r2() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu32r2];
-  }
-
-  bool hasFgpu64r2() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu64r2];
-  }
-
-  bool hasFgpu32r3() const {
-    return (getSTI().getFeatureBits()[Fgpu::FeatureFgpu32r3]);
-  }
-
-  bool hasFgpu64r3() const {
-    return (getSTI().getFeatureBits()[Fgpu::FeatureFgpu64r3]);
-  }
-
-  bool hasFgpu32r5() const {
-    return (getSTI().getFeatureBits()[Fgpu::FeatureFgpu32r5]);
-  }
-
-  bool hasFgpu64r5() const {
-    return (getSTI().getFeatureBits()[Fgpu::FeatureFgpu64r5]);
-  }
-
-  bool hasFgpu32r6() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu32r6];
-  }
-
-  bool hasFgpu64r6() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu64r6];
-  }
-
-  bool hasDSP() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureDSP];
-  }
-
-  bool hasDSPR2() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureDSPR2];
-  }
-
-  bool hasDSPR3() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureDSPR3];
-  }
-
-  bool hasMSA() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureMSA];
-  }
-
-  bool hasCnFgpu() const {
-    return (getSTI().getFeatureBits()[Fgpu::FeatureCnFgpu]);
-  }
-
-  bool hasCnFgpuP() const {
-    return (getSTI().getFeatureBits()[Fgpu::FeatureCnFgpuP]);
-  }
+  bool isABI_N32() const { return false; }
+  bool isABI_N64() const { return false; }
+  bool isABI_O32() const { return true; }
+//  bool isABI_FPXX() const {
+//    return getSTI().getFeatureBits()[Fgpu::FeatureFPXX];
+//  }
 
   bool inPicMode() {
     return IsPicEnabled;
   }
 
-  bool inFgpu16Mode() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureFgpu16];
-  }
-
-  bool useTraps() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureUseTCCInDIV];
-  }
-
-  bool useSoftFloat() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureSoftFloat];
-  }
-  bool hasMT() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureMT];
-  }
-
-  bool hasCRC() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureCRC];
-  }
-
-  bool hasVirt() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureVirt];
-  }
-
-  bool hasGINV() const {
-    return getSTI().getFeatureBits()[Fgpu::FeatureGINV];
-  }
+//  bool hasGINV() const {
+//    return getSTI().getFeatureBits()[Fgpu::FeatureGINV];
+//  }
 
   /// Warn if RegIndex is the same as the current AT.
   void warnIfRegIndexIsAT(unsigned RegIndex, SMLoc Loc);
@@ -789,22 +628,9 @@ public:
   /// The exact class is finalized by the render method.
   enum RegKind {
     RegKind_GPR = 1,      /// GPR32 and GPR64 (depending on isGP64bit())
-    RegKind_FGR = 2,      /// FGR32, FGR64, AFGR64 (depending on context and
-                          /// isFP64bit())
-    RegKind_FCC = 4,      /// FCC
-    RegKind_MSA128 = 8,   /// MSA128[BHWD] (makes no difference which)
-    RegKind_MSACtrl = 16, /// MSA control registers
-    RegKind_COP2 = 32,    /// COP2
-    RegKind_ACC = 64,     /// HI32DSP, LO32DSP, and ACC64DSP (depending on
-                          /// context).
-    RegKind_CCR = 128,    /// CCR
-    RegKind_HWRegs = 256, /// HWRegs
-    RegKind_COP3 = 512,   /// COP3
-    RegKind_COP0 = 1024,  /// COP0
+    RegKind_VFP = 2,      /// Vector registers
     /// Potentially any (e.g. $1)
-    RegKind_Numeric = RegKind_GPR | RegKind_FGR | RegKind_FCC | RegKind_MSA128 |
-                      RegKind_MSACtrl | RegKind_COP2 | RegKind_ACC |
-                      RegKind_CCR | RegKind_HWRegs | RegKind_COP3 | RegKind_COP0
+    RegKind_Numeric = RegKind_GPR | RegKind_VFP
   };
 
 private:
@@ -894,144 +720,20 @@ private:
 public:
   /// Coerce the register to GPR32 and return the real register for the current
   /// target.
-  unsigned getGPR32Reg() const {
+  unsigned getGPRReg() const {
     assert(isRegIdx() && (RegIdx.Kind & RegKind_GPR) && "Invalid access!");
     AsmParser.warnIfRegIndexIsAT(RegIdx.Index, StartLoc);
-    unsigned ClassID = Fgpu::GPR32RegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to GPR32 and return the real register for the current
-  /// target.
-  unsigned getGPRMM16Reg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_GPR) && "Invalid access!");
-    unsigned ClassID = Fgpu::GPR32RegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to GPR64 and return the real register for the current
-  /// target.
-  unsigned getGPR64Reg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_GPR) && "Invalid access!");
-    unsigned ClassID = Fgpu::GPR64RegClassID;
+    unsigned ClassID = Fgpu::GPROutRegClassID;
     return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
   }
 
 private:
-  /// Coerce the register to AFGR64 and return the real register for the current
-  /// target.
-  unsigned getAFGR64Reg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_FGR) && "Invalid access!");
-    if (RegIdx.Index % 2 != 0)
-      AsmParser.Warning(StartLoc, "Float register should be even.");
-    return RegIdx.RegInfo->getRegClass(Fgpu::AFGR64RegClassID)
-        .getRegister(RegIdx.Index / 2);
-  }
-
-  /// Coerce the register to FGR64 and return the real register for the current
-  /// target.
-  unsigned getFGR64Reg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_FGR) && "Invalid access!");
-    return RegIdx.RegInfo->getRegClass(Fgpu::FGR64RegClassID)
-        .getRegister(RegIdx.Index);
-  }
-
   /// Coerce the register to FGR32 and return the real register for the current
   /// target.
-  unsigned getFGR32Reg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_FGR) && "Invalid access!");
-    return RegIdx.RegInfo->getRegClass(Fgpu::FGR32RegClassID)
+  unsigned getVFPReg() const {
+    assert(isRegIdx() && (RegIdx.Kind & RegKind_VFP) && "Invalid access!");
+    return RegIdx.RegInfo->getRegClass(Fgpu::VecRegsRegClassID)
         .getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to FCC and return the real register for the current
-  /// target.
-  unsigned getFCCReg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_FCC) && "Invalid access!");
-    return RegIdx.RegInfo->getRegClass(Fgpu::FCCRegClassID)
-        .getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to MSA128 and return the real register for the current
-  /// target.
-  unsigned getMSA128Reg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_MSA128) && "Invalid access!");
-    // It doesn't matter which of the MSA128[BHWD] classes we use. They are all
-    // identical
-    unsigned ClassID = Fgpu::MSA128BRegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to MSACtrl and return the real register for the
-  /// current target.
-  unsigned getMSACtrlReg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_MSACtrl) && "Invalid access!");
-    unsigned ClassID = Fgpu::MSACtrlRegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to COP0 and return the real register for the
-  /// current target.
-  unsigned getCOP0Reg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_COP0) && "Invalid access!");
-    unsigned ClassID = Fgpu::COP0RegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to COP2 and return the real register for the
-  /// current target.
-  unsigned getCOP2Reg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_COP2) && "Invalid access!");
-    unsigned ClassID = Fgpu::COP2RegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to COP3 and return the real register for the
-  /// current target.
-  unsigned getCOP3Reg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_COP3) && "Invalid access!");
-    unsigned ClassID = Fgpu::COP3RegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to ACC64DSP and return the real register for the
-  /// current target.
-  unsigned getACC64DSPReg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_ACC) && "Invalid access!");
-    unsigned ClassID = Fgpu::ACC64DSPRegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to HI32DSP and return the real register for the
-  /// current target.
-  unsigned getHI32DSPReg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_ACC) && "Invalid access!");
-    unsigned ClassID = Fgpu::HI32DSPRegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to LO32DSP and return the real register for the
-  /// current target.
-  unsigned getLO32DSPReg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_ACC) && "Invalid access!");
-    unsigned ClassID = Fgpu::LO32DSPRegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to CCR and return the real register for the
-  /// current target.
-  unsigned getCCRReg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_CCR) && "Invalid access!");
-    unsigned ClassID = Fgpu::CCRRegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
-  }
-
-  /// Coerce the register to HWRegs and return the real register for the
-  /// current target.
-  unsigned getHWRegsReg() const {
-    assert(isRegIdx() && (RegIdx.Kind & RegKind_HWRegs) && "Invalid access!");
-    unsigned ClassID = Fgpu::HWRegsRegClassID;
-    return RegIdx.RegInfo->getRegClass(ClassID).getRegister(RegIdx.Index);
   }
 
 public:
@@ -1054,146 +756,27 @@ public:
   /// is not a k_RegisterIndex compatible with RegKind_GPR
   void addGPR32ZeroAsmRegOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getGPR32Reg()));
+    Inst.addOperand(MCOperand::createReg(getGPRReg()));
   }
 
   void addGPR32NonZeroAsmRegOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getGPR32Reg()));
+    Inst.addOperand(MCOperand::createReg(getGPRReg()));
   }
 
   void addGPR32AsmRegOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getGPR32Reg()));
+    Inst.addOperand(MCOperand::createReg(getGPRReg()));
   }
 
-  void addGPRMM16AsmRegOperands(MCInst &Inst, unsigned N) const {
+  void addVFPAsmRegOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getGPRMM16Reg()));
+    Inst.addOperand(MCOperand::createReg(getVFPReg()));
   }
 
-  void addGPRMM16AsmRegZeroOperands(MCInst &Inst, unsigned N) const {
+  void addStrictlyVFPAsmRegOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getGPRMM16Reg()));
-  }
-
-  void addGPRMM16AsmRegMovePOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getGPRMM16Reg()));
-  }
-
-  void addGPRMM16AsmRegMovePPairFirstOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getGPRMM16Reg()));
-  }
-
-  void addGPRMM16AsmRegMovePPairSecondOperands(MCInst &Inst,
-                                               unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getGPRMM16Reg()));
-  }
-
-  /// Render the operand to an MCInst as a GPR64
-  /// Asserts if the wrong number of operands are requested, or the operand
-  /// is not a k_RegisterIndex compatible with RegKind_GPR
-  void addGPR64AsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getGPR64Reg()));
-  }
-
-  void addAFGR64AsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getAFGR64Reg()));
-  }
-
-  void addStrictlyAFGR64AsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getAFGR64Reg()));
-  }
-
-  void addStrictlyFGR64AsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getFGR64Reg()));
-  }
-
-  void addFGR64AsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getFGR64Reg()));
-  }
-
-  void addFGR32AsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getFGR32Reg()));
-    // FIXME: We ought to do this for -integrated-as without -via-file-asm too.
-    // FIXME: This should propagate failure up to parseStatement.
-    if (!AsmParser.useOddSPReg() && RegIdx.Index & 1)
-      AsmParser.getParser().printError(
-          StartLoc, "-mno-odd-spreg prohibits the use of odd FPU "
-                    "registers");
-  }
-
-  void addStrictlyFGR32AsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getFGR32Reg()));
-    // FIXME: We ought to do this for -integrated-as without -via-file-asm too.
-    if (!AsmParser.useOddSPReg() && RegIdx.Index & 1)
-      AsmParser.Error(StartLoc, "-mno-odd-spreg prohibits the use of odd FPU "
-                                "registers");
-  }
-
-  void addFCCAsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getFCCReg()));
-  }
-
-  void addMSA128AsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getMSA128Reg()));
-  }
-
-  void addMSACtrlAsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getMSACtrlReg()));
-  }
-
-  void addCOP0AsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getCOP0Reg()));
-  }
-
-  void addCOP2AsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getCOP2Reg()));
-  }
-
-  void addCOP3AsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getCOP3Reg()));
-  }
-
-  void addACC64DSPAsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getACC64DSPReg()));
-  }
-
-  void addHI32DSPAsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getHI32DSPReg()));
-  }
-
-  void addLO32DSPAsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getLO32DSPReg()));
-  }
-
-  void addCCRAsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getCCRReg()));
-  }
-
-  void addHWRegsAsmRegOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(getHWRegsReg()));
+    Inst.addOperand(MCOperand::createReg(getVFPReg()));
   }
 
   template <unsigned Bits, int Offset = 0, int AdjustOffset = 0>
@@ -1243,18 +826,7 @@ public:
   void addMemOperands(MCInst &Inst, unsigned N) const {
     assert(N == 2 && "Invalid number of operands!");
 
-    Inst.addOperand(MCOperand::createReg(AsmParser.getABI().ArePtrs64bit()
-                                             ? getMemBase()->getGPR64Reg()
-                                             : getMemBase()->getGPR32Reg()));
-
-    const MCExpr *Expr = getMemOff();
-    addExpr(Inst, Expr);
-  }
-
-  void addMicroFgpuMemOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 2 && "Invalid number of operands!");
-
-    Inst.addOperand(MCOperand::createReg(getMemBase()->getGPRMM16Reg()));
+    Inst.addOperand(MCOperand::createReg(getMemBase()->getGPRReg()));
 
     const MCExpr *Expr = getMemOff();
     addExpr(Inst, Expr);
@@ -1345,7 +917,7 @@ public:
       return false;
     if (!getMemBase()->isGPRAsmReg())
       return false;
-    const unsigned PtrBits = AsmParser.getABI().ArePtrs64bit() ? 64 : 32;
+    const unsigned PtrBits = 32;
     if (isa<MCTargetExpr>(getMemOff()) ||
         (isConstantMemOff() && isIntN(PtrBits, getConstantMemOff())))
       return true;
@@ -1354,25 +926,21 @@ public:
     return IsReloc && isIntN(PtrBits, Res.getConstant());
   }
 
-  bool isMemWithGRPMM16Base() const {
-    return isMem() && getMemBase()->isMM16AsmReg();
-  }
-
   template <unsigned Bits> bool isMemWithUimmOffsetSP() const {
     return isMem() && isConstantMemOff() && isUInt<Bits>(getConstantMemOff())
-      && getMemBase()->isRegIdx() && (getMemBase()->getGPR32Reg() == Fgpu::SP);
+      && getMemBase()->isRegIdx() && (getMemBase()->getGPRReg() == Fgpu::SP);
   }
 
   template <unsigned Bits> bool isMemWithUimmWordAlignedOffsetSP() const {
     return isMem() && isConstantMemOff() && isUInt<Bits>(getConstantMemOff())
       && (getConstantMemOff() % 4 == 0) && getMemBase()->isRegIdx()
-      && (getMemBase()->getGPR32Reg() == Fgpu::SP);
+      && (getMemBase()->getGPRReg() == Fgpu::SP);
   }
 
   template <unsigned Bits> bool isMemWithSimmWordAlignedOffsetGP() const {
     return isMem() && isConstantMemOff() && isInt<Bits>(getConstantMemOff())
       && (getConstantMemOff() % 4 == 0) && getMemBase()->isRegIdx()
-      && (getMemBase()->getGPR32Reg() == Fgpu::GP);
+      && (getMemBase()->getGPRReg() == Fgpu::R29);
   }
 
   template <unsigned Bits, unsigned ShiftLeftAmount>
@@ -1393,31 +961,6 @@ public:
     MCValue Res;
     bool Success = getImm()->evaluateAsRelocatable(Res, nullptr, nullptr);
     return Success && isShiftedInt<Bits, ShiftLeftAmount>(Res.getConstant());
-  }
-
-  bool isRegList16() const {
-    if (!isRegList())
-      return false;
-
-    int Size = RegList.List->size();
-    if (Size < 2 || Size > 5)
-      return false;
-
-    unsigned R0 = RegList.List->front();
-    unsigned R1 = RegList.List->back();
-    if (!((R0 == Fgpu::S0 && R1 == Fgpu::RA) ||
-          (R0 == Fgpu::S0_64 && R1 == Fgpu::RA_64)))
-      return false;
-
-    int PrevReg = *RegList.List->begin();
-    for (int i = 1; i < Size - 1; i++) {
-      int Reg = (*(RegList.List))[i];
-      if ( Reg != PrevReg + 1)
-        return false;
-      PrevReg = Reg;
-    }
-
-    return true;
   }
 
   bool isInvNum() const { return Kind == k_Immediate; }
@@ -1441,7 +984,7 @@ public:
     // $0/$zero here so that MCK_ZERO works correctly.
     if (Kind == k_RegisterIndex && RegIdx.Index == 0 &&
         RegIdx.Kind & RegKind_GPR)
-      return getGPR32Reg(); // FIXME: GPR64 too
+      return getGPRReg(); // FIXME: GPR64 too
 
     llvm_unreachable("Invalid access!");
     return 0;
@@ -1505,52 +1048,12 @@ public:
     return CreateReg(Index, Str, RegKind_GPR, RegInfo, S, E, Parser);
   }
 
-  /// Create a register that is definitely a FGR.
+  /// Create a register that is definitely a VFP.
   /// This is typically only used for named registers such as $f0.
   static std::unique_ptr<FgpuOperand>
-  createFGRReg(unsigned Index, StringRef Str, const MCRegisterInfo *RegInfo,
+  createVFPReg(unsigned Index, StringRef Str, const MCRegisterInfo *RegInfo,
                SMLoc S, SMLoc E, FgpuAsmParser &Parser) {
-    return CreateReg(Index, Str, RegKind_FGR, RegInfo, S, E, Parser);
-  }
-
-  /// Create a register that is definitely a HWReg.
-  /// This is typically only used for named registers such as $hwr_cpunum.
-  static std::unique_ptr<FgpuOperand>
-  createHWRegsReg(unsigned Index, StringRef Str, const MCRegisterInfo *RegInfo,
-                  SMLoc S, SMLoc E, FgpuAsmParser &Parser) {
-    return CreateReg(Index, Str, RegKind_HWRegs, RegInfo, S, E, Parser);
-  }
-
-  /// Create a register that is definitely an FCC.
-  /// This is typically only used for named registers such as $fcc0.
-  static std::unique_ptr<FgpuOperand>
-  createFCCReg(unsigned Index, StringRef Str, const MCRegisterInfo *RegInfo,
-               SMLoc S, SMLoc E, FgpuAsmParser &Parser) {
-    return CreateReg(Index, Str, RegKind_FCC, RegInfo, S, E, Parser);
-  }
-
-  /// Create a register that is definitely an ACC.
-  /// This is typically only used for named registers such as $ac0.
-  static std::unique_ptr<FgpuOperand>
-  createACCReg(unsigned Index, StringRef Str, const MCRegisterInfo *RegInfo,
-               SMLoc S, SMLoc E, FgpuAsmParser &Parser) {
-    return CreateReg(Index, Str, RegKind_ACC, RegInfo, S, E, Parser);
-  }
-
-  /// Create a register that is definitely an MSA128.
-  /// This is typically only used for named registers such as $w0.
-  static std::unique_ptr<FgpuOperand>
-  createMSA128Reg(unsigned Index, StringRef Str, const MCRegisterInfo *RegInfo,
-                  SMLoc S, SMLoc E, FgpuAsmParser &Parser) {
-    return CreateReg(Index, Str, RegKind_MSA128, RegInfo, S, E, Parser);
-  }
-
-  /// Create a register that is definitely an MSACtrl.
-  /// This is typically only used for named registers such as $msaaccess.
-  static std::unique_ptr<FgpuOperand>
-  createMSACtrlReg(unsigned Index, StringRef Str, const MCRegisterInfo *RegInfo,
-                   SMLoc S, SMLoc E, FgpuAsmParser &Parser) {
-    return CreateReg(Index, Str, RegKind_MSACtrl, RegInfo, S, E, Parser);
+    return CreateReg(Index, Str, RegKind_VFP, RegInfo, S, E, Parser);
   }
 
   static std::unique_ptr<FgpuOperand>
@@ -1598,87 +1101,14 @@ public:
     return isRegIdx() && RegIdx.Kind & RegKind_GPR && RegIdx.Index <= 31;
   }
 
-  bool isMM16AsmReg() const {
-    if (!(isRegIdx() && RegIdx.Kind))
-      return false;
-    return ((RegIdx.Index >= 2 && RegIdx.Index <= 7)
-            || RegIdx.Index == 16 || RegIdx.Index == 17);
-
-  }
-  bool isMM16AsmRegZero() const {
-    if (!(isRegIdx() && RegIdx.Kind))
-      return false;
-    return (RegIdx.Index == 0 ||
-            (RegIdx.Index >= 2 && RegIdx.Index <= 7) ||
-            RegIdx.Index == 17);
-  }
-
-  bool isMM16AsmRegMoveP() const {
-    if (!(isRegIdx() && RegIdx.Kind))
-      return false;
-    return (RegIdx.Index == 0 || (RegIdx.Index >= 2 && RegIdx.Index <= 3) ||
-      (RegIdx.Index >= 16 && RegIdx.Index <= 20));
-  }
-
-  bool isMM16AsmRegMovePPairFirst() const {
-    if (!(isRegIdx() && RegIdx.Kind))
-      return false;
-    return RegIdx.Index >= 4 && RegIdx.Index <= 6;
-  }
-
-  bool isMM16AsmRegMovePPairSecond() const {
-    if (!(isRegIdx() && RegIdx.Kind))
-      return false;
-    return (RegIdx.Index == 21 || RegIdx.Index == 22 ||
-      (RegIdx.Index >= 5 && RegIdx.Index <= 7));
-  }
-
-  bool isFGRAsmReg() const {
+  bool isVFPAsmReg() const {
     // AFGR64 is $0-$15 but we handle this in getAFGR64()
-    return isRegIdx() && RegIdx.Kind & RegKind_FGR && RegIdx.Index <= 31;
+    return isRegIdx() && RegIdx.Kind & RegKind_VFP && RegIdx.Index <= 31;
   }
 
-  bool isStrictlyFGRAsmReg() const {
+  bool isStrictlyVFPAsmReg() const {
     // AFGR64 is $0-$15 but we handle this in getAFGR64()
-    return isRegIdx() && RegIdx.Kind == RegKind_FGR && RegIdx.Index <= 31;
-  }
-
-  bool isHWRegsAsmReg() const {
-    return isRegIdx() && RegIdx.Kind & RegKind_HWRegs && RegIdx.Index <= 31;
-  }
-
-  bool isCCRAsmReg() const {
-    return isRegIdx() && RegIdx.Kind & RegKind_CCR && RegIdx.Index <= 31;
-  }
-
-  bool isFCCAsmReg() const {
-    if (!(isRegIdx() && RegIdx.Kind & RegKind_FCC))
-      return false;
-    return RegIdx.Index <= 7;
-  }
-
-  bool isACCAsmReg() const {
-    return isRegIdx() && RegIdx.Kind & RegKind_ACC && RegIdx.Index <= 3;
-  }
-
-  bool isCOP0AsmReg() const {
-    return isRegIdx() && RegIdx.Kind & RegKind_COP0 && RegIdx.Index <= 31;
-  }
-
-  bool isCOP2AsmReg() const {
-    return isRegIdx() && RegIdx.Kind & RegKind_COP2 && RegIdx.Index <= 31;
-  }
-
-  bool isCOP3AsmReg() const {
-    return isRegIdx() && RegIdx.Kind & RegKind_COP3 && RegIdx.Index <= 31;
-  }
-
-  bool isMSA128AsmReg() const {
-    return isRegIdx() && RegIdx.Kind & RegKind_MSA128 && RegIdx.Index <= 31;
-  }
-
-  bool isMSACtrlAsmReg() const {
-    return isRegIdx() && RegIdx.Kind & RegKind_MSACtrl && RegIdx.Index <= 7;
+    return isRegIdx() && RegIdx.Kind == RegKind_VFP && RegIdx.Index <= 31;
   }
 
   /// getStartLoc - Get the location of the first token of this operand.
@@ -1853,13 +1283,6 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
     switch (Opcode) {
     default:
       break;
-    case Fgpu::BBIT0:
-    case Fgpu::BBIT032:
-    case Fgpu::BBIT1:
-    case Fgpu::BBIT132:
-      assert(hasCnFgpu() && "instruction only valid for octeon cpus");
-      LLVM_FALLTHROUGH;
-
     case Fgpu::BEQ:
     case Fgpu::BNE:
       assert(MCID.getNumOperands() == 3 && "unexpected number of operands");
@@ -1872,112 +1295,6 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
                             (Align(4))))
         return Error(IDLoc, "branch to misaligned address");
       break;
-    case Fgpu::BGEZ:
-    case Fgpu::BGTZ:
-    case Fgpu::BLEZ:
-    case Fgpu::BLTZ:
-    case Fgpu::BGEZAL:
-    case Fgpu::BLTZAL:
-    case Fgpu::BC1F:
-    case Fgpu::BC1T:
-      assert(MCID.getNumOperands() == 2 && "unexpected number of operands");
-      Offset = Inst.getOperand(1);
-      if (!Offset.isImm())
-        break; // We'll deal with this situation later on when applying fixups.
-      if (!isIntN(18, Offset.getImm()))
-        return Error(IDLoc, "branch target out of range");
-      if (offsetToAlignment(Offset.getImm(),
-                            (Align(4))))
-        return Error(IDLoc, "branch to misaligned address");
-      break;
-    case Fgpu::BGEC:
-    case Fgpu::BLTC:
-    case Fgpu::BGEUC:
-    case Fgpu::BLTUC:
-    case Fgpu::BEQC:
-    case Fgpu::BNEC:
-      assert(MCID.getNumOperands() == 3 && "unexpected number of operands");
-      Offset = Inst.getOperand(2);
-      if (!Offset.isImm())
-        break; // We'll deal with this situation later on when applying fixups.
-      if (!isIntN(18, Offset.getImm()))
-        return Error(IDLoc, "branch target out of range");
-      if (offsetToAlignment(Offset.getImm(), Align(4)))
-        return Error(IDLoc, "branch to misaligned address");
-      break;
-    case Fgpu::BLEZC:
-    case Fgpu::BGEZC:
-    case Fgpu::BGTZC:
-    case Fgpu::BLTZC:
-      assert(MCID.getNumOperands() == 2 && "unexpected number of operands");
-      Offset = Inst.getOperand(1);
-      if (!Offset.isImm())
-        break; // We'll deal with this situation later on when applying fixups.
-      if (!isIntN(18, Offset.getImm()))
-        return Error(IDLoc, "branch target out of range");
-      if (offsetToAlignment(Offset.getImm(), Align(4)))
-        return Error(IDLoc, "branch to misaligned address");
-      break;
-    case Fgpu::BEQZC:
-    case Fgpu::BNEZC:
-      assert(MCID.getNumOperands() == 2 && "unexpected number of operands");
-      Offset = Inst.getOperand(1);
-      if (!Offset.isImm())
-        break; // We'll deal with this situation later on when applying fixups.
-      if (!isIntN(23, Offset.getImm()))
-        return Error(IDLoc, "branch target out of range");
-      if (offsetToAlignment(Offset.getImm(), Align(4)))
-        return Error(IDLoc, "branch to misaligned address");
-      break;
-    }
-  }
-
-  // SSNOP is deprecated on FGPU32r6/FGPU64r6
-  // We still accept it but it is a normal nop.
-  if (hasFgpu32r6() && Opcode == Fgpu::SSNOP) {
-    std::string ISA = hasFgpu64r6() ? "FGPU64r6" : "FGPU32r6";
-    Warning(IDLoc, "ssnop is deprecated for " + ISA + " and is equivalent to a "
-                                                      "nop instruction");
-  }
-
-  if (hasCnFgpu()) {
-    MCOperand Opnd;
-    int Imm;
-
-    switch (Opcode) {
-      default:
-        break;
-
-      case Fgpu::BBIT0:
-      case Fgpu::BBIT032:
-      case Fgpu::BBIT1:
-      case Fgpu::BBIT132:
-        assert(MCID.getNumOperands() == 3 && "unexpected number of operands");
-        // The offset is handled above
-        Opnd = Inst.getOperand(1);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if (Imm < 0 || Imm > (Opcode == Fgpu::BBIT0 ||
-                              Opcode == Fgpu::BBIT1 ? 63 : 31))
-          return Error(IDLoc, "immediate operand value out of range");
-        if (Imm > 31) {
-          Inst.setOpcode(Opcode == Fgpu::BBIT0 ? Fgpu::BBIT032
-                                               : Fgpu::BBIT132);
-          Inst.getOperand(1).setImm(Imm - 32);
-        }
-        break;
-
-      case Fgpu::SEQi:
-      case Fgpu::SNEi:
-        assert(MCID.getNumOperands() == 3 && "unexpected number of operands");
-        Opnd = Inst.getOperand(2);
-        if (!Opnd.isImm())
-          return Error(IDLoc, "expected immediate operand kind");
-        Imm = Opnd.getImm();
-        if (!isInt<10>(Imm))
-          return Error(IDLoc, "immediate operand value out of range");
-        break;
     }
   }
 
@@ -1990,60 +1307,11 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
   // not in the operands.
   unsigned FirstOp = 1;
   unsigned SecondOp = 2;
-  switch (Opcode) {
-  default:
-    break;
-  case Fgpu::SDivIMacro:
-  case Fgpu::UDivIMacro:
-  case Fgpu::DSDivIMacro:
-  case Fgpu::DUDivIMacro:
-    if (Inst.getOperand(2).getImm() == 0) {
-      if (Inst.getOperand(1).getReg() == Fgpu::ZERO ||
-          Inst.getOperand(1).getReg() == Fgpu::ZERO_64)
-        Warning(IDLoc, "dividing zero by zero");
-      else
-        Warning(IDLoc, "division by zero");
-    }
-    break;
-  case Fgpu::DSDIV:
-  case Fgpu::SDIV:
-  case Fgpu::UDIV:
-  case Fgpu::DUDIV:
-    FirstOp = 0;
-    SecondOp = 1;
-    LLVM_FALLTHROUGH;
-  case Fgpu::SDivMacro:
-  case Fgpu::DSDivMacro:
-  case Fgpu::UDivMacro:
-  case Fgpu::DUDivMacro:
-  case Fgpu::DIV:
-  case Fgpu::DIVU:
-  case Fgpu::DDIV:
-  case Fgpu::DDIVU:
-    if (Inst.getOperand(SecondOp).getReg() == Fgpu::ZERO ||
-        Inst.getOperand(SecondOp).getReg() == Fgpu::ZERO_64) {
-      if (Inst.getOperand(FirstOp).getReg() == Fgpu::ZERO ||
-          Inst.getOperand(FirstOp).getReg() == Fgpu::ZERO_64)
-        Warning(IDLoc, "dividing zero by zero");
-      else
-        Warning(IDLoc, "division by zero");
-    }
-    break;
-  }
 
-  // For PIC code convert unconditional jump to unconditional branch.
-  if ((Opcode == Fgpu::J) && inPicMode()) {
-    MCInst BInst;
-    BInst.setOpcode(Fgpu::BEQ);
-    BInst.addOperand(MCOperand::createReg(Fgpu::ZERO));
-    BInst.addOperand(MCOperand::createReg(Fgpu::ZERO));
-    BInst.addOperand(Inst.getOperand(0));
-    Inst = BInst;
-  }
 
   // This expansion is not in a function called by tryExpandInstruction()
   // because the pseudo-instruction doesn't have a distinct opcode.
-  if ((Opcode == Fgpu::JAL) && inPicMode()) {
+  if ((Opcode == Fgpu::JSUB) && inPicMode()) {
     warnIfNoMacro(IDLoc);
 
     const MCExpr *JalExpr = Inst.getOperand(0).getExpr();
@@ -2057,14 +1325,14 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
     //        of the assembler. We ought to leave it to those later stages.
     const MCSymbol *JalSym = getSingleMCSymbol(JalExpr);
 
-    if (expandLoadAddress(Fgpu::T9, Fgpu::NoRegister, Inst.getOperand(0),
-                          !isGP64bit(), IDLoc, Out, STI))
+    if (expandLoadAddress(Fgpu::R26, Fgpu::NoRegister, Inst.getOperand(0),
+                          true, IDLoc, Out, STI))
       return true;
 
     MCInst JalrInst;
-    JalrInst.setOpcode(Fgpu::JALR);
-    JalrInst.addOperand(MCOperand::createReg(Fgpu::RA));
-    JalrInst.addOperand(MCOperand::createReg(Fgpu::T9));
+    JalrInst.setOpcode(Fgpu::JSUB); // TODO add JALR
+    JalrInst.addOperand(MCOperand::createReg(Fgpu::LR));
+    JalrInst.addOperand(MCOperand::createReg(Fgpu::R26));
 
     if (isJalrRelocAvailable(JalExpr)) {
       // As an optimization hint for the linker, before the JALR we add:
@@ -2119,31 +1387,6 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
     break;
   case MER_Fail:
     return true;
-  }
-
-
-  // If this instruction has a delay slot and .set reorder is active,
-  // emit a NOP after it.
-  if (FillDelaySlot) {
-    TOut.emitEmptyDelaySlot(false, IDLoc, STI);
-    TOut.emitDirectiveSetReorder();
-  }
-
-  if ((Opcode == Fgpu::JalOneReg || Opcode == Fgpu::JalTwoReg ||
-       ExpandedJalSym) &&
-      isPicAndNotNxxAbi()) {
-    if (IsCpRestoreSet) {
-      // We need a NOP between the JALR and the LW:
-      // If .set reorder has been used, we've already emitted a NOP.
-      // If .set noreorder has been used, we need to emit a NOP at this point.
-      if (!AssemblerOptions.back()->isReorder())
-        TOut.emitEmptyDelaySlot(false, IDLoc,
-                                STI);
-
-      // Load the $gp from the stack.
-      TOut.emitGPRestore(CpRestoreOffset, IDLoc, STI);
-    } else
-      Warning(IDLoc, "no .cprestore used in PIC mode");
   }
 
   return false;
@@ -2418,7 +1661,7 @@ bool FgpuAsmParser::expandJalWithRegs(MCInst &Inst, SMLoc IDLoc,
   if (Opcode == Fgpu::JalOneReg) {
     // jal $rs => jalr $rs
     JalrInst.setOpcode(Fgpu::JALR);
-    JalrInst.addOperand(MCOperand::createReg(Fgpu::RA));
+    JalrInst.addOperand(MCOperand::createReg(Fgpu::LR));
     JalrInst.addOperand(FirstRegOp);
   } else if (Opcode == Fgpu::JalTwoReg) {
     // jal $rd, $rs => jalr $rd, $rs
@@ -3015,8 +2258,8 @@ static unsigned nextReg(unsigned Reg) {
   case Fgpu::K1:   return Fgpu::GP;
   case Fgpu::GP:   return Fgpu::SP;
   case Fgpu::SP:   return Fgpu::FP;
-  case Fgpu::FP:   return Fgpu::RA;
-  case Fgpu::RA:   return Fgpu::ZERO;
+  case Fgpu::FP:   return Fgpu::LR;
+  case Fgpu::LR:   return Fgpu::ZERO;
   case Fgpu::D0:   return Fgpu::F1;
   case Fgpu::D1:   return Fgpu::F3;
   case Fgpu::D2:   return Fgpu::F5;
@@ -3413,7 +2656,7 @@ void FgpuAsmParser::expandMem16Inst(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   int16_t DstRegClass = Desc.OpInfo[StartOp].RegClass;
   unsigned DstRegClassID =
       getContext().getRegisterInfo()->getRegClass(DstRegClass).getID();
-  bool IsGPR = (DstRegClassID == Fgpu::GPR32RegClassID) ||
+  bool IsGPR = (DstRegClassID == Fgpu::GPROutRegClassID) ||
                (DstRegClassID == Fgpu::GPR64RegClassID);
 
   if (!IsLoad || !IsGPR || (BaseReg == DstReg)) {
@@ -3540,7 +2783,7 @@ void FgpuAsmParser::expandMem9Inst(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   int16_t DstRegClass = Desc.OpInfo[StartOp].RegClass;
   unsigned DstRegClassID =
       getContext().getRegisterInfo()->getRegClass(DstRegClass).getID();
-  bool IsGPR = (DstRegClassID == Fgpu::GPR32RegClassID) ||
+  bool IsGPR = (DstRegClassID == Fgpu::GPROutRegClassID) ||
                (DstRegClassID == Fgpu::GPR64RegClassID);
 
   if (!IsLoad || !IsGPR || (BaseReg == DstReg)) {
@@ -4035,17 +3278,17 @@ bool FgpuAsmParser::expandTrunc(MCInst &Inst, bool IsDouble, bool Is64FPU,
     unsigned ATReg = getATReg(IDLoc);
     if (!ATReg)
       return true;
-    TOut.emitRR(Fgpu::CFC1, ThirdReg, Fgpu::RA, IDLoc, STI);
-    TOut.emitRR(Fgpu::CFC1, ThirdReg, Fgpu::RA, IDLoc, STI);
+    TOut.emitRR(Fgpu::CFC1, ThirdReg, Fgpu::LR, IDLoc, STI);
+    TOut.emitRR(Fgpu::CFC1, ThirdReg, Fgpu::LR, IDLoc, STI);
     TOut.emitNop(IDLoc, STI);
     TOut.emitRRI(Fgpu::ORi, ATReg, ThirdReg, 0x3, IDLoc, STI);
     TOut.emitRRI(Fgpu::XORi, ATReg, ATReg, 0x2, IDLoc, STI);
-    TOut.emitRR(Fgpu::CTC1, Fgpu::RA, ATReg, IDLoc, STI);
+    TOut.emitRR(Fgpu::CTC1, Fgpu::LR, ATReg, IDLoc, STI);
     TOut.emitNop(IDLoc, STI);
     TOut.emitRR(IsDouble ? (Is64FPU ? Fgpu::CVT_W_D64 : Fgpu::CVT_W_D32)
                          : Fgpu::CVT_W_S,
                 FirstReg, SecondReg, IDLoc, STI);
-    TOut.emitRR(Fgpu::CTC1, Fgpu::RA, ThirdReg, IDLoc, STI);
+    TOut.emitRR(Fgpu::CTC1, Fgpu::LR, ThirdReg, IDLoc, STI);
     TOut.emitNop(IDLoc, STI);
     return false;
   }
@@ -5274,7 +4517,7 @@ static unsigned getRegisterForMxtrFP(MCInst &Inst, bool IsMFTC1) {
     case Fgpu::F28: return Fgpu::GP;
     case Fgpu::F29: return Fgpu::SP;
     case Fgpu::F30: return Fgpu::FP;
-    case Fgpu::F31: return Fgpu::RA;
+    case Fgpu::F31: return Fgpu::LR;
     default: llvm_unreachable("Unknown register for mttc1 alias!");
   }
 }
@@ -5313,7 +4556,7 @@ static unsigned getRegisterForMxtrC0(MCInst &Inst, bool IsMFTC0) {
     case Fgpu::COP028: return Fgpu::GP;
     case Fgpu::COP029: return Fgpu::SP;
     case Fgpu::COP030: return Fgpu::FP;
-    case Fgpu::COP031: return Fgpu::RA;
+    case Fgpu::COP031: return Fgpu::LR;
     default: llvm_unreachable("Unknown register for mttc0 alias!");
   }
 }
@@ -5973,7 +5216,7 @@ unsigned FgpuAsmParser::getATReg(SMLoc Loc) {
     return 0;
   }
   unsigned AT = getReg(
-      (isGP64bit()) ? Fgpu::GPR64RegClassID : Fgpu::GPR32RegClassID, ATIndex);
+      (isGP64bit()) ? Fgpu::GPR64RegClassID : Fgpu::GPROutRegClassID, ATIndex);
   return AT;
 }
 
@@ -6064,7 +5307,7 @@ OperandMatchResultTy FgpuAsmParser::tryParseRegister(unsigned &RegNo,
     // register is a parse error.
     if (Operand.isGPRAsmReg()) {
       // Resolve to GPR32 or GPR64 appropriately.
-      RegNo = isGP64bit() ? Operand.getGPR64Reg() : Operand.getGPR32Reg();
+      RegNo = isGP64bit() ? Operand.getGPR64Reg() : Operand.getGPRReg();
     }
 
     return (RegNo == (unsigned)-1) ? MatchOperand_NoMatch
@@ -6451,12 +5694,12 @@ FgpuAsmParser::parseRegisterList(OperandVector &Operands) {
   while (parseAnyRegister(TmpOperands) == MatchOperand_Success) {
     SMLoc E = getLexer().getLoc();
     FgpuOperand &Reg = static_cast<FgpuOperand &>(*TmpOperands.back());
-    RegNo = isGP64bit() ? Reg.getGPR64Reg() : Reg.getGPR32Reg();
+    RegNo =  Reg.getGPRReg();
     if (RegRange) {
       // Remove last register operand because registers from register range
       // should be inserted first.
-      if ((isGP64bit() && RegNo == Fgpu::RA_64) ||
-          (!isGP64bit() && RegNo == Fgpu::RA)) {
+      if ((isGP64bit() && RegNo == Fgpu::LR_64) ||
+          (!isGP64bit() && RegNo == Fgpu::LR)) {
         Regs.push_back(RegNo);
       } else {
         unsigned TmpReg = PrevReg + 1;
@@ -6476,21 +5719,21 @@ FgpuAsmParser::parseRegisterList(OperandVector &Operands) {
       RegRange = false;
     } else {
       if ((PrevReg == Fgpu::NoRegister) &&
-          ((isGP64bit() && (RegNo != Fgpu::S0_64) && (RegNo != Fgpu::RA_64)) ||
-          (!isGP64bit() && (RegNo != Fgpu::S0) && (RegNo != Fgpu::RA)))) {
+          ((isGP64bit() && (RegNo != Fgpu::S0_64) && (RegNo != Fgpu::LR_64)) ||
+          (!isGP64bit() && (RegNo != Fgpu::S0) && (RegNo != Fgpu::LR)))) {
         Error(E, "$16 or $31 expected");
         return MatchOperand_ParseFail;
-      } else if (!(((RegNo == Fgpu::FP || RegNo == Fgpu::RA ||
+      } else if (!(((RegNo == Fgpu::FP || RegNo == Fgpu::LR ||
                     (RegNo >= Fgpu::S0 && RegNo <= Fgpu::S7)) &&
                     !isGP64bit()) ||
-                   ((RegNo == Fgpu::FP_64 || RegNo == Fgpu::RA_64 ||
+                   ((RegNo == Fgpu::FP_64 || RegNo == Fgpu::LR_64 ||
                     (RegNo >= Fgpu::S0_64 && RegNo <= Fgpu::S7_64)) &&
                     isGP64bit()))) {
         Error(E, "invalid register operand");
         return MatchOperand_ParseFail;
       } else if ((PrevReg != Fgpu::NoRegister) && (RegNo != PrevReg + 1) &&
-                 ((RegNo != Fgpu::FP && RegNo != Fgpu::RA && !isGP64bit()) ||
-                  (RegNo != Fgpu::FP_64 && RegNo != Fgpu::RA_64 &&
+                 ((RegNo != Fgpu::FP && RegNo != Fgpu::LR && !isGP64bit()) ||
+                  (RegNo != Fgpu::FP_64 && RegNo != Fgpu::LR_64 &&
                    isGP64bit()))) {
         Error(E, "consecutive register numbers expected");
         return MatchOperand_ParseFail;
@@ -7297,7 +6540,7 @@ bool FgpuAsmParser::parseDirectiveCpAdd(SMLoc Loc) {
   }
   getParser().Lex(); // Consume the EndOfStatement.
 
-  getTargetStreamer().emitDirectiveCpAdd(RegOpnd.getGPR32Reg());
+  getTargetStreamer().emitDirectiveCpAdd(RegOpnd.getGPRReg());
   return false;
 }
 
@@ -7329,7 +6572,7 @@ bool FgpuAsmParser::parseDirectiveCpLoad(SMLoc Loc) {
     return false;
   }
 
-  getTargetStreamer().emitDirectiveCpLoad(RegOpnd.getGPR32Reg());
+  getTargetStreamer().emitDirectiveCpLoad(RegOpnd.getGPRReg());
   return false;
 }
 
@@ -7359,7 +6602,7 @@ bool FgpuAsmParser::parseDirectiveCpLocal(SMLoc Loc) {
   }
   getParser().Lex(); // Consume the EndOfStatement.
 
-  unsigned NewReg = RegOpnd.getGPR32Reg();
+  unsigned NewReg = RegOpnd.getGPRReg();
   if (IsPicEnabled)
     GPReg = NewReg;
 
@@ -7431,7 +6674,7 @@ bool FgpuAsmParser::parseDirectiveCPSetup() {
     return false;
   }
 
-  FuncReg = FuncRegOpnd.getGPR32Reg();
+  FuncReg = FuncRegOpnd.getGPRReg();
   TmpReg.clear();
 
   if (!eatComma("unexpected token, expected comma"))
@@ -7457,7 +6700,7 @@ bool FgpuAsmParser::parseDirectiveCPSetup() {
       reportParseError(SaveOpnd.getStartLoc(), "invalid register");
       return false;
     }
-    Save = SaveOpnd.getGPR32Reg();
+    Save = SaveOpnd.getGPRReg();
   }
 
   if (!eatComma("unexpected token, expected comma"))
@@ -8302,7 +7545,7 @@ bool FgpuAsmParser::ParseDirective(AsmToken DirectiveID) {
                        "expected general purpose register");
       return false;
     }
-    unsigned StackReg = StackRegOpnd.getGPR32Reg();
+    unsigned StackReg = StackRegOpnd.getGPRReg();
 
     if (Parser.getTok().is(AsmToken::Comma))
       Parser.Lex();
@@ -8354,7 +7597,7 @@ bool FgpuAsmParser::ParseDirective(AsmToken DirectiveID) {
     }
 
     getTargetStreamer().emitFrame(StackReg, FrameSizeVal,
-                                  ReturnRegOpnd.getGPR32Reg());
+                                  ReturnRegOpnd.getGPRReg());
     IsCpRestoreSet = false;
     return false;
   }

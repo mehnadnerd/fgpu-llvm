@@ -458,7 +458,7 @@ bool FgpuCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
 
   MachineInstrBuilder MIB = MIRBuilder.buildInstrNoInsert(
       Info.Callee.isReg() || IsCalleeGlobalPIC ? Fgpu::JSUB : Fgpu::JSUB);
-  // TODO: TODO: Does jsub do what we want????
+  // TODO: TODO: Does jsub do what we want????, JALR should be the first here
   // TODO: JALR pseudo
   MIB.addDef(Fgpu::SP, RegState::Implicit);
   if (IsCalleeGlobalPIC) {
@@ -524,12 +524,12 @@ bool FgpuCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
     MIB.addDef(Fgpu::R29, RegState::Implicit);
   }
   MIRBuilder.insertInstr(MIB);
-  if (MIB->getOpcode() == Fgpu::JALRPseudo) {
-    const FgpuSubtarget &STI =
-        static_cast<const FgpuSubtarget &>(MIRBuilder.getMF().getSubtarget());
-    MIB.constrainAllUses(MIRBuilder.getTII(), *STI.getRegisterInfo(),
-                         *STI.getRegBankInfo());
-  }
+  //if (MIB->getOpcode() == Fgpu::JALRPseudo) {
+  //  const FgpuSubtarget &STI =
+  //      static_cast<const FgpuSubtarget &>(MIRBuilder.getMF().getSubtarget());
+  //  MIB.constrainAllUses(MIRBuilder.getTII(), *STI.getRegisterInfo(),
+  //                       *STI.getRegBankInfo());
+  //}
 
   if (!Info.OrigRet.Ty->isVoidTy()) {
     ArgInfos.clear();

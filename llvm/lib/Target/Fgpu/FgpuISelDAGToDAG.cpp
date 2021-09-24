@@ -216,6 +216,61 @@ bool FgpuDAGToDAGISel::selectVSplatMaskR(SDValue N, SDValue &Imm) const {
   return false;
 }
 
+/// ComplexPattern used on FgpuInstrInfo used on Fgpu Load/Store instructions
+bool FgpuDAGToDAGISel::selectFrameAddr(SDNode *Parent, SDValue Addr, SDValue &Base, SDValue &Offset) {
+  LLVM_DEBUG(dbgs() << "soubhi: selectFrameAddr entered\n");
+  EVT ValTy = Addr.getValueType();
+  SDLoc DL(Addr);
+
+  // If Parent is an unaligned f32 load or store, select a (base + index)
+  // floating point load/store instruction (luxc1 or suxc1).
+  const LSBaseSDNode* LS = 0;
+
+  if (Parent && (LS = dyn_cast<LSBaseSDNode>(Parent))) {
+    EVT VT = LS->getMemoryVT();
+
+    if (VT.getSizeInBits() / 8 > LS->getAlignment()) {
+      assert(false && "Unaligned loads/stores not supported for this type.");
+      if (VT == MVT::f32)
+        return false;
+    }
+  }
+  // return false;
+  // if Address is FI, get the TargetFrameIndex.
+  if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
+    LLVM_DEBUG(dbgs() << "soubhi: FrameIndexSDNode\n");
+    Base   = CurDAG->getTargetFrameIndex(FIN->getIndex(), ValTy);
+    Offset = CurDAG->getTargetConstant(0, DL, ValTy);
+    return true;
+  }
+  // return false;
+
+  // Addresses of the form FI+const or FI|const
+  if (CurDAG->isBaseWithConstantOffset(Addr)) {
+    LLVM_DEBUG(dbgs() << "soubhi: isBaseWithConstantOffset\n");
+    ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1));
+    if (isInt<16>(CN->getSExtValue())) {
+      LLVM_DEBUG(dbgs() << "soubhi: is 16bit offset\n");
+
+      // If the first operand is a FI, get the TargetFI Node
+      if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode> (Addr.getOperand(0))) {
+        LLVM_DEBUG(dbgs() << "soubhi: operand 0 is a FrameIndex\n");
+        Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), ValTy);
+        Offset = CurDAG->getTargetConstant(CN->getZExtValue(), DL, ValTy);
+        return true;
+      }
+      // else
+      //   Base = Addr.getOperand(0);
+
+    }
+  }
+  return false;
+
+  Base   = Addr;
+  Offset = CurDAG->getTargetConstant(0, DL, ValTy);
+  return true;
+}
+
 /// Convert vector addition with vector subtraction if that allows to encode
 /// constant as an immediate and thus avoid extra 'ldi' instruction.
 /// add X, <-1, -1...> --> sub X, <1, 1...>
@@ -237,7 +292,7 @@ bool FgpuDAGToDAGISel::selectVecAddAsVecSubIfProfitable(SDNode *Node) {
   bool HasAnyUndefs;
 
   if (!BVN->isConstantSplat(SplatValue, SplatUndef, SplatBitSize, HasAnyUndefs,
-                            8, !Subtarget->isLittle()))
+                            8, false))
     return false;
 
   auto IsInlineConstant = [](const APInt &Imm) { return Imm.isIntN(5); };

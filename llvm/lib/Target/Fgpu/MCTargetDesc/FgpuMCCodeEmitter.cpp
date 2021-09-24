@@ -73,18 +73,18 @@ static void LowerLargeShift(MCInst& Inst) {
   default:
     // Calling function is not synchronized
     llvm_unreachable("Unexpected shift instruction");
-  case Fgpu::DSLL:
-    Inst.setOpcode(Fgpu::DSLL32);
-    return;
-  case Fgpu::DSRL:
-    Inst.setOpcode(Fgpu::DSRL32);
-    return;
-  case Fgpu::DSRA:
-    Inst.setOpcode(Fgpu::DSRA32);
-    return;
-  case Fgpu::DROTR:
-    Inst.setOpcode(Fgpu::DROTR32);
-    return;
+//  case Fgpu::DSLL:
+//    Inst.setOpcode(Fgpu::DSLL32);
+//    return;
+//  case Fgpu::DSRL:
+//    Inst.setOpcode(Fgpu::DSRL32);
+//    return;
+//  case Fgpu::DSRA:
+//    Inst.setOpcode(Fgpu::DSRA32);
+//    return;
+//  case Fgpu::DROTR:
+//    Inst.setOpcode(Fgpu::DROTR32);
+//    return;
   }
 }
 
@@ -98,27 +98,19 @@ void FgpuMCCodeEmitter::LowerCompactBranch(MCInst& Inst) const {
   unsigned Reg0 =  Ctx.getRegisterInfo()->getEncodingValue(RegOp0);
   unsigned Reg1 =  Ctx.getRegisterInfo()->getEncodingValue(RegOp1);
 
-  if (Inst.getOpcode() == Fgpu::BNEC || Inst.getOpcode() == Fgpu::BEQC ||
-      Inst.getOpcode() == Fgpu::BNEC64 || Inst.getOpcode() == Fgpu::BEQC64) {
-    assert(Reg0 != Reg1 && "Instruction has bad operands ($rs == $rt)!");
-    if (Reg0 < Reg1)
-      return;
-  } else if (Inst.getOpcode() == Fgpu::BNVC || Inst.getOpcode() == Fgpu::BOVC) {
-    if (Reg0 >= Reg1)
-      return;
-  } else
-    llvm_unreachable("Cannot rewrite unknown branch!");
-
-  Inst.getOperand(0).setReg(RegOp1);
-  Inst.getOperand(1).setReg(RegOp0);
-}
-
-bool FgpuMCCodeEmitter::isMicroFgpu(const MCSubtargetInfo &STI) const {
-  return STI.getFeatureBits()[Fgpu::FeatureMicroFgpu];
-}
-
-bool FgpuMCCodeEmitter::isFgpu32r6(const MCSubtargetInfo &STI) const {
-  return STI.getFeatureBits()[Fgpu::FeatureFgpu32r6];
+//  if (Inst.getOpcode() == Fgpu::BNEC || Inst.getOpcode() == Fgpu::BEQC ||
+//      Inst.getOpcode() == Fgpu::BNEC64 || Inst.getOpcode() == Fgpu::BEQC64) {
+//    assert(Reg0 != Reg1 && "Instruction has bad operands ($rs == $rt)!");
+//    if (Reg0 < Reg1)
+//      return;
+//  } else if (Inst.getOpcode() == Fgpu::BNVC || Inst.getOpcode() == Fgpu::BOVC) {
+//    if (Reg0 >= Reg1)
+//      return;
+//  } else
+//    llvm_unreachable("Cannot rewrite unknown branch!");
+//
+//  Inst.getOperand(0).setReg(RegOp1);
+//  Inst.getOperand(1).setReg(RegOp0);
 }
 
 void FgpuMCCodeEmitter::EmitByte(unsigned char C, raw_ostream &OS) const {
@@ -132,10 +124,7 @@ void FgpuMCCodeEmitter::emitInstruction(uint64_t Val, unsigned Size,
   // Little-endian byte ordering:
   //   fgpu32r2:   4 | 3 | 2 | 1
   //   microFGPU:  2 | 1 | 4 | 3
-  if (IsLittleEndian && Size == 4 && isMicroFgpu(STI)) {
-    emitInstruction(Val >> 16, 2, STI, OS);
-    emitInstruction(Val, 2, STI, OS);
-  } else {
+  {
     for (unsigned i = 0; i < Size; ++i) {
       unsigned Shift = IsLittleEndian ? i * 8 : (Size - 1 - i) * 8;
       EmitByte((Val >> Shift) & 0xff, OS);
@@ -157,20 +146,20 @@ encodeInstruction(const MCInst &MI, raw_ostream &OS,
   MCInst TmpInst = MI;
   switch (MI.getOpcode()) {
   // If shift amount is >= 32 it the inst needs to be lowered further
-  case Fgpu::DSLL:
-  case Fgpu::DSRL:
-  case Fgpu::DSRA:
-  case Fgpu::DROTR:
-    LowerLargeShift(TmpInst);
-    break;
-  // Compact branches, enforce encoding restrictions.
-  case Fgpu::BEQC:
-  case Fgpu::BNEC:
-  case Fgpu::BEQC64:
-  case Fgpu::BNEC64:
-  case Fgpu::BOVC:
-  case Fgpu::BNVC:
-    LowerCompactBranch(TmpInst);
+//  case Fgpu::DSLL:
+//  case Fgpu::DSRL:
+//  case Fgpu::DSRA:
+//  case Fgpu::DROTR:
+//    LowerLargeShift(TmpInst);
+//    break;
+//  // Compact branches, enforce encoding restrictions.
+//  case Fgpu::BEQC:
+//  case Fgpu::BNEC:
+//  case Fgpu::BEQC64:
+//  case Fgpu::BNEC64:
+//  case Fgpu::BOVC:
+//  case Fgpu::BNVC:
+//    LowerCompactBranch(TmpInst);
   }
 
   unsigned long N = Fixups.size();
@@ -593,28 +582,23 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
       FixupKind = Fgpu::fixup_Fgpu_CALL_LO16;
       break;
     case FgpuMCExpr::MEK_DTPREL_HI:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_TLS_DTPREL_HI16
-                                   : Fgpu::fixup_Fgpu_DTPREL_HI;
+      FixupKind =
+                                    Fgpu::fixup_Fgpu_DTPREL_HI;
       break;
     case FgpuMCExpr::MEK_DTPREL_LO:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_TLS_DTPREL_LO16
-                                   : Fgpu::fixup_Fgpu_DTPREL_LO;
+      FixupKind = Fgpu::fixup_Fgpu_DTPREL_LO;
       break;
     case FgpuMCExpr::MEK_GOTTPREL:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_GOTTPREL
-                                   : Fgpu::fixup_Fgpu_GOTTPREL;
+      FixupKind = Fgpu::fixup_Fgpu_GOTTPREL;
       break;
     case FgpuMCExpr::MEK_GOT:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_GOT16
-                                   : Fgpu::fixup_Fgpu_GOT;
+      FixupKind = Fgpu::fixup_Fgpu_GOT;
       break;
     case FgpuMCExpr::MEK_GOT_CALL:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_CALL16
-                                   : Fgpu::fixup_Fgpu_CALL16;
+      FixupKind = Fgpu::fixup_Fgpu_CALL16;
       break;
     case FgpuMCExpr::MEK_GOT_DISP:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_GOT_DISP
-                                   : Fgpu::fixup_Fgpu_GOT_DISP;
+      FixupKind = Fgpu::fixup_Fgpu_GOT_DISP;
       break;
     case FgpuMCExpr::MEK_GOT_HI16:
       FixupKind = Fgpu::fixup_Fgpu_GOT_HI16;
@@ -623,12 +607,10 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
       FixupKind = Fgpu::fixup_Fgpu_GOT_LO16;
       break;
     case FgpuMCExpr::MEK_GOT_PAGE:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_GOT_PAGE
-                                   : Fgpu::fixup_Fgpu_GOT_PAGE;
+      FixupKind = Fgpu::fixup_Fgpu_GOT_PAGE;
       break;
     case FgpuMCExpr::MEK_GOT_OFST:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_GOT_OFST
-                                   : Fgpu::fixup_Fgpu_GOT_OFST;
+      FixupKind = Fgpu::fixup_Fgpu_GOT_OFST;
       break;
     case FgpuMCExpr::MEK_GPREL:
       FixupKind = Fgpu::fixup_Fgpu_GPREL16;
@@ -636,28 +618,22 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
     case FgpuMCExpr::MEK_LO:
       // Check for %lo(%neg(%gp_rel(X)))
       if (FgpuExpr->isGpOff())
-        FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_GPOFF_LO
-                                     : Fgpu::fixup_Fgpu_GPOFF_LO;
+        FixupKind = Fgpu::fixup_Fgpu_GPOFF_LO;
       else
-        FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_LO16
-                                     : Fgpu::fixup_Fgpu_LO16;
+        FixupKind = Fgpu::fixup_Fgpu_LO16;
       break;
     case FgpuMCExpr::MEK_HIGHEST:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_HIGHEST
-                                   : Fgpu::fixup_Fgpu_HIGHEST;
+      FixupKind = Fgpu::fixup_Fgpu_HIGHEST;
       break;
     case FgpuMCExpr::MEK_HIGHER:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_HIGHER
-                                   : Fgpu::fixup_Fgpu_HIGHER;
+      FixupKind = Fgpu::fixup_Fgpu_HIGHER;
       break;
     case FgpuMCExpr::MEK_HI:
       // Check for %hi(%neg(%gp_rel(X)))
       if (FgpuExpr->isGpOff())
-        FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_GPOFF_HI
-                                     : Fgpu::fixup_Fgpu_GPOFF_HI;
+        FixupKind = Fgpu::fixup_Fgpu_GPOFF_HI;
       else
-        FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_HI16
-                                     : Fgpu::fixup_Fgpu_HI16;
+        FixupKind = Fgpu::fixup_Fgpu_HI16;
       break;
     case FgpuMCExpr::MEK_PCREL_HI16:
       FixupKind = Fgpu::fixup_FGPU_PCHI16;
@@ -666,24 +642,19 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
       FixupKind = Fgpu::fixup_FGPU_PCLO16;
       break;
     case FgpuMCExpr::MEK_TLSGD:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_TLS_GD
-                                   : Fgpu::fixup_Fgpu_TLSGD;
+      FixupKind = Fgpu::fixup_Fgpu_TLSGD;
       break;
     case FgpuMCExpr::MEK_TLSLDM:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_TLS_LDM
-                                   : Fgpu::fixup_Fgpu_TLSLDM;
+      FixupKind = Fgpu::fixup_Fgpu_TLSLDM;
       break;
     case FgpuMCExpr::MEK_TPREL_HI:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_TLS_TPREL_HI16
-                                   : Fgpu::fixup_Fgpu_TPREL_HI;
+      FixupKind = Fgpu::fixup_Fgpu_TPREL_HI;
       break;
     case FgpuMCExpr::MEK_TPREL_LO:
-      FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_TLS_TPREL_LO16
-                                   : Fgpu::fixup_Fgpu_TPREL_LO;
+      FixupKind = Fgpu::fixup_Fgpu_TPREL_LO;
       break;
     case FgpuMCExpr::MEK_NEG:
-      FixupKind =
-          isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_SUB : Fgpu::fixup_Fgpu_SUB;
+      FixupKind = Fgpu::fixup_Fgpu_SUB;
       break;
     }
     Fixups.push_back(MCFixup::create(0, FgpuExpr, MCFixupKind(FixupKind)));
@@ -781,8 +752,7 @@ getMemEncodingMMSPImm5Lsl2(const MCInst &MI, unsigned OpNo,
                            const MCSubtargetInfo &STI) const {
   // Register is encoded in bits 9-5, offset is encoded in bits 4-0.
   assert(MI.getOperand(OpNo).isReg() &&
-         (MI.getOperand(OpNo).getReg() == Fgpu::SP ||
-         MI.getOperand(OpNo).getReg() == Fgpu::SP_64) &&
+         (MI.getOperand(OpNo).getReg() == Fgpu::SP) &&
          "Unexpected base register!");
   unsigned OffBits = getMachineOpValue(MI, MI.getOperand(OpNo+1),
                                        Fixups, STI) >> 2;
@@ -906,8 +876,7 @@ FgpuMCCodeEmitter::getSimm19Lsl2Encoding(const MCInst &MI, unsigned OpNo,
          "getSimm19Lsl2Encoding expects only expressions or an immediate");
 
   const MCExpr *Expr = MO.getExpr();
-  Fgpu::Fixups FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_PC19_S2
-                                            : Fgpu::fixup_FGPU_PC19_S2;
+  Fgpu::Fixups FixupKind = Fgpu::fixup_FGPU_PC19_S2;
   Fixups.push_back(MCFixup::create(0, Expr, MCFixupKind(FixupKind)));
   return 0;
 }
@@ -928,8 +897,7 @@ FgpuMCCodeEmitter::getSimm18Lsl3Encoding(const MCInst &MI, unsigned OpNo,
          "getSimm18Lsl2Encoding expects only expressions or an immediate");
 
   const MCExpr *Expr = MO.getExpr();
-  Fgpu::Fixups FixupKind = isMicroFgpu(STI) ? Fgpu::fixup_MICROFGPU_PC18_S3
-                                            : Fgpu::fixup_FGPU_PC18_S3;
+  Fgpu::Fixups FixupKind = Fgpu::fixup_FGPU_PC18_S3;
   Fixups.push_back(MCFixup::create(0, Expr, MCFixupKind(FixupKind)));
   return 0;
 }
@@ -1002,57 +970,60 @@ unsigned
 FgpuMCCodeEmitter::getMovePRegPairOpValue(const MCInst &MI, unsigned OpNo,
                                           SmallVectorImpl<MCFixup> &Fixups,
                                           const MCSubtargetInfo &STI) const {
-  unsigned res = 0;
-
-  if (MI.getOperand(0).getReg() == Fgpu::A1 &&
-      MI.getOperand(1).getReg() == Fgpu::A2)
-    res = 0;
-  else if (MI.getOperand(0).getReg() == Fgpu::A1 &&
-           MI.getOperand(1).getReg() == Fgpu::A3)
-    res = 1;
-  else if (MI.getOperand(0).getReg() == Fgpu::A2 &&
-           MI.getOperand(1).getReg() == Fgpu::A3)
-    res = 2;
-  else if (MI.getOperand(0).getReg() == Fgpu::A0 &&
-           MI.getOperand(1).getReg() == Fgpu::S5)
-    res = 3;
-  else if (MI.getOperand(0).getReg() == Fgpu::A0 &&
-           MI.getOperand(1).getReg() == Fgpu::S6)
-    res = 4;
-  else if (MI.getOperand(0).getReg() == Fgpu::A0 &&
-           MI.getOperand(1).getReg() == Fgpu::A1)
-    res = 5;
-  else if (MI.getOperand(0).getReg() == Fgpu::A0 &&
-           MI.getOperand(1).getReg() == Fgpu::A2)
-    res = 6;
-  else if (MI.getOperand(0).getReg() == Fgpu::A0 &&
-           MI.getOperand(1).getReg() == Fgpu::A3)
-    res = 7;
-
-  return res;
+ assert(false && "naT in this");
+  return -1;
+//  unsigned res = 0;
+//
+//  if (MI.getOperand(0).getReg() == Fgpu::A1 &&
+//      MI.getOperand(1).getReg() == Fgpu::A2)
+//    res = 0;
+//  else if (MI.getOperand(0).getReg() == Fgpu::A1 &&
+//           MI.getOperand(1).getReg() == Fgpu::A3)
+//    res = 1;
+//  else if (MI.getOperand(0).getReg() == Fgpu::A2 &&
+//           MI.getOperand(1).getReg() == Fgpu::A3)
+//    res = 2;
+//  else if (MI.getOperand(0).getReg() == Fgpu::A0 &&
+//           MI.getOperand(1).getReg() == Fgpu::S5)
+//    res = 3;
+//  else if (MI.getOperand(0).getReg() == Fgpu::A0 &&
+//           MI.getOperand(1).getReg() == Fgpu::S6)
+//    res = 4;
+//  else if (MI.getOperand(0).getReg() == Fgpu::A0 &&
+//           MI.getOperand(1).getReg() == Fgpu::A1)
+//    res = 5;
+//  else if (MI.getOperand(0).getReg() == Fgpu::A0 &&
+//           MI.getOperand(1).getReg() == Fgpu::A2)
+//    res = 6;
+//  else if (MI.getOperand(0).getReg() == Fgpu::A0 &&
+//           MI.getOperand(1).getReg() == Fgpu::A3)
+//    res = 7;
+//
+//  return res;
 }
 
 unsigned
 FgpuMCCodeEmitter::getMovePRegSingleOpValue(const MCInst &MI, unsigned OpNo,
                                             SmallVectorImpl<MCFixup> &Fixups,
                                             const MCSubtargetInfo &STI) const {
-  assert(((OpNo == 2) || (OpNo == 3)) &&
-         "Unexpected OpNo for movep operand encoding!");
-
-  MCOperand Op = MI.getOperand(OpNo);
-  assert(Op.isReg() && "Operand of movep is not a register!");
-  switch (Op.getReg()) {
-  default:
-    llvm_unreachable("Unknown register for movep!");
-  case Fgpu::ZERO:  return 0;
-  case Fgpu::S1:    return 1;
-  case Fgpu::V0:    return 2;
-  case Fgpu::V1:    return 3;
-  case Fgpu::S0:    return 4;
-  case Fgpu::S2:    return 5;
-  case Fgpu::S3:    return 6;
-  case Fgpu::S4:    return 7;
-  }
+  assert(false && "What is this");
+//  assert(((OpNo == 2) || (OpNo == 3)) &&
+//         "Unexpected OpNo for movep operand encoding!");
+//
+//  MCOperand Op = MI.getOperand(OpNo);
+//  assert(Op.isReg() && "Operand of movep is not a register!");
+//  switch (Op.getReg()) {
+//  default:
+//    llvm_unreachable("Unknown register for movep!");
+//  case Fgpu::ZERO:  return 0;
+//  case Fgpu::S1:    return 1;
+//  case Fgpu::V0:    return 2;
+//  case Fgpu::V1:    return 3;
+//  case Fgpu::S0:    return 4;
+//  case Fgpu::S2:    return 5;
+//  case Fgpu::S3:    return 6;
+//  case Fgpu::S4:    return 7;
+//  }
 }
 
 unsigned

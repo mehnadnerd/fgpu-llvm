@@ -26,25 +26,19 @@ namespace llvm {
 namespace Fgpu {
 enum PartialMappingIdx {
   PMI_GPR,
-  PMI_SPR,
-  PMI_DPR,
-  PMI_MSA,
+  PMI_VFP,
   PMI_Min = PMI_GPR,
 };
 
 RegisterBankInfo::PartialMapping PartMappings[]{
     {0, 32, GPRBRegBank},
-    {0, 32, FPRBRegBank},
-    {0, 64, FPRBRegBank},
-    {0, 128, FPRBRegBank}
+    {0, 128, VFPRegBank} // TODO: figure out how big
 };
 
 enum ValueMappingIdx {
     InvalidIdx = 0,
     GPRIdx = 1,
-    SPRIdx = 4,
-    DPRIdx = 7,
-    MSAIdx = 10
+    VFPIdx = 4
 };
 
 RegisterBankInfo::ValueMapping ValueMappings[] = {
@@ -54,18 +48,10 @@ RegisterBankInfo::ValueMapping ValueMappings[] = {
     {&PartMappings[PMI_GPR - PMI_Min], 1},
     {&PartMappings[PMI_GPR - PMI_Min], 1},
     {&PartMappings[PMI_GPR - PMI_Min], 1},
-    // up to 3 operands in FPRs - single precission
-    {&PartMappings[PMI_SPR - PMI_Min], 1},
-    {&PartMappings[PMI_SPR - PMI_Min], 1},
-    {&PartMappings[PMI_SPR - PMI_Min], 1},
-    // up to 3 operands in FPRs - double precission
-    {&PartMappings[PMI_DPR - PMI_Min], 1},
-    {&PartMappings[PMI_DPR - PMI_Min], 1},
-    {&PartMappings[PMI_DPR - PMI_Min], 1},
-    // up to 3 operands in FPRs - MSA
-    {&PartMappings[PMI_MSA - PMI_Min], 1},
-    {&PartMappings[PMI_MSA - PMI_Min], 1},
-    {&PartMappings[PMI_MSA - PMI_Min], 1}
+    // up to 3 operands in VFPs
+    {&PartMappings[PMI_VFP - PMI_Min], 1},
+    {&PartMappings[PMI_VFP - PMI_Min], 1},
+    {&PartMappings[PMI_VFP - PMI_Min], 1}
 };
 
 } // end namespace Fgpu
@@ -82,24 +68,10 @@ FgpuRegisterBankInfo::getRegBankFromRegClass(const TargetRegisterClass &RC,
   using namespace Fgpu;
 
   switch (RC.getID()) {
-  case Fgpu::GPR32RegClassID:
-  case Fgpu::CPU16Regs_and_GPRMM16ZeroRegClassID:
-  case Fgpu::GPRMM16MovePPairFirstRegClassID:
-  case Fgpu::CPU16Regs_and_GPRMM16MovePPairSecondRegClassID:
-  case Fgpu::GPRMM16MoveP_and_CPU16Regs_and_GPRMM16ZeroRegClassID:
-  case Fgpu::GPRMM16MovePPairFirst_and_GPRMM16MovePPairSecondRegClassID:
-  case Fgpu::SP32RegClassID:
-  case Fgpu::GP32RegClassID:
+  case Fgpu::GPROutRegClassID:
     return getRegBank(Fgpu::GPRBRegBankID);
-  case Fgpu::FGRCCRegClassID:
-  case Fgpu::FGR32RegClassID:
-  case Fgpu::FGR64RegClassID:
-  case Fgpu::AFGR64RegClassID:
-  case Fgpu::MSA128BRegClassID:
-  case Fgpu::MSA128HRegClassID:
-  case Fgpu::MSA128WRegClassID:
-  case Fgpu::MSA128DRegClassID:
-    return getRegBank(Fgpu::FPRBRegBankID);
+  case Fgpu::VecRegsRegClassID:
+    return getRegBank(Fgpu::VFPRegBankID);
   default:
     llvm_unreachable("Register class not supported");
   }
@@ -373,7 +345,8 @@ void FgpuRegisterBankInfo::TypeInfoForMF::setTypesAccordingToPhysicalRegister(
   const RegisterBank *Bank =
       RBI.getRegBank(CopyInst->getOperand(Op).getReg(), MRI, TRI);
 
-  if (Bank == &Fgpu::FPRBRegBank)
+  //TODO: deal with fact that fp can be in GPRs
+  if (Bank == &Fgpu::VFPRegBank)
     setTypes(MI, InstType::FloatingPoint);
   else if (Bank == &Fgpu::GPRBRegBank)
     setTypes(MI, InstType::Integer);
@@ -397,30 +370,7 @@ void FgpuRegisterBankInfo::TypeInfoForMF::cleanupIfNewFunction(
   }
 }
 
-static const FgpuRegisterBankInfo::ValueMapping *
-getMSAMapping(const MachineFunction &MF) {
-  assert(static_cast<const FgpuSubtarget &>(MF.getSubtarget()).hasMSA() &&
-         "MSA mapping not available on target without MSA.");
-  return &Fgpu::ValueMappings[Fgpu::MSAIdx];
-}
-
-static const FgpuRegisterBankInfo::ValueMapping *getFprbMapping(unsigned Size) {
-  return Size == 32 ? &Fgpu::ValueMappings[Fgpu::SPRIdx]
-                    : &Fgpu::ValueMappings[Fgpu::DPRIdx];
-}
-
 static const unsigned CustomMappingID = 1;
-
-// Only 64 bit mapping is available in fprb and will be marked as custom, i.e.
-// will be split into two 32 bit registers in gprb.
-static const FgpuRegisterBankInfo::ValueMapping *
-getGprbOrCustomMapping(unsigned Size, unsigned &MappingID) {
-  if (Size == 32)
-    return &Fgpu::ValueMappings[Fgpu::GPRIdx];
-
-  MappingID = CustomMappingID;
-  return &Fgpu::ValueMappings[Fgpu::DPRIdx];
-}
 
 const RegisterBankInfo::InstructionMapping &
 FgpuRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
@@ -493,33 +443,27 @@ FgpuRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
   case G_UDIV:
   case G_UREM:
     OperandsMapping = &Fgpu::ValueMappings[Fgpu::GPRIdx];
-    if (Op0Size == 128)
-      OperandsMapping = getMSAMapping(MF);
     break;
   case G_STORE:
   case G_LOAD: {
-    if (Op0Size == 128) {
-      OperandsMapping = getOperandsMapping(
-          {getMSAMapping(MF), &Fgpu::ValueMappings[Fgpu::GPRIdx]});
-      break;
-    }
-
     if (!Op0Ty.isPointer())
       InstTy = TI.determineInstType(&MI);
-
-    if (isFloatingPoint_32or64(InstTy, Op0Size) ||
-        isAmbiguous_64(InstTy, Op0Size)) {
-      OperandsMapping = getOperandsMapping(
-          {getFprbMapping(Op0Size), &Fgpu::ValueMappings[Fgpu::GPRIdx]});
-    } else {
-      assert((isInteger_32(InstTy, Op0Size) ||
-              isAmbiguous_32(InstTy, Op0Size) ||
-              isAmbiguousWithMergeOrUnmerge_64(InstTy, Op0Size)) &&
-             "Unexpected Inst type");
-      OperandsMapping =
-          getOperandsMapping({getGprbOrCustomMapping(Op0Size, MappingID),
-                              &Fgpu::ValueMappings[Fgpu::GPRIdx]});
-    }
+    OperandsMapping = &Fgpu::ValueMappings[Fgpu::GPRIdx];
+//        getOperandsMapping({getGprbOrCustomMapping(Op0Size, MappingID),
+//                            &Fgpu::ValueMappings[Fgpu::GPRIdx]});
+//    if (isFloatingPoint_32or64(InstTy, Op0Size) ||
+//        isAmbiguous_64(InstTy, Op0Size)) {
+//      OperandsMapping = getOperandsMapping(
+//          {getFprbMapping(Op0Size), &Fgpu::ValueMappings[Fgpu::GPRIdx]});
+//    } else {
+//      assert((isInteger_32(InstTy, Op0Size) ||
+//              isAmbiguous_32(InstTy, Op0Size) ||
+//              isAmbiguousWithMergeOrUnmerge_64(InstTy, Op0Size)) &&
+//             "Unexpected Inst type");
+//      OperandsMapping =
+//          getOperandsMapping({getGprbOrCustomMapping(Op0Size, MappingID),
+//                              &Fgpu::ValueMappings[Fgpu::GPRIdx]});
+//    }
 
     break;
   }
@@ -527,55 +471,32 @@ FgpuRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     if (!Op0Ty.isPointer())
       InstTy = TI.determineInstType(&MI);
 
-    // PHI is copylike and should have one regbank in mapping for def register.
-    if (isAmbiguousWithMergeOrUnmerge_64(InstTy, Op0Size)) {
-      OperandsMapping =
-          getOperandsMapping({&Fgpu::ValueMappings[Fgpu::DPRIdx]});
-      TI.clearTypeInfoData(&MI);
-      return getInstructionMapping(CustomMappingID, /*Cost=*/1, OperandsMapping,
-                                   /*NumOperands=*/1);
-    }
-    assert((isInteger_32(InstTy, Op0Size) ||
-            isFloatingPoint_32or64(InstTy, Op0Size) ||
-            isAmbiguous_32or64(InstTy, Op0Size)) &&
-           "Unexpected Inst type");
+//    // PHI is copylike and should have one regbank in mapping for def register.
+//    if (isAmbiguousWithMergeOrUnmerge_64(InstTy, Op0Size)) {
+//      OperandsMapping =
+//          getOperandsMapping({&Fgpu::ValueMappings[Fgpu::DPRIdx]});
+//      TI.clearTypeInfoData(&MI);
+//      return getInstructionMapping(CustomMappingID, /*Cost=*/1, OperandsMapping,
+//                                   /*NumOperands=*/1);
+//    } // TODO: I have no idea if this should be kept
+//    assert((isInteger_32(InstTy, Op0Size) ||
+//            isFloatingPoint_32or64(InstTy, Op0Size) ||
+//            isAmbiguous_32or64(InstTy, Op0Size)) &&
+//           "Unexpected Inst type");
     // Use default handling for PHI, i.e. set reg bank of def operand to match
     // register banks of use operands.
     return getInstrMappingImpl(MI);
   }
   case G_SELECT: {
-    if (!Op0Ty.isPointer())
-      InstTy = TI.determineInstType(&MI);
-    if (isFloatingPoint_32or64(InstTy, Op0Size) ||
-        isAmbiguous_64(InstTy, Op0Size)) {
-      const RegisterBankInfo::ValueMapping *Bank = getFprbMapping(Op0Size);
+      const RegisterBankInfo::ValueMapping *Bank = &Fgpu::ValueMappings[Fgpu::GPRIdx];
       OperandsMapping = getOperandsMapping(
           {Bank, &Fgpu::ValueMappings[Fgpu::GPRIdx], Bank, Bank});
-      break;
-    } else {
-      assert((isInteger_32(InstTy, Op0Size) ||
-              isAmbiguous_32(InstTy, Op0Size) ||
-              isAmbiguousWithMergeOrUnmerge_64(InstTy, Op0Size)) &&
-             "Unexpected Inst type");
-      const RegisterBankInfo::ValueMapping *Bank =
-          getGprbOrCustomMapping(Op0Size, MappingID);
-      OperandsMapping = getOperandsMapping(
-          {Bank, &Fgpu::ValueMappings[Fgpu::GPRIdx], Bank, Bank});
-    }
     break;
   }
   case G_IMPLICIT_DEF: {
     if (!Op0Ty.isPointer())
       InstTy = TI.determineInstType(&MI);
-
-    if (isFloatingPoint_32or64(InstTy, Op0Size))
-      OperandsMapping = getFprbMapping(Op0Size);
-    else {
-      assert((isInteger_32(InstTy, Op0Size) ||
-              isAmbiguousWithMergeOrUnmerge_64(InstTy, Op0Size)) &&
-             "Unexpected Inst type");
-      OperandsMapping = getGprbOrCustomMapping(Op0Size, MappingID);
-    }
+    OperandsMapping = &Fgpu::ValueMappings[Fgpu::GPRIdx];
   } break;
   case G_UNMERGE_VALUES: {
     assert(MI.getNumOperands() == 3 && "Unsupported G_UNMERGE_VALUES");
@@ -586,7 +507,7 @@ FgpuRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
            "Unexpected Inst type");
     OperandsMapping = getOperandsMapping({&Fgpu::ValueMappings[Fgpu::GPRIdx],
                                           &Fgpu::ValueMappings[Fgpu::GPRIdx],
-                                          &Fgpu::ValueMappings[Fgpu::DPRIdx]});
+                                          &Fgpu::ValueMappings[Fgpu::GPRIdx]});
     if (isAmbiguousWithMergeOrUnmerge_64(InstTy, Op3Size))
       MappingID = CustomMappingID;
     break;
@@ -596,7 +517,7 @@ FgpuRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     assert((isAmbiguousWithMergeOrUnmerge_64(InstTy, Op0Size) ||
             isFloatingPoint_64(InstTy, Op0Size)) &&
            "Unexpected Inst type");
-    OperandsMapping = getOperandsMapping({&Fgpu::ValueMappings[Fgpu::DPRIdx],
+    OperandsMapping = getOperandsMapping({&Fgpu::ValueMappings[Fgpu::GPRIdx],
                                           &Fgpu::ValueMappings[Fgpu::GPRIdx],
                                           &Fgpu::ValueMappings[Fgpu::GPRIdx]});
     if (isAmbiguousWithMergeOrUnmerge_64(InstTy, Op0Size))
@@ -609,40 +530,38 @@ FgpuRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
   case G_FDIV:
   case G_FABS:
   case G_FSQRT:
-    OperandsMapping = getFprbMapping(Op0Size);
-    if (Op0Size == 128)
-      OperandsMapping = getMSAMapping(MF);
+    OperandsMapping = &Fgpu::ValueMappings[Fgpu::GPRIdx]; //getFprbMapping(Op0Size);
     break;
   case G_FCONSTANT:
-    OperandsMapping = getOperandsMapping({getFprbMapping(Op0Size), nullptr});
+    OperandsMapping = getOperandsMapping({&Fgpu::ValueMappings[Fgpu::GPRIdx], nullptr});
     break;
   case G_FCMP: {
     unsigned Op2Size = MRI.getType(MI.getOperand(2).getReg()).getSizeInBits();
     OperandsMapping =
         getOperandsMapping({&Fgpu::ValueMappings[Fgpu::GPRIdx], nullptr,
-                            getFprbMapping(Op2Size), getFprbMapping(Op2Size)});
+                            &Fgpu::ValueMappings[Fgpu::GPRIdx], &Fgpu::ValueMappings[Fgpu::GPRIdx]});
     break;
   }
   case G_FPEXT:
-    OperandsMapping = getOperandsMapping({&Fgpu::ValueMappings[Fgpu::DPRIdx],
-                                          &Fgpu::ValueMappings[Fgpu::SPRIdx]});
+    OperandsMapping = getOperandsMapping({&Fgpu::ValueMappings[Fgpu::GPRIdx],
+                                          &Fgpu::ValueMappings[Fgpu::GPRIdx]});
     break;
   case G_FPTRUNC:
-    OperandsMapping = getOperandsMapping({&Fgpu::ValueMappings[Fgpu::SPRIdx],
-                                          &Fgpu::ValueMappings[Fgpu::DPRIdx]});
+    OperandsMapping = getOperandsMapping({&Fgpu::ValueMappings[Fgpu::GPRIdx],
+                                          &Fgpu::ValueMappings[Fgpu::GPRIdx]});
     break;
   case G_FPTOSI: {
     assert((Op0Size == 32) && "Unsupported integer size");
     unsigned SizeFP = MRI.getType(MI.getOperand(1).getReg()).getSizeInBits();
     OperandsMapping = getOperandsMapping(
-        {&Fgpu::ValueMappings[Fgpu::GPRIdx], getFprbMapping(SizeFP)});
+        {&Fgpu::ValueMappings[Fgpu::GPRIdx], &Fgpu::ValueMappings[Fgpu::GPRIdx]});
     break;
   }
   case G_SITOFP:
     assert((MRI.getType(MI.getOperand(1).getReg()).getSizeInBits() == 32) &&
            "Unsupported integer size");
     OperandsMapping = getOperandsMapping(
-        {getFprbMapping(Op0Size), &Fgpu::ValueMappings[Fgpu::GPRIdx]});
+        {&Fgpu::ValueMappings[Fgpu::GPRIdx], &Fgpu::ValueMappings[Fgpu::GPRIdx]});
     break;
   case G_CONSTANT:
   case G_FRAME_INDEX:

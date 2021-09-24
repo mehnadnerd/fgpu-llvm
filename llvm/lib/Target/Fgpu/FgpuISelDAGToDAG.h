@@ -54,6 +54,7 @@ private:
   #include "FgpuGenDAGISel.inc"
 
   // Complex Pattern.
+  bool selectFrameAddr(SDNode *Parent, SDValue N, SDValue &Base, SDValue &Offset);
   /// (reg + imm).
   virtual bool selectAddrRegImm(SDValue Addr, SDValue &Base,
                                 SDValue &Offset) const;

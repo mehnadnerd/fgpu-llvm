@@ -352,12 +352,9 @@ unsigned FgpuFastISel::materialize32BitInt(int64_t Imm,
                                            const TargetRegisterClass *RC) {
   unsigned ResultReg = createResultReg(RC);
 
-  if (isInt<16>(Imm)) {
-    unsigned Opc = Fgpu::ADDiu;
+  if (isUInt<16>(Imm)) {
+    unsigned Opc = Fgpu::Li;
     emitInst(Opc, ResultReg).addReg(Fgpu::ZERO).addImm(Imm);
-    return ResultReg;
-  } else if (isUInt<16>(Imm)) {
-    emitInst(Fgpu::ORi, ResultReg).addReg(Fgpu::ZERO).addImm(Imm);
     return ResultReg;
   }
   unsigned Lo = Imm & 0xFFFF;
@@ -366,7 +363,7 @@ unsigned FgpuFastISel::materialize32BitInt(int64_t Imm,
     // Both Lo and Hi have nonzero bits.
     unsigned TmpReg = createResultReg(RC);
     emitInst(Fgpu::LUi, TmpReg).addImm(Hi);
-    emitInst(Fgpu::ORi, ResultReg).addReg(TmpReg).addImm(Lo);
+    emitInst(Fgpu::Li, ResultReg).addReg(TmpReg).addImm(Lo);
   } else {
     emitInst(Fgpu::LUi, ResultReg).addImm(Hi);
   }
@@ -374,24 +371,24 @@ unsigned FgpuFastISel::materialize32BitInt(int64_t Imm,
 }
 
 unsigned FgpuFastISel::materializeFP(const ConstantFP *CFP, MVT VT) {
-  if (UnsupportedFPMode)
-    return 0;
-  int64_t Imm = CFP->getValueAPF().bitcastToAPInt().getZExtValue();
-  if (VT == MVT::f32) {
-    const TargetRegisterClass *RC = &Fgpu::FGR32RegClass;
-    unsigned DestReg = createResultReg(RC);
-    unsigned TempReg = materialize32BitInt(Imm, &Fgpu::GPROutRegClass);
-    emitInst(Fgpu::MTC1, DestReg).addReg(TempReg);
-    return DestReg;
-  } else if (VT == MVT::f64) {
-    const TargetRegisterClass *RC = &Fgpu::AFGR64RegClass;
-    unsigned DestReg = createResultReg(RC);
-    unsigned TempReg1 = materialize32BitInt(Imm >> 32, &Fgpu::GPROutRegClass);
-    unsigned TempReg2 =
-        materialize32BitInt(Imm & 0xFFFFFFFF, &Fgpu::GPROutRegClass);
-    emitInst(Fgpu::BuildPairF64, DestReg).addReg(TempReg2).addReg(TempReg1);
-    return DestReg;
-  }
+//  if (UnsupportedFPMode)
+//    return 0;
+//  int64_t Imm = CFP->getValueAPF().bitcastToAPInt().getZExtValue();
+//  if (VT == MVT::f32) {
+//    const TargetRegisterClass *RC = &Fgpu::FGR32RegClass;
+//    unsigned DestReg = createResultReg(RC);
+//    unsigned TempReg = materialize32BitInt(Imm, &Fgpu::GPROutRegClass);
+//    emitInst(Fgpu::MTC1, DestReg).addReg(TempReg);
+//    return DestReg;
+//  } else if (VT == MVT::f64) {
+//    const TargetRegisterClass *RC = &Fgpu::AFGR64RegClass;
+//    unsigned DestReg = createResultReg(RC);
+//    unsigned TempReg1 = materialize32BitInt(Imm >> 32, &Fgpu::GPROutRegClass);
+//    unsigned TempReg2 =
+//        materialize32BitInt(Imm & 0xFFFFFFFF, &Fgpu::GPROutRegClass);
+//    emitInst(Fgpu::BuildPairF64, DestReg).addReg(TempReg2).addReg(TempReg1);
+//    return DestReg;
+//  }
   return 0;
 }
 
@@ -412,7 +409,7 @@ unsigned FgpuFastISel::materializeGV(const GlobalValue *GV, MVT VT) {
   if ((GV->hasInternalLinkage() ||
        (GV->hasLocalLinkage() && !isa<Function>(GV)))) {
     unsigned TempReg = createResultReg(RC);
-    emitInst(Fgpu::ADDiu, TempReg)
+    emitInst(Fgpu::Li, TempReg)
         .addReg(DestReg)
         .addGlobalAddress(GV, 0, FgpuII::MO_ABS_LO);
     DestReg = TempReg;
@@ -690,51 +687,7 @@ bool FgpuFastISel::emitCmp(unsigned ResultReg, const CmpInst *CI) {
   case CmpInst::FCMP_OLE:
   case CmpInst::FCMP_OGT:
   case CmpInst::FCMP_OGE: {
-    if (UnsupportedFPMode)
-      return false;
-    bool IsFloat = Left->getType()->isFloatTy();
-    bool IsDouble = Left->getType()->isDoubleTy();
-    if (!IsFloat && !IsDouble)
-      return false;
-    unsigned Opc, CondMovOpc;
-    switch (P) {
-    case CmpInst::FCMP_OEQ:
-      Opc = IsFloat ? Fgpu::C_EQ_S : Fgpu::C_EQ_D32;
-      CondMovOpc = Fgpu::MOVT_I;
-      break;
-    case CmpInst::FCMP_UNE:
-      Opc = IsFloat ? Fgpu::C_EQ_S : Fgpu::C_EQ_D32;
-      CondMovOpc = Fgpu::MOVF_I;
-      break;
-    case CmpInst::FCMP_OLT:
-      Opc = IsFloat ? Fgpu::C_OLT_S : Fgpu::C_OLT_D32;
-      CondMovOpc = Fgpu::MOVT_I;
-      break;
-    case CmpInst::FCMP_OLE:
-      Opc = IsFloat ? Fgpu::C_OLE_S : Fgpu::C_OLE_D32;
-      CondMovOpc = Fgpu::MOVT_I;
-      break;
-    case CmpInst::FCMP_OGT:
-      Opc = IsFloat ? Fgpu::C_ULE_S : Fgpu::C_ULE_D32;
-      CondMovOpc = Fgpu::MOVF_I;
-      break;
-    case CmpInst::FCMP_OGE:
-      Opc = IsFloat ? Fgpu::C_ULT_S : Fgpu::C_ULT_D32;
-      CondMovOpc = Fgpu::MOVF_I;
-      break;
-    default:
-      llvm_unreachable("Only switching of a subset of CCs.");
-    }
-    unsigned RegWithZero = createResultReg(&Fgpu::GPROutRegClass);
-    unsigned RegWithOne = createResultReg(&Fgpu::GPROutRegClass);
-    emitInst(Fgpu::ADDiu, RegWithZero).addReg(Fgpu::ZERO).addImm(0);
-    emitInst(Fgpu::ADDiu, RegWithOne).addReg(Fgpu::ZERO).addImm(1);
-    emitInst(Opc).addReg(Fgpu::FCC0, RegState::Define).addReg(LeftReg)
-                 .addReg(RightReg);
-    emitInst(CondMovOpc, ResultReg)
-        .addReg(RegWithOne)
-        .addReg(Fgpu::FCC0)
-        .addReg(RegWithZero);
+    return false; // FP is hard
     break;
   }
   }
@@ -754,23 +707,20 @@ bool FgpuFastISel::emitLoad(MVT VT, unsigned &ResultReg, Address &Addr,
     break;
   case MVT::i16:
     ResultReg = createResultReg(&Fgpu::GPROutRegClass);
-    Opc = Fgpu::LHu;
+    Opc = Fgpu::LH;
     break;
   case MVT::i8:
     ResultReg = createResultReg(&Fgpu::GPROutRegClass);
-    Opc = Fgpu::LBu;
+    Opc = Fgpu::LB;
     break;
   case MVT::f32:
     if (UnsupportedFPMode)
       return false;
-    ResultReg = createResultReg(&Fgpu::FGR32RegClass);
-    Opc = Fgpu::LWC1;
+    ResultReg = createResultReg(&Fgpu::GPROutRegClass);
+    Opc = Fgpu::LW;
     break;
   case MVT::f64:
-    if (UnsupportedFPMode)
-      return false;
-    ResultReg = createResultReg(&Fgpu::AFGR64RegClass);
-    Opc = Fgpu::LDC1;
+    return false;
     break;
   default:
     return false;
@@ -815,13 +765,10 @@ bool FgpuFastISel::emitStore(MVT VT, unsigned SrcReg, Address &Addr,
   case MVT::f32:
     if (UnsupportedFPMode)
       return false;
-    Opc = Fgpu::SWC1;
+    Opc = Fgpu::SW;
     break;
   case MVT::f64:
-    if (UnsupportedFPMode)
-      return false;
-    Opc = Fgpu::SDC1;
-    break;
+    return false;
   default:
     return false;
   }
@@ -960,10 +907,11 @@ bool FgpuFastISel::selectBranch(const Instruction *I) {
     if (ZExtCondReg == 0)
       return false;
   }
+  return false; // don't support this rn
 
-  BuildMI(*BrBB, FuncInfo.InsertPt, DbgLoc, TII.get(Fgpu::BGTZ))
-      .addReg(ZExtCondReg)
-      .addMBB(TBB);
+//  BuildMI(*BrBB, FuncInfo.InsertPt, DbgLoc, TII.get(Fgpu::BGTZ))
+//      .addReg(ZExtCondReg)
+//      .addMBB(TBB);
   finishCondBranch(BI->getParent(), TBB, FBB);
   return true;
 }
@@ -979,25 +927,26 @@ bool FgpuFastISel::selectCmp(const Instruction *I) {
 
 // Attempt to fast-select a floating-point extend instruction.
 bool FgpuFastISel::selectFPExt(const Instruction *I) {
-  if (UnsupportedFPMode)
-    return false;
-  Value *Src = I->getOperand(0);
-  EVT SrcVT = TLI.getValueType(DL, Src->getType(), true);
-  EVT DestVT = TLI.getValueType(DL, I->getType(), true);
-
-  if (SrcVT != MVT::f32 || DestVT != MVT::f64)
-    return false;
-
-  unsigned SrcReg =
-      getRegForValue(Src); // this must be a 32bit floating point register class
-                           // maybe we should handle this differently
-  if (!SrcReg)
-    return false;
-
-  unsigned DestReg = createResultReg(&Fgpu::AFGR64RegClass);
-  emitInst(Fgpu::CVT_D32_S, DestReg).addReg(SrcReg);
-  updateValueMap(I, DestReg);
-  return true;
+  return false;
+//  if (UnsupportedFPMode)
+//    return false;
+//  Value *Src = I->getOperand(0);
+//  EVT SrcVT = TLI.getValueType(DL, Src->getType(), true);
+//  EVT DestVT = TLI.getValueType(DL, I->getType(), true);
+//
+//  if (SrcVT != MVT::f32 || DestVT != MVT::f64)
+//    return false;
+//
+//  unsigned SrcReg =
+//      getRegForValue(Src); // this must be a 32bit floating point register class
+//                           // maybe we should handle this differently
+//  if (!SrcReg)
+//    return false;
+//
+//  unsigned DestReg = createResultReg(&Fgpu::AFGR64RegClass);
+//  emitInst(Fgpu::CVT_D32_S, DestReg).addReg(SrcReg);
+//  updateValueMap(I, DestReg);
+//  return true;
 }
 
 bool FgpuFastISel::selectSelect(const Instruction *I) {
@@ -1014,111 +963,114 @@ bool FgpuFastISel::selectSelect(const Instruction *I) {
 
   unsigned CondMovOpc;
   const TargetRegisterClass *RC;
-
-  if (VT.isInteger() && !VT.isVector() && VT.getSizeInBits() <= 32) {
-    CondMovOpc = Fgpu::MOVN_I_I;
-    RC = &Fgpu::GPROutRegClass;
-  } else if (VT == MVT::f32) {
-    CondMovOpc = Fgpu::MOVN_I_S;
-    RC = &Fgpu::FGR32RegClass;
-  } else if (VT == MVT::f64) {
-    CondMovOpc = Fgpu::MOVN_I_D32;
-    RC = &Fgpu::AFGR64RegClass;
-  } else
-    return false;
-
-  const SelectInst *SI = cast<SelectInst>(I);
-  const Value *Cond = SI->getCondition();
-  unsigned Src1Reg = getRegForValue(SI->getTrueValue());
-  unsigned Src2Reg = getRegForValue(SI->getFalseValue());
-  unsigned CondReg = getRegForValue(Cond);
-
-  if (!Src1Reg || !Src2Reg || !CondReg)
-    return false;
-
-  unsigned ZExtCondReg = createResultReg(&Fgpu::GPROutRegClass);
-  if (!ZExtCondReg)
-    return false;
-
-  if (!emitIntExt(MVT::i1, CondReg, MVT::i32, ZExtCondReg, true))
-    return false;
-
-  unsigned ResultReg = createResultReg(RC);
-  unsigned TempReg = createResultReg(RC);
-
-  if (!ResultReg || !TempReg)
-    return false;
-
-  emitInst(TargetOpcode::COPY, TempReg).addReg(Src2Reg);
-  emitInst(CondMovOpc, ResultReg)
-    .addReg(Src1Reg).addReg(ZExtCondReg).addReg(TempReg);
-  updateValueMap(I, ResultReg);
-  return true;
+  return false;
+//
+//  if (VT.isInteger() && !VT.isVector() && VT.getSizeInBits() <= 32) {
+//    CondMovOpc = Fgpu::MOVN_I_I;
+//    RC = &Fgpu::GPROutRegClass;
+//  } else if (VT == MVT::f32) {
+//    CondMovOpc = Fgpu::MOVN_I_S;
+//    RC = &Fgpu::FGR32RegClass;
+//  } else if (VT == MVT::f64) {
+//    CondMovOpc = Fgpu::MOVN_I_D32;
+//    RC = &Fgpu::AFGR64RegClass;
+//  } else
+//    return false;
+//
+//  const SelectInst *SI = cast<SelectInst>(I);
+//  const Value *Cond = SI->getCondition();
+//  unsigned Src1Reg = getRegForValue(SI->getTrueValue());
+//  unsigned Src2Reg = getRegForValue(SI->getFalseValue());
+//  unsigned CondReg = getRegForValue(Cond);
+//
+//  if (!Src1Reg || !Src2Reg || !CondReg)
+//    return false;
+//
+//  unsigned ZExtCondReg = createResultReg(&Fgpu::GPROutRegClass);
+//  if (!ZExtCondReg)
+//    return false;
+//
+//  if (!emitIntExt(MVT::i1, CondReg, MVT::i32, ZExtCondReg, true))
+//    return false;
+//
+//  unsigned ResultReg = createResultReg(RC);
+//  unsigned TempReg = createResultReg(RC);
+//
+//  if (!ResultReg || !TempReg)
+//    return false;
+//
+//  emitInst(TargetOpcode::COPY, TempReg).addReg(Src2Reg);
+//  emitInst(CondMovOpc, ResultReg)
+//    .addReg(Src1Reg).addReg(ZExtCondReg).addReg(TempReg);
+//  updateValueMap(I, ResultReg);
+//  return true;
 }
 
 // Attempt to fast-select a floating-point truncate instruction.
 bool FgpuFastISel::selectFPTrunc(const Instruction *I) {
   if (UnsupportedFPMode)
     return false;
-  Value *Src = I->getOperand(0);
-  EVT SrcVT = TLI.getValueType(DL, Src->getType(), true);
-  EVT DestVT = TLI.getValueType(DL, I->getType(), true);
-
-  if (SrcVT != MVT::f64 || DestVT != MVT::f32)
-    return false;
-
-  unsigned SrcReg = getRegForValue(Src);
-  if (!SrcReg)
-    return false;
-
-  unsigned DestReg = createResultReg(&Fgpu::FGR32RegClass);
-  if (!DestReg)
-    return false;
-
-  emitInst(Fgpu::CVT_S_D32, DestReg).addReg(SrcReg);
-  updateValueMap(I, DestReg);
-  return true;
+  return false;
+//  Value *Src = I->getOperand(0);
+//  EVT SrcVT = TLI.getValueType(DL, Src->getType(), true);
+//  EVT DestVT = TLI.getValueType(DL, I->getType(), true);
+//
+//  if (SrcVT != MVT::f64 || DestVT != MVT::f32)
+//    return false;
+//
+//  unsigned SrcReg = getRegForValue(Src);
+//  if (!SrcReg)
+//    return false;
+//
+//  unsigned DestReg = createResultReg(&Fgpu::FGR32RegClass);
+//  if (!DestReg)
+//    return false;
+//
+//  emitInst(Fgpu::CVT_S_D32, DestReg).addReg(SrcReg);
+//  updateValueMap(I, DestReg);
+//  return true;
 }
 
 // Attempt to fast-select a floating-point-to-integer conversion.
 bool FgpuFastISel::selectFPToInt(const Instruction *I, bool IsSigned) {
   if (UnsupportedFPMode)
     return false;
-  MVT DstVT, SrcVT;
-  if (!IsSigned)
-    return false; // We don't handle this case yet. There is no native
-                  // instruction for this but it can be synthesized.
-  Type *DstTy = I->getType();
-  if (!isTypeLegal(DstTy, DstVT))
-    return false;
-
-  if (DstVT != MVT::i32)
-    return false;
-
-  Value *Src = I->getOperand(0);
-  Type *SrcTy = Src->getType();
-  if (!isTypeLegal(SrcTy, SrcVT))
-    return false;
-
-  if (SrcVT != MVT::f32 && SrcVT != MVT::f64)
-    return false;
-
-  unsigned SrcReg = getRegForValue(Src);
-  if (SrcReg == 0)
-    return false;
-
-  // Determine the opcode for the conversion, which takes place
-  // entirely within FPRs.
-  unsigned DestReg = createResultReg(&Fgpu::GPROutRegClass);
-  unsigned TempReg = createResultReg(&Fgpu::FGR32RegClass);
-  unsigned Opc = (SrcVT == MVT::f32) ? Fgpu::TRUNC_W_S : Fgpu::TRUNC_W_D32;
-
-  // Generate the convert.
-  emitInst(Opc, TempReg).addReg(SrcReg);
-  emitInst(Fgpu::MFC1, DestReg).addReg(TempReg);
-
-  updateValueMap(I, DestReg);
-  return true;
+  return false;
+//  MVT DstVT, SrcVT;
+//  if (!IsSigned)
+//    return false; // We don't handle this case yet. There is no native
+//                  // instruction for this but it can be synthesized.
+//  Type *DstTy = I->getType();
+//  if (!isTypeLegal(DstTy, DstVT))
+//    return false;
+//
+//  if (DstVT != MVT::i32)
+//    return false;
+//
+//  Value *Src = I->getOperand(0);
+//  Type *SrcTy = Src->getType();
+//  if (!isTypeLegal(SrcTy, SrcVT))
+//    return false;
+//
+//  if (SrcVT != MVT::f32 && SrcVT != MVT::f64)
+//    return false;
+//
+//  unsigned SrcReg = getRegForValue(Src);
+//  if (SrcReg == 0)
+//    return false;
+//
+//  // Determine the opcode for the conversion, which takes place
+//  // entirely within FPRs.
+//  unsigned DestReg = createResultReg(&Fgpu::GPROutRegClass);
+//  unsigned TempReg = createResultReg(&Fgpu::FGR32RegClass);
+//  unsigned Opc = (SrcVT == MVT::f32) ? Fgpu::TRUNC_W_S : Fgpu::TRUNC_W_D32;
+//
+//  // Generate the convert.
+//  emitInst(Opc, TempReg).addReg(SrcReg);
+//  emitInst(Fgpu::MFC1, DestReg).addReg(TempReg);
+//
+//  updateValueMap(I, DestReg);
+//  return true;
 }
 
 bool FgpuFastISel::processCallArgs(CallLoweringInfo &CLI,
@@ -1145,44 +1097,48 @@ bool FgpuFastISel::processCallArgs(CallLoweringInfo &CLI,
     if (i == 0) {
       firstMVT = ArgVT;
       if (ArgVT == MVT::f32) {
-        VA.convertToReg(Fgpu::F12);
+        return false;
+        //VA.convertToReg(Fgpu::F12);
       } else if (ArgVT == MVT::f64) {
-        if (Subtarget->isFP64bit())
-          VA.convertToReg(Fgpu::D6_64);
-        else
-          VA.convertToReg(Fgpu::D6);
+        return false;
+//        if (Subtarget->isFP64bit())
+//          VA.convertToReg(Fgpu::D6_64);
+//        else
+//          VA.convertToReg(Fgpu::D6);
       }
     } else if (i == 1) {
       if ((firstMVT == MVT::f32) || (firstMVT == MVT::f64)) {
-        if (ArgVT == MVT::f32) {
-          VA.convertToReg(Fgpu::F14);
-        } else if (ArgVT == MVT::f64) {
-          if (Subtarget->isFP64bit())
-            VA.convertToReg(Fgpu::D7_64);
-          else
-            VA.convertToReg(Fgpu::D7);
-        }
+        return false;
+//        if (ArgVT == MVT::f32) {
+//          VA.convertToReg(Fgpu::F14);
+//        } else if (ArgVT == MVT::f64) {
+//          if (Subtarget->isFP64bit())
+//            VA.convertToReg(Fgpu::D7_64);
+//          else
+//            VA.convertToReg(Fgpu::D7);
+//        }
       }
     }
     if (((ArgVT == MVT::i32) || (ArgVT == MVT::f32) || (ArgVT == MVT::i16) ||
          (ArgVT == MVT::i8)) &&
         VA.isMemLoc()) {
-      switch (VA.getLocMemOffset()) {
-      case 0:
-        VA.convertToReg(Fgpu::A0);
-        break;
-      case 4:
-        VA.convertToReg(Fgpu::A1);
-        break;
-      case 8:
-        VA.convertToReg(Fgpu::A2);
-        break;
-      case 12:
-        VA.convertToReg(Fgpu::A3);
-        break;
-      default:
-        break;
-      }
+      return false;
+//      switch (VA.getLocMemOffset()) {
+//      case 0:
+//        VA.convertToReg(Fgpu::A0);
+//        break;
+//      case 4:
+//        VA.convertToReg(Fgpu::A1);
+//        break;
+//      case 8:
+//        VA.convertToReg(Fgpu::A2);
+//        break;
+//      case 12:
+//        VA.convertToReg(Fgpu::A3);
+//        break;
+//      default:
+//        break;
+//      }
     }
     unsigned ArgReg = getRegForValue(ArgVal);
     if (!ArgReg)
@@ -1222,39 +1178,40 @@ bool FgpuFastISel::processCallArgs(CallLoweringInfo &CLI,
       llvm_unreachable("Fgpu does not use custom args.");
       return false;
     } else {
-      //
-      // FIXME: This path will currently return false. It was copied
-      // from the AArch64 port and should be essentially fine for Fgpu too.
-      // The work to finish up this path will be done in a follow-on patch.
-      //
-      assert(VA.isMemLoc() && "Assuming store on stack.");
-      // Don't emit stores for undef values.
-      if (isa<UndefValue>(ArgVal))
-        continue;
-
-      // Need to store on the stack.
-      // FIXME: This alignment is incorrect but this path is disabled
-      // for now (will return false). We need to determine the right alignment
-      // based on the normal alignment for the underlying machine type.
-      //
-      unsigned ArgSize = alignTo(ArgVT.getSizeInBits(), 4);
-
-      unsigned BEAlign = 0;
-      if (ArgSize < 8 && !Subtarget->isLittle())
-        BEAlign = 8 - ArgSize;
-
-      Address Addr;
-      Addr.setKind(Address::RegBase);
-      Addr.setReg(Fgpu::SP);
-      Addr.setOffset(VA.getLocMemOffset() + BEAlign);
-
-      Align Alignment = DL.getABITypeAlign(ArgVal->getType());
-      MachineMemOperand *MMO = FuncInfo.MF->getMachineMemOperand(
-          MachinePointerInfo::getStack(*FuncInfo.MF, Addr.getOffset()),
-          MachineMemOperand::MOStore, ArgVT.getStoreSize(), Alignment);
-      (void)(MMO);
-      // if (!emitStore(ArgVT, ArgReg, Addr, MMO))
-      return false; // can't store on the stack yet.
+      return false;
+//      //
+//      // FIXME: This path will currently return false. It was copied
+//      // from the AArch64 port and should be essentially fine for Fgpu too.
+//      // The work to finish up this path will be done in a follow-on patch.
+//      //
+//      assert(VA.isMemLoc() && "Assuming store on stack.");
+//      // Don't emit stores for undef values.
+//      if (isa<UndefValue>(ArgVal))
+//        continue;
+//
+//      // Need to store on the stack.
+//      // FIXME: This alignment is incorrect but this path is disabled
+//      // for now (will return false). We need to determine the right alignment
+//      // based on the normal alignment for the underlying machine type.
+//      //
+//      unsigned ArgSize = alignTo(ArgVT.getSizeInBits(), 4);
+//
+//      unsigned BEAlign = 0;
+//      if (ArgSize < 8 && !Subtarget->isLittle())
+//        BEAlign = 8 - ArgSize;
+//
+//      Address Addr;
+//      Addr.setKind(Address::RegBase);
+//      Addr.setReg(Fgpu::SP);
+//      Addr.setOffset(VA.getLocMemOffset() + BEAlign);
+//
+//      Align Alignment = DL.getABITypeAlign(ArgVal->getType());
+//      MachineMemOperand *MMO = FuncInfo.MF->getMachineMemOperand(
+//          MachinePointerInfo::getStack(*FuncInfo.MF, Addr.getOffset()),
+//          MachineMemOperand::MOStore, ArgVT.getStoreSize(), Alignment);
+//      (void)(MMO);
+//      // if (!emitStore(ArgVT, ArgReg, Addr, MMO))
+//      return false; // can't store on the stack yet.
     }
   }
 
@@ -1407,7 +1364,7 @@ bool FgpuFastISel::selectRet(const Instruction *I) {
     // Add register to return instruction.
     RetRegs.push_back(VA.getLocReg());
   }
-  MachineInstrBuilder MIB = emitInst(Fgpu::RetRA);
+  MachineInstrBuilder MIB = emitInst(Fgpu::RetLR);
   for (unsigned i = 0, e = RetRegs.size(); i != e; ++i)
     MIB.addReg(RetRegs[i], RegState::Implicit);
   return true;
@@ -1556,7 +1513,7 @@ void FgpuFastISel::simplifyAddress(Address &Addr) {
     unsigned TempReg =
         materialize32BitInt(Addr.getOffset(), &Fgpu::GPROutRegClass);
     unsigned DestReg = createResultReg(&Fgpu::GPROutRegClass);
-    emitInst(Fgpu::ADDu, DestReg).addReg(TempReg).addReg(Addr.getReg());
+    emitInst(Fgpu::ADD, DestReg).addReg(TempReg).addReg(Addr.getReg());
     Addr.setReg(DestReg);
     Addr.setOffset(0);
   }
@@ -1565,24 +1522,24 @@ void FgpuFastISel::simplifyAddress(Address &Addr) {
 unsigned FgpuFastISel::fastEmitInst_rr(unsigned MachineInstOpcode,
                                        const TargetRegisterClass *RC,
                                        unsigned Op0, unsigned Op1) {
-  // We treat the MUL instruction in a special way because it clobbers
-  // the HI0 & LO0 registers. The TableGen definition of this instruction can
-  // mark these registers only as implicitly defined. As a result, the
-  // register allocator runs out of registers when this instruction is
-  // followed by another instruction that defines the same registers too.
-  // We can fix this by explicitly marking those registers as dead.
-  if (MachineInstOpcode == Fgpu::MUL) {
-    unsigned ResultReg = createResultReg(RC);
-    const MCInstrDesc &II = TII.get(MachineInstOpcode);
-    Op0 = constrainOperandRegClass(II, Op0, II.getNumDefs());
-    Op1 = constrainOperandRegClass(II, Op1, II.getNumDefs() + 1);
-    BuildMI(*FuncInfo.MBB, FuncInfo.InsertPt, DbgLoc, II, ResultReg)
-      .addReg(Op0)
-      .addReg(Op1)
-      .addReg(Fgpu::HI0, RegState::ImplicitDefine | RegState::Dead)
-      .addReg(Fgpu::LO0, RegState::ImplicitDefine | RegState::Dead);
-    return ResultReg;
-  }
+//  // We treat the MUL instruction in a special way because it clobbers
+//  // the HI0 & LO0 registers. The TableGen definition of this instruction can
+//  // mark these registers only as implicitly defined. As a result, the
+//  // register allocator runs out of registers when this instruction is
+//  // followed by another instruction that defines the same registers too.
+//  // We can fix this by explicitly marking those registers as dead.
+//  if (MachineInstOpcode == Fgpu::MUL) {
+//    unsigned ResultReg = createResultReg(RC);
+//    const MCInstrDesc &II = TII.get(MachineInstOpcode);
+//    Op0 = constrainOperandRegClass(II, Op0, II.getNumDefs());
+//    Op1 = constrainOperandRegClass(II, Op1, II.getNumDefs() + 1);
+//    BuildMI(*FuncInfo.MBB, FuncInfo.InsertPt, DbgLoc, II, ResultReg)
+//      .addReg(Op0)
+//      .addReg(Op1)
+//      .addReg(Fgpu::HI0, RegState::ImplicitDefine | RegState::Dead)
+//      .addReg(Fgpu::LO0, RegState::ImplicitDefine | RegState::Dead);
+//    return ResultReg;
+//  }
 
   return FastISel::fastEmitInst_rr(MachineInstOpcode, RC, Op0, Op1);
 }

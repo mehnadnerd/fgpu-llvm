@@ -18,17 +18,6 @@ uint8_t FgpuABIFlagsSection::getFpABIValue() {
   switch (FpABI) {
   case FpABIKind::ANY:
     return Fgpu::Val_GNU_FGPU_ABI_FP_ANY;
-  case FpABIKind::SOFT:
-    return Fgpu::Val_GNU_FGPU_ABI_FP_SOFT;
-  case FpABIKind::XX:
-    return Fgpu::Val_GNU_FGPU_ABI_FP_XX;
-  case FpABIKind::S32:
-    return Fgpu::Val_GNU_FGPU_ABI_FP_DOUBLE;
-  case FpABIKind::S64:
-    if (Is32BitABI)
-      return OddSPReg ? Fgpu::Val_GNU_FGPU_ABI_FP_64
-                      : Fgpu::Val_GNU_FGPU_ABI_FP_64A;
-    return Fgpu::Val_GNU_FGPU_ABI_FP_DOUBLE;
   }
 
   llvm_unreachable("unexpected fp abi value");
@@ -36,20 +25,12 @@ uint8_t FgpuABIFlagsSection::getFpABIValue() {
 
 StringRef FgpuABIFlagsSection::getFpABIString(FpABIKind Value) {
   switch (Value) {
-  case FpABIKind::XX:
-    return "xx";
-  case FpABIKind::S32:
-    return "32";
-  case FpABIKind::S64:
-    return "64";
   default:
     llvm_unreachable("unsupported fp abi value");
   }
 }
 
 uint8_t FgpuABIFlagsSection::getCPR1SizeValue() {
-  if (FpABI == FpABIKind::XX)
-    return (uint8_t)Fgpu::AFL_REG_32;
   return (uint8_t)CPR1Size;
 }
 

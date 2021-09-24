@@ -44,7 +44,8 @@ public:
     ri_gp_value = 0;
 
     const MCRegisterInfo *TRI = Context.getRegisterInfo();
-    GPRRegClass = &(TRI->getRegClass(Fgpu::GPROutClassID));
+    GPRRegClass = &(TRI->getRegClass(Fgpu::GPROutRegClassID));
+    VFPRegClass = &(TRI->getRegClass(Fgpu::VecRegsRegClassID));
   }
 
   ~FgpuRegInfoRecord() override = default;
@@ -56,6 +57,7 @@ private:
   FgpuELFStreamer *Streamer;
   MCContext &Context;
   const MCRegisterClass *GPRRegClass;
+  const MCRegisterClass *VFPRegClass;
   uint32_t ri_gprmask;
   uint32_t ri_cprmask[4];
   int64_t ri_gp_value;

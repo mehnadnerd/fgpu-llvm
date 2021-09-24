@@ -16,7 +16,6 @@
 #include "FgpuELFStreamer.h"
 #include "FgpuInstPrinter.h"
 #include "FgpuMCAsmInfo.h"
-#include "FgpuMCNaCl.h"
 #include "FgpuTargetStreamer.h"
 #include "TargetInfo/FgpuTargetInfo.h"
 #include "llvm/ADT/Triple.h"
@@ -47,10 +46,7 @@ using namespace llvm;
 /// Select the Fgpu CPU for the given triple and cpu name.
 StringRef FGPU_MC::selectFgpuCPU(const Triple &TT, StringRef CPU) {
   if (CPU.empty() || CPU == "generic") {
-    if (TT.isFGPU32())
       CPU = "fgpu32";
-    else
-      CPU = "fgpu64";
   }
   return CPU;
 }
@@ -63,7 +59,7 @@ static MCInstrInfo *createFgpuMCInstrInfo() {
 
 static MCRegisterInfo *createFgpuMCRegisterInfo(const Triple &TT) {
   MCRegisterInfo *X = new MCRegisterInfo();
-  InitFgpuMCRegisterInfo(X, Fgpu::RA);
+  InitFgpuMCRegisterInfo(X, Fgpu::LR);
   return X;
 }
 
@@ -99,12 +95,8 @@ static MCStreamer *createMCStreamer(const Triple &T, MCContext &Context,
                                     std::unique_ptr<MCCodeEmitter> &&Emitter,
                                     bool RelaxAll) {
   MCStreamer *S;
-  if (!T.isOSNaCl())
     S = createFgpuELFStreamer(Context, std::move(MAB), std::move(OW),
                               std::move(Emitter), RelaxAll);
-  else
-    S = createFgpuNaClELFStreamer(Context, std::move(MAB), std::move(OW),
-                                  std::move(Emitter), RelaxAll);
   return S;
 }
 
@@ -160,8 +152,7 @@ static MCInstrAnalysis *createFgpuMCInstrAnalysis(const MCInstrInfo *Info) {
 }
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeFgpuTargetMC() {
-  for (Target *T : {&getTheFgpuTarget(), &getTheFgpuelTarget(),
-                    &getTheFgpu64Target(), &getTheFgpu64elTarget()}) {
+  for (Target *T : {&getTheFgpuTarget()}) {
     // Register the MC asm info.
     RegisterMCAsmInfoFn X(*T, createFgpuMCAsmInfo);
 
@@ -197,9 +188,6 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeFgpuTargetMC() {
   }
 
   // Register the MC Code Emitter
-  for (Target *T : {&getTheFgpuTarget(), &getTheFgpu64Target()})
-    TargetRegistry::RegisterMCCodeEmitter(*T, createFgpuMCCodeEmitterEB);
-
-  for (Target *T : {&getTheFgpuelTarget(), &getTheFgpu64elTarget()})
+  for (Target *T : {&getTheFgpuTarget()})
     TargetRegistry::RegisterMCCodeEmitter(*T, createFgpuMCCodeEmitterEL);
 }

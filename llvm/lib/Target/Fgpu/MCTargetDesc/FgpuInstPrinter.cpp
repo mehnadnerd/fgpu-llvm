@@ -35,38 +35,38 @@ static bool isReg(const MCInst &MI, unsigned OpNo) {
 
 const char* Fgpu::FgpuFCCToString(Fgpu::CondCode CC) {
   switch (CC) {
-  case FCOND_F:
-  case FCOND_T:   return "f";
-  case FCOND_UN:
-  case FCOND_OR:  return "un";
-  case FCOND_OEQ:
-  case FCOND_UNE: return "eq";
-  case FCOND_UEQ:
-  case FCOND_ONE: return "ueq";
-  case FCOND_OLT:
-  case FCOND_UGE: return "olt";
-  case FCOND_ULT:
-  case FCOND_OGE: return "ult";
-  case FCOND_OLE:
-  case FCOND_UGT: return "ole";
-  case FCOND_ULE:
-  case FCOND_OGT: return "ule";
-  case FCOND_SF:
-  case FCOND_ST:  return "sf";
-  case FCOND_NGLE:
-  case FCOND_GLE: return "ngle";
-  case FCOND_SEQ:
-  case FCOND_SNE: return "seq";
-  case FCOND_NGL:
-  case FCOND_GL:  return "ngl";
-  case FCOND_LT:
-  case FCOND_NLT: return "lt";
-  case FCOND_NGE:
-  case FCOND_GE:  return "nge";
-  case FCOND_LE:
-  case FCOND_NLE: return "le";
-  case FCOND_NGT:
-  case FCOND_GT:  return "ngt";
+//  case FCOND_F:
+//  case FCOND_T:   return "f";
+//  case FCOND_UN:
+//  case FCOND_OR:  return "un";
+//  case FCOND_OEQ:
+//  case FCOND_UNE: return "eq";
+//  case FCOND_UEQ:
+//  case FCOND_ONE: return "ueq";
+//  case FCOND_OLT:
+//  case FCOND_UGE: return "olt";
+//  case FCOND_ULT:
+//  case FCOND_OGE: return "ult";
+//  case FCOND_OLE:
+//  case FCOND_UGT: return "ole";
+//  case FCOND_ULE:
+//  case FCOND_OGT: return "ule";
+//  case FCOND_SF:
+//  case FCOND_ST:  return "sf";
+//  case FCOND_NGLE:
+//  case FCOND_GLE: return "ngle";
+//  case FCOND_SEQ:
+//  case FCOND_SNE: return "seq";
+//  case FCOND_NGL:
+//  case FCOND_GL:  return "ngl";
+//  case FCOND_LT:
+//  case FCOND_NLT: return "lt";
+//  case FCOND_NGE:
+//  case FCOND_GE:  return "nge";
+//  case FCOND_LE:
+//  case FCOND_NLE: return "le";
+//  case FCOND_NGT:
+//  case FCOND_GT:  return "ngt";
   }
   llvm_unreachable("Impossible condition code!");
 }
@@ -81,11 +81,11 @@ void FgpuInstPrinter::printInst(const MCInst *MI, uint64_t Address,
   switch (MI->getOpcode()) {
   default:
     break;
-  case Fgpu::RDHWR:
-  case Fgpu::RDHWR64:
-    O << "\t.set\tpush\n";
-    O << "\t.set\tfgpu32r2\n";
-    break;
+//  case Fgpu::RDHWR:
+//  case Fgpu::RDHWR64:
+//    O << "\t.set\tpush\n";
+//    O << "\t.set\tfgpu32r2\n";
+//    break;
   }
 
   // Try to print any aliases first.
@@ -96,9 +96,9 @@ void FgpuInstPrinter::printInst(const MCInst *MI, uint64_t Address,
   switch (MI->getOpcode()) {
   default:
     break;
-  case Fgpu::RDHWR:
-  case Fgpu::RDHWR64:
-    O << "\n\t.set\tpop";
+//  case Fgpu::RDHWR:
+//  case Fgpu::RDHWR64:
+//    O << "\n\t.set\tpop";
   }
 }
 
@@ -132,6 +132,23 @@ void FgpuInstPrinter::printUImm(const MCInst *MI, int opNum, raw_ostream &O) {
   }
 
   printOperand(MI, opNum, O);
+}
+
+void FgpuInstPrinter::printUnsignedShortImm(const MCInst *MI, int opNum, raw_ostream &O) {
+  // errs() << "printUnsignedShortImm entered: Imm= " << opNum << "\n";
+  const MCOperand &MO = MI->getOperand(opNum);
+  if (MO.isImm())
+    O << (unsigned short int)MO.getImm();
+  else
+    printOperand(MI, opNum, O);
+}
+void FgpuInstPrinter::printUnsignedImm(const MCInst *MI, int opNum, raw_ostream &O) {
+  // errs() << "printUnsignedImm entered: Imm= " << opNum << "\n";
+  const MCOperand &MO = MI->getOperand(opNum);
+  if (MO.isImm())
+    O << (unsigned int)MO.getImm();
+  else
+    printOperand(MI, opNum, O);
 }
 
 void FgpuInstPrinter::
@@ -190,36 +207,15 @@ bool FgpuInstPrinter::printAlias(const MCInst &MI, raw_ostream &OS) {
     return (isReg<Fgpu::ZERO>(MI, 0) && isReg<Fgpu::ZERO>(MI, 1) &&
             printAlias("b", MI, 2, OS)) ||
            (isReg<Fgpu::ZERO>(MI, 1) && printAlias("beqz", MI, 0, 2, OS));
-  case Fgpu::BEQ64:
-    // beq $r0, $zero, $L2 => beqz $r0, $L2
-    return isReg<Fgpu::ZERO_64>(MI, 1) && printAlias("beqz", MI, 0, 2, OS);
   case Fgpu::BNE:
     // bne $r0, $zero, $L2 => bnez $r0, $L2
     return isReg<Fgpu::ZERO>(MI, 1) && printAlias("bnez", MI, 0, 2, OS);
-  case Fgpu::BNE64:
-    // bne $r0, $zero, $L2 => bnez $r0, $L2
-    return isReg<Fgpu::ZERO_64>(MI, 1) && printAlias("bnez", MI, 0, 2, OS);
-  case Fgpu::BGEZAL:
-    // bgezal $zero, $L1 => bal $L1
-    return isReg<Fgpu::ZERO>(MI, 0) && printAlias("bal", MI, 1, OS);
-  case Fgpu::BC1T:
-    // bc1t $fcc0, $L1 => bc1t $L1
-    return isReg<Fgpu::FCC0>(MI, 0) && printAlias("bc1t", MI, 1, OS);
-  case Fgpu::BC1F:
-    // bc1f $fcc0, $L1 => bc1f $L1
-    return isReg<Fgpu::FCC0>(MI, 0) && printAlias("bc1f", MI, 1, OS);
-  case Fgpu::JALR:
-    // jalr $ra, $r1 => jalr $r1
-    return isReg<Fgpu::RA>(MI, 0) && printAlias("jalr", MI, 1, OS);
-  case Fgpu::JALR64:
-    // jalr $ra, $r1 => jalr $r1
-    return isReg<Fgpu::RA_64>(MI, 0) && printAlias("jalr", MI, 1, OS);
+//  case Fgpu::JALR:
+//    // jalr $ra, $r1 => jalr $r1
+//    return isReg<Fgpu::RA>(MI, 0) && printAlias("jalr", MI, 1, OS);
   case Fgpu::NOR:
     // nor $r0, $r1, $zero => not $r0, $r1
     return isReg<Fgpu::ZERO>(MI, 2) && printAlias("not", MI, 0, 1, OS);
-  case Fgpu::NOR64:
-    // nor $r0, $r1, $zero => not $r0, $r1
-    return isReg<Fgpu::ZERO_64>(MI, 2) && printAlias("not", MI, 0, 1, OS);
   case Fgpu::OR:
     // or $r0, $r1, $zero => move $r0, $r1
     return isReg<Fgpu::ZERO>(MI, 2) && printAlias("move", MI, 0, 1, OS);

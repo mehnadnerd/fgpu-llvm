@@ -89,12 +89,6 @@ public:
   bool isBranchOffsetInRange(unsigned BranchOpc,
                              int64_t BrOffset) const override;
 
-  /// Predicate to determine if an instruction can go in a forbidden slot.
-  bool SafeInForbiddenSlot(const MachineInstr &MI) const;
-
-  /// Predicate to determine if an instruction has a forbidden slot.
-  bool HasForbiddenSlot(const MachineInstr &MI) const;
-
   /// Insert nop instruction when hazard condition is found
   void insertNoop(MachineBasicBlock &MBB,
                   MachineBasicBlock::iterator MI) const override;

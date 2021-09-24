@@ -32,9 +32,6 @@ class FgpuMCCodeEmitter : public MCCodeEmitter {
   MCContext &Ctx;
   bool IsLittleEndian;
 
-  bool isMicroFgpu(const MCSubtargetInfo &STI) const;
-  bool isFgpu32r6(const MCSubtargetInfo &STI) const;
-
 public:
   FgpuMCCodeEmitter(const MCInstrInfo &mcii, MCContext &Ctx_, bool IsLittle)
       : MCII(mcii), Ctx(Ctx_), IsLittleEndian(IsLittle) {}

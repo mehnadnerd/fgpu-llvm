@@ -373,29 +373,21 @@ void FgpuBranchExpansion::replaceBranch(MachineBasicBlock &MBB, Iter Br,
 bool FgpuBranchExpansion::buildProperJumpMI(MachineBasicBlock *MBB,
                                             MachineBasicBlock::iterator Pos,
                                             DebugLoc DL) {
-  return false;
-//  bool HasR6 = ABI.IsN64() ? STI->hasFgpu64r6() : STI->hasFgpu32r6();
-//  bool AddImm = HasR6 && !STI->useIndirectJumpsHazard();
-//
-//  unsigned JR = ABI.IsN64() ? Fgpu::JR64 : Fgpu::JR;
-//  unsigned JIC = ABI.IsN64() ? Fgpu::JIC64 : Fgpu::JIC;
-//  unsigned JR_HB = ABI.IsN64() ? Fgpu::JR_HB64 : Fgpu::JR_HB;
-//  unsigned JR_HB_R6 = ABI.IsN64() ? Fgpu::JR_HB64_R6 : Fgpu::JR_HB_R6;
-//
-//  unsigned JumpOp;
-//  if (STI->useIndirectJumpsHazard())
-//    JumpOp = HasR6 ? JR_HB_R6 : JR_HB;
-//  else
-//    JumpOp = HasR6 ? JIC : JR;
-//
-//
-//  unsigned ATReg = ABI.IsN64() ? Fgpu::AT_64 : Fgpu::AT;
-//  MachineInstrBuilder Instr =
-//      BuildMI(*MBB, Pos, DL, TII->get(JumpOp)).addReg(ATReg);
-//  if (AddImm)
-//    Instr.addImm(0);
-//
-//  return !AddImm;
+  bool HasR6 = false;
+  bool AddImm = false;
+
+  unsigned JR = 0; //Fgpu::JALR; //TODO: make JALR/JR a thing
+
+  unsigned JumpOp = JR;
+
+
+  unsigned ATReg = Fgpu::AT;
+  MachineInstrBuilder Instr =
+      BuildMI(*MBB, Pos, DL, TII->get(JumpOp)).addReg(ATReg);
+  if (AddImm)
+    Instr.addImm(0);
+
+  return !AddImm;
 }
 
 // Expand branch instructions to long branches.
@@ -423,12 +415,8 @@ void FgpuBranchExpansion::expandToLongBranch(MBBInfo &I) {
     // We must select between the FGPU32r6/FGPU64r6 BALC (which is a normal
     // instruction) and the pre-FGPU32r6/FGPU64r6 definition (which is an
     // pseudo-instruction wrapping BGEZAL).
-    const unsigned BalOp =
-        STI->hasFgpu32r6()
-            ? Fgpu::BALC
-            : Fgpu::BAL_BR;
+    const unsigned BalOp = Fgpu::JSUB; //TODO is correct?
 
-    if (!ABI.IsN64()) {
       // Pre R6:
       // $longbr:
       //  addiu $sp, $sp, -8
@@ -444,27 +432,13 @@ void FgpuBranchExpansion::expandToLongBranch(MBBInfo &I) {
       // $fallthrough:
       //
 
-      // R6:
-      // $longbr:
-      //  addiu $sp, $sp, -8
-      //  sw $ra, 0($sp)
-      //  lui $at, %hi($tgt - $baltgt)
-      //  addiu $at, $at, %lo($tgt - $baltgt)
-      //  balc $baltgt
-      // $baltgt:
-      //  addu $at, $ra, $at
-      //  lw $ra, 0($sp)
-      //  addiu $sp, $sp, 8
-      //  jic $at, 0
-      // $fallthrough:
-
       Pos = LongBrMBB->begin();
 
-      BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::ADDiu), Fgpu::SP)
+      BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::ADDi), Fgpu::SP)
           .addReg(Fgpu::SP)
           .addImm(-8);
       BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::SW))
-          .addReg(Fgpu::RA)
+          .addReg(Fgpu::LR)
           .addReg(Fgpu::SP)
           .addImm(0);
 
@@ -484,160 +458,35 @@ void FgpuBranchExpansion::expandToLongBranch(MBBInfo &I) {
       // %hi($tgt-$baltgt) and %lo($tgt-$baltgt) expressions and add them as
       // operands to lowered instructions.
 
-      BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::LONG_BRANCH_LUi), Fgpu::AT)
+      BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::LUi), Fgpu::AT)
           .addMBB(TgtMBB, FgpuII::MO_ABS_HI)
           .addMBB(BalTgtMBB);
 
       MachineInstrBuilder BalInstr =
           BuildMI(*MFp, DL, TII->get(BalOp)).addMBB(BalTgtMBB);
       MachineInstrBuilder ADDiuInstr =
-          BuildMI(*MFp, DL, TII->get(Fgpu::LONG_BRANCH_ADDiu), Fgpu::AT)
+          BuildMI(*MFp, DL, TII->get(Fgpu::Li), Fgpu::AT)
               .addReg(Fgpu::AT)
               .addMBB(TgtMBB, FgpuII::MO_ABS_LO)
               .addMBB(BalTgtMBB);
-      if (STI->hasFgpu32r6()) {
         LongBrMBB->insert(Pos, ADDiuInstr);
         LongBrMBB->insert(Pos, BalInstr);
-      } else {
-        LongBrMBB->insert(Pos, BalInstr);
-        LongBrMBB->insert(Pos, ADDiuInstr);
-        LongBrMBB->rbegin()->bundleWithPred();
-      }
 
       Pos = BalTgtMBB->begin();
 
-      BuildMI(*BalTgtMBB, Pos, DL, TII->get(Fgpu::ADDu), Fgpu::AT)
-          .addReg(Fgpu::RA)
+      BuildMI(*BalTgtMBB, Pos, DL, TII->get(Fgpu::ADD), Fgpu::AT)
+          .addReg(Fgpu::LR)
           .addReg(Fgpu::AT);
-      BuildMI(*BalTgtMBB, Pos, DL, TII->get(Fgpu::LW), Fgpu::RA)
+      BuildMI(*BalTgtMBB, Pos, DL, TII->get(Fgpu::LW), Fgpu::LR)
           .addReg(Fgpu::SP)
           .addImm(0);
-      if (STI->isTargetNaCl())
-        // Bundle-align the target of indirect branch JR.
-        TgtMBB->setAlignment(FGPU_NACL_BUNDLE_ALIGN);
 
       // In NaCl, modifying the sp is not allowed in branch delay slot.
       // For FGPU32R6, we can skip using a delay slot branch.
-      bool hasDelaySlot = buildProperJumpMI(BalTgtMBB, Pos, DL);
-
-      if (STI->isTargetNaCl() || !hasDelaySlot) {
-        BuildMI(*BalTgtMBB, std::prev(Pos), DL, TII->get(Fgpu::ADDiu), Fgpu::SP)
+      buildProperJumpMI(BalTgtMBB, Pos, DL);
+        BuildMI(*BalTgtMBB, std::prev(Pos), DL, TII->get(Fgpu::ADDi), Fgpu::SP)
             .addReg(Fgpu::SP)
             .addImm(8);
-      }
-      if (hasDelaySlot) {
-        if (STI->isTargetNaCl()) {
-          BuildMI(*BalTgtMBB, Pos, DL, TII->get(Fgpu::NOP));
-        } else {
-          BuildMI(*BalTgtMBB, Pos, DL, TII->get(Fgpu::ADDiu), Fgpu::SP)
-              .addReg(Fgpu::SP)
-              .addImm(8);
-        }
-        BalTgtMBB->rbegin()->bundleWithPred();
-      }
-    } else {
-      // Pre R6:
-      // $longbr:
-      //  daddiu $sp, $sp, -16
-      //  sd $ra, 0($sp)
-      //  daddiu $at, $zero, %hi($tgt - $baltgt)
-      //  dsll $at, $at, 16
-      //  bal $baltgt
-      //  daddiu $at, $at, %lo($tgt - $baltgt)
-      // $baltgt:
-      //  daddu $at, $ra, $at
-      //  ld $ra, 0($sp)
-      //  jr64 $at
-      //  daddiu $sp, $sp, 16
-      // $fallthrough:
-
-      // R6:
-      // $longbr:
-      //  daddiu $sp, $sp, -16
-      //  sd $ra, 0($sp)
-      //  daddiu $at, $zero, %hi($tgt - $baltgt)
-      //  dsll $at, $at, 16
-      //  daddiu $at, $at, %lo($tgt - $baltgt)
-      //  balc $baltgt
-      // $baltgt:
-      //  daddu $at, $ra, $at
-      //  ld $ra, 0($sp)
-      //  daddiu $sp, $sp, 16
-      //  jic $at, 0
-      // $fallthrough:
-
-      // We assume the branch is within-function, and that offset is within
-      // +/- 2GB.  High 32 bits will therefore always be zero.
-
-      // Note that this will work even if the offset is negative, because
-      // of the +1 modification that's added in that case.  For example, if the
-      // offset is -1MB (0xFFFFFFFFFFF00000), the computation for %higher is
-      //
-      // 0xFFFFFFFFFFF00000 + 0x80008000 = 0x000000007FF08000
-      //
-      // and the bits [47:32] are zero.  For %highest
-      //
-      // 0xFFFFFFFFFFF00000 + 0x800080008000 = 0x000080007FF08000
-      //
-      // and the bits [63:48] are zero.
-
-      Pos = LongBrMBB->begin();
-
-      BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::DADDiu), Fgpu::SP_64)
-          .addReg(Fgpu::SP_64)
-          .addImm(-16);
-      BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::SD))
-          .addReg(Fgpu::RA_64)
-          .addReg(Fgpu::SP_64)
-          .addImm(0);
-      BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::LONG_BRANCH_DADDiu),
-              Fgpu::AT_64)
-          .addReg(Fgpu::ZERO_64)
-          .addMBB(TgtMBB, FgpuII::MO_ABS_HI)
-          .addMBB(BalTgtMBB);
-      BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::DSLL), Fgpu::AT_64)
-          .addReg(Fgpu::AT_64)
-          .addImm(16);
-
-      MachineInstrBuilder BalInstr =
-          BuildMI(*MFp, DL, TII->get(BalOp)).addMBB(BalTgtMBB);
-      MachineInstrBuilder DADDiuInstr =
-          BuildMI(*MFp, DL, TII->get(Fgpu::LONG_BRANCH_DADDiu), Fgpu::AT_64)
-              .addReg(Fgpu::AT_64)
-              .addMBB(TgtMBB, FgpuII::MO_ABS_LO)
-              .addMBB(BalTgtMBB);
-      if (STI->hasFgpu32r6()) {
-        LongBrMBB->insert(Pos, DADDiuInstr);
-        LongBrMBB->insert(Pos, BalInstr);
-      } else {
-        LongBrMBB->insert(Pos, BalInstr);
-        LongBrMBB->insert(Pos, DADDiuInstr);
-        LongBrMBB->rbegin()->bundleWithPred();
-      }
-
-      Pos = BalTgtMBB->begin();
-
-      BuildMI(*BalTgtMBB, Pos, DL, TII->get(Fgpu::DADDu), Fgpu::AT_64)
-          .addReg(Fgpu::RA_64)
-          .addReg(Fgpu::AT_64);
-      BuildMI(*BalTgtMBB, Pos, DL, TII->get(Fgpu::LD), Fgpu::RA_64)
-          .addReg(Fgpu::SP_64)
-          .addImm(0);
-
-      bool hasDelaySlot = buildProperJumpMI(BalTgtMBB, Pos, DL);
-      // If there is no delay slot, Insert stack adjustment before
-      if (!hasDelaySlot) {
-        BuildMI(*BalTgtMBB, std::prev(Pos), DL, TII->get(Fgpu::DADDiu),
-                Fgpu::SP_64)
-            .addReg(Fgpu::SP_64)
-            .addImm(16);
-      } else {
-        BuildMI(*BalTgtMBB, Pos, DL, TII->get(Fgpu::DADDiu), Fgpu::SP_64)
-            .addReg(Fgpu::SP_64)
-            .addImm(16);
-        BalTgtMBB->rbegin()->bundleWithPred();
-      }
-    }
   } else { // Not PIC
     Pos = LongBrMBB->begin();
     LongBrMBB->addSuccessor(TgtMBB);
@@ -654,63 +503,34 @@ void FgpuBranchExpansion::expandToLongBranch(MBBInfo &I) {
     // Compare 4 upper bits to check if it's the same segment
     bool SameSegmentJump = JOffset >> 28 == TgtMBBOffset >> 28;
 
-    if (STI->hasFgpu32r6() && TII->isBranchOffsetInRange(Fgpu::BC, I.Offset)) {
-      // R6:
-      // $longbr:
-      //  bc $tgt
-      // $fallthrough:
-      //
-      BuildMI(*LongBrMBB, Pos, DL,
-              TII->get(Fgpu::BC))
-          .addMBB(TgtMBB);
-    } else if (SameSegmentJump) {
+if (SameSegmentJump) {
       // Pre R6:
       // $longbr:
       //  j $tgt
       //  nop
       // $fallthrough:
       //
-      MIBundleBuilder(*LongBrMBB, Pos)
-          .append(BuildMI(*MFp, DL, TII->get(Fgpu::J)).addMBB(TgtMBB))
-          .append(BuildMI(*MFp, DL, TII->get(Fgpu::NOP)));
+      assert(false && "I'm tired and this isn't working");
+//      MIBundleBuilder(*LongBrMBB, Pos)
+//          .append(BuildMI(*MFp, DL, TII->get(Fgpu::B)).addMBB(TgtMBB)) // TODO: check B
+//          .append(BuildMI(*MFp, DL, TII->get(Fgpu::NOP)));
     } else {
       // At this point, offset where we need to branch does not fit into
       // immediate field of the branch instruction and is not in the same
       // segment as jump instruction. Therefore we will break it into couple
       // instructions, where we first load the offset into register, and then we
       // do branch register.
-      if (ABI.IsN64()) {
-        BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::LONG_BRANCH_LUi2Op_64),
-                Fgpu::AT_64)
-            .addMBB(TgtMBB, FgpuII::MO_HIGHEST);
-        BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::LONG_BRANCH_DADDiu2Op),
-                Fgpu::AT_64)
-            .addReg(Fgpu::AT_64)
-            .addMBB(TgtMBB, FgpuII::MO_HIGHER);
-        BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::DSLL), Fgpu::AT_64)
-            .addReg(Fgpu::AT_64)
-            .addImm(16);
-        BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::LONG_BRANCH_DADDiu2Op),
-                Fgpu::AT_64)
-            .addReg(Fgpu::AT_64)
-            .addMBB(TgtMBB, FgpuII::MO_ABS_HI);
-        BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::DSLL), Fgpu::AT_64)
-            .addReg(Fgpu::AT_64)
-            .addImm(16);
-        BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::LONG_BRANCH_DADDiu2Op),
-                Fgpu::AT_64)
-            .addReg(Fgpu::AT_64)
-            .addMBB(TgtMBB, FgpuII::MO_ABS_LO);
-      } else {
-        BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::LONG_BRANCH_LUi2Op),
-                Fgpu::AT)
-            .addMBB(TgtMBB, FgpuII::MO_ABS_HI);
-        BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::LONG_BRANCH_ADDiu2Op),
-                Fgpu::AT)
-            .addReg(Fgpu::AT)
-            .addMBB(TgtMBB, FgpuII::MO_ABS_LO);
-      }
-      buildProperJumpMI(LongBrMBB, Pos, DL);
+      assert(false && "Not supported rn"); // I think this could just be LUi annd Li
+//      {
+//        BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::LONG_BRANCH_LUi2Op),
+//                Fgpu::AT)
+//            .addMBB(TgtMBB, FgpuII::MO_ABS_HI);
+//        BuildMI(*LongBrMBB, Pos, DL, TII->get(Fgpu::LONG_BRANCH_ADDiu2Op),
+//                Fgpu::AT)
+//            .addReg(Fgpu::AT)
+//            .addMBB(TgtMBB, FgpuII::MO_ABS_LO);
+//      }
+//      buildProperJumpMI(LongBrMBB, Pos, DL);
     }
   }
 

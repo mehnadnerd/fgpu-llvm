@@ -48,7 +48,7 @@ FgpuRegisterInfo::getPointerRegClass(const MachineFunction &MF,
                                      unsigned Kind) const {
   FgpuABIInfo ABI = MF.getSubtarget<FgpuSubtarget>().getABI();
   FgpuPtrClass PtrClassKind = static_cast<FgpuPtrClass>(Kind);
-  return &Fgpu::FgpuGPRRegClass; // only kind on this system
+  return &Fgpu::GPROutRegClass; // only kind on this system
   llvm_unreachable("Unknown pointer kind");
 }
 
@@ -58,10 +58,10 @@ FgpuRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
   switch (RC->getID()) {
   default:
     return 0;
-  case Fgpu::FgpuGPRRegClassID: {
+  case Fgpu::GPROutRegClassID: {
     return 27; // TODO: don't make up
   }
-  case Fgpu::FgpuFPRRegClassID: {
+  case Fgpu::VecRegsRegClassID: {
     return 16;
   }
   }
@@ -74,7 +74,7 @@ FgpuRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
 /// Fgpu Callee Saved Registers
 const MCPhysReg *
 FgpuRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  return Fgpu::CSR_CC_Fgpu;
+  return CSR_CC_Fgpu_SaveList;
 }
 
 const uint32_t *
@@ -98,19 +98,19 @@ getReservedRegs(const MachineFunction &MF) const {
 
   // Reserve FP if this function should have a dedicated frame pointer register.
   if (Subtarget.getFrameLowering()->hasFP(MF)) {
-    Reserved.set(Fgpu::FP);
+    Reserved.set(Fgpu::R28);
 
     // Reserve the base register if we need to both realign the stack and
     // allocate variable-sized objects at runtime. This should test the
     // same conditions as FgpuFrameLowering::hasBP().
     if (hasStackRealignment(MF) && MF.getFrameInfo().hasVarSizedObjects()) {
-      Reserved.set(Fgpu::S7); // Base PTR
+      Reserved.set(Fgpu::R27); // Base PTR
     }
   }
 
   // Reserve GP if small section is used.
   if (Subtarget.useSmallSection()) {
-    Reserved.set(Fgpu::GP);
+    Reserved.set(Fgpu::R29);
   }
 
   return Reserved;
@@ -153,7 +153,7 @@ getFrameRegister(const MachineFunction &MF) const {
   const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
   const TargetFrameLowering *TFI = Subtarget.getFrameLowering();
 
-  return TFI->hasFP(MF) ? (Fgpu::FP) :
+  return TFI->hasFP(MF) ? (Fgpu::R28) :
                           (Fgpu::SP);
 }
 
@@ -169,8 +169,8 @@ bool FgpuRegisterInfo::canRealignStack(const MachineFunction &MF) const {
     return false;
 
   const FgpuSubtarget &Subtarget = MF.getSubtarget<FgpuSubtarget>();
-  unsigned FP = Fgpu::FP;
-  unsigned BP = Fgpu::S7;
+  unsigned FP = Fgpu::R28;
+  unsigned BP = Fgpu::R27;
 
   // We can't perform dynamic stack realignment if we can't reserve the
   // frame pointer register.

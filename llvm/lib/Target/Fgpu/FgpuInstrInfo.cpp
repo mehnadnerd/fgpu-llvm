@@ -277,87 +277,8 @@ FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(
 bool FgpuInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
                                           int64_t BrOffset) const {
   switch (BranchOpc) {
-  case Fgpu::B:
-  case Fgpu::BAL:
-  case Fgpu::BAL_BR:
-  case Fgpu::BC1F:
-  case Fgpu::BC1FL:
-  case Fgpu::BC1T:
-  case Fgpu::BC1TL:
-  case Fgpu::BEQ:     case Fgpu::BEQ64:
-  case Fgpu::BEQL:
-  case Fgpu::BGEZ:    case Fgpu::BGEZ64:
-  case Fgpu::BGEZL:
-  case Fgpu::BGEZAL:
-  case Fgpu::BGEZALL:
-  case Fgpu::BGTZ:    case Fgpu::BGTZ64:
-  case Fgpu::BGTZL:
-  case Fgpu::BLEZ:    case Fgpu::BLEZ64:
-  case Fgpu::BLEZL:
-  case Fgpu::BLTZ:    case Fgpu::BLTZ64:
-  case Fgpu::BLTZL:
-  case Fgpu::BLTZAL:
-  case Fgpu::BLTZALL:
-  case Fgpu::BNE:     case Fgpu::BNE64:
-  case Fgpu::BNEL:
-    return isInt<18>(BrOffset);
-
-
-  // FGPUR6 branches.
-  case Fgpu::BALC:
-  case Fgpu::BC:
-    return isInt<28>(BrOffset);
-
-  case Fgpu::BC1EQZ:
-  case Fgpu::BC1NEZ:
-  case Fgpu::BC2EQZ:
-  case Fgpu::BC2NEZ:
-  case Fgpu::BEQC:   case Fgpu::BEQC64:
-  case Fgpu::BNEC:   case Fgpu::BNEC64:
-  case Fgpu::BGEC:   case Fgpu::BGEC64:
-  case Fgpu::BGEUC:  case Fgpu::BGEUC64:
-  case Fgpu::BGEZC:  case Fgpu::BGEZC64:
-  case Fgpu::BGTZC:  case Fgpu::BGTZC64:
-  case Fgpu::BLEZC:  case Fgpu::BLEZC64:
-  case Fgpu::BLTC:   case Fgpu::BLTC64:
-  case Fgpu::BLTUC:  case Fgpu::BLTUC64:
-  case Fgpu::BLTZC:  case Fgpu::BLTZC64:
-  case Fgpu::BNVC:
-  case Fgpu::BOVC:
-  case Fgpu::BGEZALC:
-  case Fgpu::BEQZALC:
-  case Fgpu::BGTZALC:
-  case Fgpu::BLEZALC:
-  case Fgpu::BLTZALC:
-  case Fgpu::BNEZALC:
-    return isInt<18>(BrOffset);
-
-  case Fgpu::BEQZC:  case Fgpu::BEQZC64:
-  case Fgpu::BNEZC:  case Fgpu::BNEZC64:
-    return isInt<23>(BrOffset);
-
-  // DSP branches.
-  case Fgpu::BPOSGE32:
-    return isInt<18>(BrOffset);
-
-  // cnFGPU branches.
-  case Fgpu::BBIT0:
-  case Fgpu::BBIT032:
-  case Fgpu::BBIT1:
-  case Fgpu::BBIT132:
-    return isInt<18>(BrOffset);
-
-  // MSA branches.
-  case Fgpu::BZ_B:
-  case Fgpu::BZ_H:
-  case Fgpu::BZ_W:
-  case Fgpu::BZ_D:
-  case Fgpu::BZ_V:
-  case Fgpu::BNZ_B:
-  case Fgpu::BNZ_H:
-  case Fgpu::BNZ_W:
-  case Fgpu::BNZ_D:
-  case Fgpu::BNZ_V:
+  case Fgpu::BEQ:
+  case Fgpu::BNE:
     return isInt<18>(BrOffset);
   }
 
@@ -368,108 +289,7 @@ bool FgpuInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
 unsigned FgpuInstrInfo::getEquivalentCompactForm(
     const MachineBasicBlock::iterator I) const {
   unsigned Opcode = I->getOpcode();
-
-  // FGPUR6 forbids both operands being the zero register.
-  if (Subtarget.hasFgpu32r6() && (I->getNumOperands() > 1) &&
-      (I->getOperand(0).isReg() &&
-       (I->getOperand(0).getReg() == Fgpu::ZERO ||
-        I->getOperand(0).getReg() == Fgpu::ZERO_64)) &&
-      (I->getOperand(1).isReg() &&
-       (I->getOperand(1).getReg() == Fgpu::ZERO ||
-        I->getOperand(1).getReg() == Fgpu::ZERO_64)))
-    return 0;
-
-  if (Subtarget.hasFgpu32r6()) {
-    switch (Opcode) {
-    case Fgpu::B:
-      return Fgpu::BC;
-    case Fgpu::BAL:
-      return Fgpu::BALC;
-    case Fgpu::BEQ:
-      if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
-        return 0;
-      return Fgpu::BEQC;
-    case Fgpu::BNE:
-      if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
-        return 0;
-      return Fgpu::BNEC;
-    case Fgpu::BGE:
-      if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
-        return 0;
-      return Fgpu::BGEC;
-    case Fgpu::BGEU:
-      if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
-        return 0;
-      return Fgpu::BGEUC;
-    case Fgpu::BGEZ:
-      return Fgpu::BGEZC;
-    case Fgpu::BGTZ:
-      return Fgpu::BGTZC;
-    case Fgpu::BLEZ:
-      return Fgpu::BLEZC;
-    case Fgpu::BLT:
-      if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
-        return 0;
-      return Fgpu::BLTC;
-    case Fgpu::BLTU:
-      if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
-        return 0;
-      return Fgpu::BLTUC;
-    case Fgpu::BLTZ:
-      return Fgpu::BLTZC;
-    case Fgpu::BEQ64:
-      if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
-        return 0;
-      return Fgpu::BEQC64;
-    case Fgpu::BNE64:
-      if (I->getOperand(0).getReg() == I->getOperand(1).getReg())
-        return 0;
-      return Fgpu::BNEC64;
-    case Fgpu::BGTZ64:
-      return Fgpu::BGTZC64;
-    case Fgpu::BGEZ64:
-      return Fgpu::BGEZC64;
-    case Fgpu::BLTZ64:
-      return Fgpu::BLTZC64;
-    case Fgpu::BLEZ64:
-      return Fgpu::BLEZC64;
-    // For FGPUR6, the instruction 'jic' can be used for these cases. Some
-    // tools will accept 'jrc reg' as an alias for 'jic 0, $reg'.
-    case Fgpu::JR:
-    case Fgpu::PseudoIndirectBranchR6:
-    case Fgpu::PseudoReturn:
-    case Fgpu::TAILCALLR6REG:
-      return Fgpu::JIC;
-    case Fgpu::JALRPseudo:
-      return Fgpu::JIALC;
-    case Fgpu::JR64:
-    case Fgpu::PseudoIndirectBranch64R6:
-    case Fgpu::PseudoReturn64:
-    case Fgpu::TAILCALL64R6REG:
-      return Fgpu::JIC64;
-    case Fgpu::JALR64Pseudo:
-      return Fgpu::JIALC64;
-    default:
-      return 0;
-    }
-  }
-
   return 0;
-}
-
-/// Predicate for distingushing between control transfer instructions and all
-/// other instructions for handling forbidden slots. Consider inline assembly
-/// as unsafe as well.
-bool FgpuInstrInfo::SafeInForbiddenSlot(const MachineInstr &MI) const {
-  if (MI.isInlineAsm())
-    return false;
-
-  return (MI.getDesc().TSFlags & FgpuII::IsCTI) == 0;
-}
-
-/// Predicate for distingushing instructions that have forbidden slots.
-bool FgpuInstrInfo::HasForbiddenSlot(const MachineInstr &MI) const {
-  return (MI.getDesc().TSFlags & FgpuII::HasForbiddenSlot) != 0;
 }
 
 /// Return the number of bytes of code the specified instruction may be.
@@ -490,6 +310,7 @@ MachineInstrBuilder
 FgpuInstrInfo::genInstrWithNewOpc(unsigned NewOpc,
                                   MachineBasicBlock::iterator I) const {
   MachineInstrBuilder MIB;
+  assert(false); // this won't work
 
   // Certain branches have two forms: e.g beq $1, $zero, dest vs beqz $1, dest
   // Pick the zero form of the branch for readable assembly and for greater
@@ -508,58 +329,13 @@ FgpuInstrInfo::genInstrWithNewOpc(unsigned NewOpc,
     BranchWithZeroOperand = ZeroOperandPosition != -1;
   }
 
-  if (BranchWithZeroOperand) {
-    switch (NewOpc) {
-    case Fgpu::BEQC:
-      NewOpc = Fgpu::BEQZC;
-      break;
-    case Fgpu::BNEC:
-      NewOpc = Fgpu::BNEZC;
-      break;
-    case Fgpu::BGEC:
-      NewOpc = Fgpu::BGEZC;
-      break;
-    case Fgpu::BLTC:
-      NewOpc = Fgpu::BLTZC;
-      break;
-    case Fgpu::BEQC64:
-      NewOpc = Fgpu::BEQZC64;
-      break;
-    case Fgpu::BNEC64:
-      NewOpc = Fgpu::BNEZC64;
-      break;
-    }
-  }
-
   MIB = BuildMI(*I->getParent(), I, I->getDebugLoc(), get(NewOpc));
 
   // For FGPUR6 JI*C requires an immediate 0 as an operand, JIALC(64) an
   // immediate 0 as an operand and requires the removal of it's implicit-def %ra
   // implicit operand as copying the implicit operations of the instructio we're
   // looking at will give us the correct flags.
-  if (NewOpc == Fgpu::JIC || NewOpc == Fgpu::JIALC || NewOpc == Fgpu::JIC64 ||
-      NewOpc == Fgpu::JIALC64) {
-
-    if (NewOpc == Fgpu::JIALC || NewOpc == Fgpu::JIALC64)
-      MIB->RemoveOperand(0);
-
-    for (unsigned J = 0, E = I->getDesc().getNumOperands(); J < E; ++J) {
-      MIB.add(I->getOperand(J));
-    }
-
-    MIB.addImm(0);
-
-    // If I has an MCSymbol operand (used by asm printer, to emit R_FGPU_JALR),
-    // add it to the new instruction.
-    for (unsigned J = I->getDesc().getNumOperands(), E = I->getNumOperands();
-         J < E; ++J) {
-      const MachineOperand &MO = I->getOperand(J);
-      if (MO.isMCSymbol() && (MO.getTargetFlags() & FgpuII::MO_JALR))
-        MIB.addSym(MO.getMCSymbol(), FgpuII::MO_JALR);
-    }
-
-
-  } else {
+  {
     for (unsigned J = 0, E = I->getDesc().getNumOperands(); J < E; ++J) {
       if (BranchWithZeroOperand && (unsigned)ZeroOperandPosition == J)
         continue;
@@ -583,21 +359,21 @@ bool FgpuInstrInfo::findCommutedOpIndices(const MachineInstr &MI,
   if (!MCID.isCommutable())
     return false;
 
-  switch (MI.getOpcode()) {
-  case Fgpu::DPADD_U_H:
-  case Fgpu::DPADD_U_W:
-  case Fgpu::DPADD_U_D:
-  case Fgpu::DPADD_S_H:
-  case Fgpu::DPADD_S_W:
-  case Fgpu::DPADD_S_D:
-    // The first operand is both input and output, so it should not commute
-    if (!fixCommutedOpIndices(SrcOpIdx1, SrcOpIdx2, 2, 3))
-      return false;
-
-    if (!MI.getOperand(SrcOpIdx1).isReg() || !MI.getOperand(SrcOpIdx2).isReg())
-      return false;
-    return true;
-  }
+//  switch (MI.getOpcode()) {
+//  case Fgpu::DPADD_U_H:
+//  case Fgpu::DPADD_U_W:
+//  case Fgpu::DPADD_U_D:
+//  case Fgpu::DPADD_S_H:
+//  case Fgpu::DPADD_S_W:
+//  case Fgpu::DPADD_S_D:
+//    // The first operand is both input and output, so it should not commute
+//    if (!fixCommutedOpIndices(SrcOpIdx1, SrcOpIdx2, 2, 3))
+//      return false;
+//
+//    if (!MI.getOperand(SrcOpIdx1).isReg() || !MI.getOperand(SrcOpIdx2).isReg())
+//      return false;
+//    return true;
+//  }
   return TargetInstrInfo::findCommutedOpIndices(MI, SrcOpIdx1, SrcOpIdx2);
 }
 
@@ -655,47 +431,48 @@ static bool verifyInsExtInstruction(const MachineInstr &MI, StringRef &ErrInfo,
 bool FgpuInstrInfo::verifyInstruction(const MachineInstr &MI,
                                       StringRef &ErrInfo) const {
   // Verify that ins and ext instructions are well formed.
-  switch (MI.getOpcode()) {
-    case Fgpu::EXT:
-    case Fgpu::INS:
-    case Fgpu::DINS:
-      return verifyInsExtInstruction(MI, ErrInfo, 0, 32, 0, 32, 0, 32);
-    case Fgpu::DINSM:
-      // The ISA spec has a subtle difference between dinsm and dextm
-      // in that it says:
-      // 2 <= size <= 64 for 'dinsm' but 'dextm' has 32 < size <= 64.
-      // To make the bounds checks similar, the range 1 < size <= 64 is checked
-      // for 'dinsm'.
-      return verifyInsExtInstruction(MI, ErrInfo, 0, 32, 1, 64, 32, 64);
-    case Fgpu::DINSU:
-      // The ISA spec has a subtle difference between dinsu and dextu in that
-      // the size range of dinsu is specified as 1 <= size <= 32 whereas size
-      // for dextu is 0 < size <= 32. The range checked for dinsu here is
-      // 0 < size <= 32, which is equivalent and similar to dextu.
-      return verifyInsExtInstruction(MI, ErrInfo, 32, 64, 0, 32, 32, 64);
-    case Fgpu::DEXT:
-      return verifyInsExtInstruction(MI, ErrInfo, 0, 32, 0, 32, 0, 63);
-    case Fgpu::DEXTM:
-      return verifyInsExtInstruction(MI, ErrInfo, 0, 32, 32, 64, 32, 64);
-    case Fgpu::DEXTU:
-      return verifyInsExtInstruction(MI, ErrInfo, 32, 64, 0, 32, 32, 64);
-    case Fgpu::TAILCALLREG:
-    case Fgpu::PseudoIndirectBranch:
-    case Fgpu::JR:
-    case Fgpu::JR64:
-    case Fgpu::JALR:
-    case Fgpu::JALR64:
-    case Fgpu::JALRPseudo:
-      if (!Subtarget.useIndirectJumpsHazard())
-        return true;
-
-      ErrInfo = "invalid instruction when using jump guards!";
-      return false;
-    default:
-      return true;
-  }
-
-  return true;
+//  switch (MI.getOpcode()) {
+//    case Fgpu::EXT:
+//    case Fgpu::INS:
+//    case Fgpu::DINS:
+//      return verifyInsExtInstruction(MI, ErrInfo, 0, 32, 0, 32, 0, 32);
+//    case Fgpu::DINSM:
+//      // The ISA spec has a subtle difference between dinsm and dextm
+//      // in that it says:
+//      // 2 <= size <= 64 for 'dinsm' but 'dextm' has 32 < size <= 64.
+//      // To make the bounds checks similar, the range 1 < size <= 64 is checked
+//      // for 'dinsm'.
+//      return verifyInsExtInstruction(MI, ErrInfo, 0, 32, 1, 64, 32, 64);
+//    case Fgpu::DINSU:
+//      // The ISA spec has a subtle difference between dinsu and dextu in that
+//      // the size range of dinsu is specified as 1 <= size <= 32 whereas size
+//      // for dextu is 0 < size <= 32. The range checked for dinsu here is
+//      // 0 < size <= 32, which is equivalent and similar to dextu.
+//      return verifyInsExtInstruction(MI, ErrInfo, 32, 64, 0, 32, 32, 64);
+//    case Fgpu::DEXT:
+//      return verifyInsExtInstruction(MI, ErrInfo, 0, 32, 0, 32, 0, 63);
+//    case Fgpu::DEXTM:
+//      return verifyInsExtInstruction(MI, ErrInfo, 0, 32, 32, 64, 32, 64);
+//    case Fgpu::DEXTU:
+//      return verifyInsExtInstruction(MI, ErrInfo, 32, 64, 0, 32, 32, 64);
+//    case Fgpu::TAILCALLREG:
+//    case Fgpu::PseudoIndirectBranch:
+//    case Fgpu::JR:
+//    case Fgpu::JR64:
+//    case Fgpu::JALR:
+//    case Fgpu::JALR64:
+//    case Fgpu::JALRPseudo:
+//      if (!Subtarget.useIndirectJumpsHazard())
+//        return true;
+//
+//      ErrInfo = "invalid instruction when using jump guards!";
+//      return false;
+//    default:
+//      return true;
+//  }
+//
+//  return true;
+    return false; // these arent implemeted
 }
 
 std::pair<unsigned, unsigned>
@@ -725,8 +502,6 @@ FgpuInstrInfo::getSerializableDirectMachineOperandTargetFlags() const {
     {MO_GOT_DISP,     "fgpu-got-disp"},
     {MO_GOT_PAGE,     "fgpu-got-page"},
     {MO_GOT_OFST,     "fgpu-got-ofst"},
-    {MO_HIGHER,       "fgpu-higher"},
-    {MO_HIGHEST,      "fgpu-highest"},
     {MO_GOT_HI16,     "fgpu-got-hi16"},
     {MO_GOT_LO16,     "fgpu-got-lo16"},
     {MO_CALL_HI16,    "fgpu-call-hi16"},
@@ -747,7 +522,7 @@ FgpuInstrInfo::describeLoadedValue(const MachineInstr &MI, Register Reg) const {
     int64_t Offset = RegImm->Imm;
     // When SrcReg is $zero, treat loaded value as immediate only.
     // Ex. $a2 = ADDiu $zero, 10
-    if (SrcReg == Fgpu::ZERO || SrcReg == Fgpu::ZERO_64) {
+    if (SrcReg == Fgpu::ZERO) {
       return ParamLoadedValue(MI.getOperand(2), Expr);
     }
     Expr = DIExpression::prepend(Expr, DIExpression::ApplyOffset, Offset);
@@ -774,8 +549,7 @@ Optional<RegImmPair> FgpuInstrInfo::isAddImmediate(const MachineInstr &MI,
     return None;
 
   switch (MI.getOpcode()) {
-  case Fgpu::ADDiu:
-  case Fgpu::DADDiu: {
+  case Fgpu::ADDi: {
     const MachineOperand &Dop = MI.getOperand(0);
     const MachineOperand &Sop1 = MI.getOperand(1);
     const MachineOperand &Sop2 = MI.getOperand(2);

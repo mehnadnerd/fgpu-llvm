@@ -152,7 +152,7 @@ static void setCallTargetReg(MachineBasicBlock *MBB,
   MachineFunction &MF = *MBB->getParent();
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
   Register SrcReg = I->getOperand(0).getReg();
-  unsigned DstReg = getRegTy(SrcReg, MF) == MVT::i32 ? Fgpu::T9 : Fgpu::T9_64;
+  unsigned DstReg = Fgpu::R25;
   BuildMI(*MBB, I, I->getDebugLoc(), TII.get(TargetOpcode::COPY), DstReg)
       .addReg(SrcReg);
   I->getOperand(0).setReg(DstReg);
@@ -165,7 +165,7 @@ static void eraseGPOpnd(MachineInstr &MI) {
 
   MachineFunction &MF = *MI.getParent()->getParent();
   MVT::SimpleValueType Ty = getRegTy(MI.getOperand(0).getReg(), MF);
-  unsigned Reg = Ty == MVT::i32 ? Fgpu::GP : Fgpu::GP_64;
+  unsigned Reg = Fgpu::R29;
 
   for (unsigned I = 0; I < MI.getNumOperands(); ++I) {
     MachineOperand &MO = MI.getOperand(I);

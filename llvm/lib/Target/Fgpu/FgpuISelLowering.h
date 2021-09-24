@@ -108,7 +108,7 @@ class TargetRegisterClass;
   //===--------------------------------------------------------------------===//
   namespace FGPU {
   bool isKernelFunction(const Function &F);
-  }
+  } // namespace FGPU
   class FgpuTargetLowering : public TargetLowering  {
 
   public:

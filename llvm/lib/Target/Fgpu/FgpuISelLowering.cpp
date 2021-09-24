@@ -89,11 +89,6 @@ NoZeroDivCheck("mno-check-zero-division", cl::Hidden,
 
 extern cl::opt<bool> EmitJalrReloc;
 
-static const MCPhysReg Fgpu64DPRegs[8] = {
-  Fgpu::D12_64, Fgpu::D13_64, Fgpu::D14_64, Fgpu::D15_64,
-  Fgpu::D16_64, Fgpu::D17_64, Fgpu::D18_64, Fgpu::D19_64
-};
-
 // If I is a shifted mask, set the size (Size) and the first bit of the
 // mask (Pos), and return true.
 // For example, if I is 0x003ff800, (Pos, Size) = (11, 11).
@@ -106,6 +101,8 @@ static bool isShiftedMask(uint64_t I, uint64_t &Pos, uint64_t &Size) {
   return true;
 }
 
+//TODO: we don't actually want these to be used
+
 // The FGPU MSA ABI passes vector arguments in the integer register set.
 // The number of integer registers used is dependant on the ABI used.
 MVT FgpuTargetLowering::getRegisterTypeForCallingConv(LLVMContext &Context,
@@ -114,15 +111,14 @@ MVT FgpuTargetLowering::getRegisterTypeForCallingConv(LLVMContext &Context,
   if (!VT.isVector())
     return getRegisterType(Context, VT);
 
-  return Subtarget.isABI_O32() || VT.getSizeInBits() == 32 ? MVT::i32
-                                                           : MVT::i64;
+  return MVT::i32;
 }
 
 unsigned FgpuTargetLowering::getNumRegistersForCallingConv(LLVMContext &Context,
                                                            CallingConv::ID CC,
                                                            EVT VT) const {
   if (VT.isVector())
-    return divideCeil(VT.getSizeInBits(), Subtarget.isABI_O32() ? 32 : 64);
+    return divideCeil(VT.getSizeInBits(), 32);
   return FgpuTargetLowering::getNumRegisters(Context, VT);
 }
 
@@ -181,116 +177,15 @@ const char *FgpuTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case FgpuISD::FIRST_NUMBER:      break;
   case FgpuISD::JmpLink:           return "FgpuISD::JmpLink";
   case FgpuISD::TailCall:          return "FgpuISD::TailCall";
-  case FgpuISD::Highest:           return "FgpuISD::Highest";
-  case FgpuISD::Higher:            return "FgpuISD::Higher";
-  case FgpuISD::Hi:                return "FgpuISD::Hi";
-  case FgpuISD::Lo:                return "FgpuISD::Lo";
   case FgpuISD::GotHi:             return "FgpuISD::GotHi";
-  case FgpuISD::TlsHi:             return "FgpuISD::TlsHi";
   case FgpuISD::GPRel:             return "FgpuISD::GPRel";
   case FgpuISD::ThreadPointer:     return "FgpuISD::ThreadPointer";
-  case FgpuISD::Ret:               return "FgpuISD::Ret";
-  case FgpuISD::ERet:              return "FgpuISD::ERet";
-  case FgpuISD::EH_RETURN:         return "FgpuISD::EH_RETURN";
-  case FgpuISD::FMS:               return "FgpuISD::FMS";
-  case FgpuISD::FPBrcond:          return "FgpuISD::FPBrcond";
-  case FgpuISD::FPCmp:             return "FgpuISD::FPCmp";
-  case FgpuISD::FSELECT:           return "FgpuISD::FSELECT";
-  case FgpuISD::MTC1_D64:          return "FgpuISD::MTC1_D64";
-  case FgpuISD::CMovFP_T:          return "FgpuISD::CMovFP_T";
-  case FgpuISD::CMovFP_F:          return "FgpuISD::CMovFP_F";
-  case FgpuISD::TruncIntFP:        return "FgpuISD::TruncIntFP";
-  case FgpuISD::MFHI:              return "FgpuISD::MFHI";
-  case FgpuISD::MFLO:              return "FgpuISD::MFLO";
-  case FgpuISD::MTLOHI:            return "FgpuISD::MTLOHI";
-  case FgpuISD::Mult:              return "FgpuISD::Mult";
-  case FgpuISD::Multu:             return "FgpuISD::Multu";
-  case FgpuISD::MAdd:              return "FgpuISD::MAdd";
-  case FgpuISD::MAddu:             return "FgpuISD::MAddu";
-  case FgpuISD::MSub:              return "FgpuISD::MSub";
-  case FgpuISD::MSubu:             return "FgpuISD::MSubu";
-  case FgpuISD::DivRem:            return "FgpuISD::DivRem";
-  case FgpuISD::DivRemU:           return "FgpuISD::DivRemU";
-  case FgpuISD::DivRem16:          return "FgpuISD::DivRem16";
-  case FgpuISD::DivRemU16:         return "FgpuISD::DivRemU16";
-  case FgpuISD::BuildPairF64:      return "FgpuISD::BuildPairF64";
-  case FgpuISD::ExtractElementF64: return "FgpuISD::ExtractElementF64";
+  case FgpuISD::RET:               return "FgpuISD::Ret";
+//  case FgpuISD::ERet:              return "FgpuISD::ERet";
+//  case FgpuISD::EH_RETURN:         return "FgpuISD::EH_RETURN";
   case FgpuISD::Wrapper:           return "FgpuISD::Wrapper";
   case FgpuISD::DynAlloc:          return "FgpuISD::DynAlloc";
   case FgpuISD::Sync:              return "FgpuISD::Sync";
-  case FgpuISD::Ext:               return "FgpuISD::Ext";
-  case FgpuISD::Ins:               return "FgpuISD::Ins";
-  case FgpuISD::CIns:              return "FgpuISD::CIns";
-  case FgpuISD::LWL:               return "FgpuISD::LWL";
-  case FgpuISD::LWR:               return "FgpuISD::LWR";
-  case FgpuISD::SWL:               return "FgpuISD::SWL";
-  case FgpuISD::SWR:               return "FgpuISD::SWR";
-  case FgpuISD::LDL:               return "FgpuISD::LDL";
-  case FgpuISD::LDR:               return "FgpuISD::LDR";
-  case FgpuISD::SDL:               return "FgpuISD::SDL";
-  case FgpuISD::SDR:               return "FgpuISD::SDR";
-  case FgpuISD::EXTP:              return "FgpuISD::EXTP";
-  case FgpuISD::EXTPDP:            return "FgpuISD::EXTPDP";
-  case FgpuISD::EXTR_S_H:          return "FgpuISD::EXTR_S_H";
-  case FgpuISD::EXTR_W:            return "FgpuISD::EXTR_W";
-  case FgpuISD::EXTR_R_W:          return "FgpuISD::EXTR_R_W";
-  case FgpuISD::EXTR_RS_W:         return "FgpuISD::EXTR_RS_W";
-  case FgpuISD::SHILO:             return "FgpuISD::SHILO";
-  case FgpuISD::MTHLIP:            return "FgpuISD::MTHLIP";
-  case FgpuISD::MULSAQ_S_W_PH:     return "FgpuISD::MULSAQ_S_W_PH";
-  case FgpuISD::MAQ_S_W_PHL:       return "FgpuISD::MAQ_S_W_PHL";
-  case FgpuISD::MAQ_S_W_PHR:       return "FgpuISD::MAQ_S_W_PHR";
-  case FgpuISD::MAQ_SA_W_PHL:      return "FgpuISD::MAQ_SA_W_PHL";
-  case FgpuISD::MAQ_SA_W_PHR:      return "FgpuISD::MAQ_SA_W_PHR";
-  case FgpuISD::DPAU_H_QBL:        return "FgpuISD::DPAU_H_QBL";
-  case FgpuISD::DPAU_H_QBR:        return "FgpuISD::DPAU_H_QBR";
-  case FgpuISD::DPSU_H_QBL:        return "FgpuISD::DPSU_H_QBL";
-  case FgpuISD::DPSU_H_QBR:        return "FgpuISD::DPSU_H_QBR";
-  case FgpuISD::DPAQ_S_W_PH:       return "FgpuISD::DPAQ_S_W_PH";
-  case FgpuISD::DPSQ_S_W_PH:       return "FgpuISD::DPSQ_S_W_PH";
-  case FgpuISD::DPAQ_SA_L_W:       return "FgpuISD::DPAQ_SA_L_W";
-  case FgpuISD::DPSQ_SA_L_W:       return "FgpuISD::DPSQ_SA_L_W";
-  case FgpuISD::DPA_W_PH:          return "FgpuISD::DPA_W_PH";
-  case FgpuISD::DPS_W_PH:          return "FgpuISD::DPS_W_PH";
-  case FgpuISD::DPAQX_S_W_PH:      return "FgpuISD::DPAQX_S_W_PH";
-  case FgpuISD::DPAQX_SA_W_PH:     return "FgpuISD::DPAQX_SA_W_PH";
-  case FgpuISD::DPAX_W_PH:         return "FgpuISD::DPAX_W_PH";
-  case FgpuISD::DPSX_W_PH:         return "FgpuISD::DPSX_W_PH";
-  case FgpuISD::DPSQX_S_W_PH:      return "FgpuISD::DPSQX_S_W_PH";
-  case FgpuISD::DPSQX_SA_W_PH:     return "FgpuISD::DPSQX_SA_W_PH";
-  case FgpuISD::MULSA_W_PH:        return "FgpuISD::MULSA_W_PH";
-  case FgpuISD::MULT:              return "FgpuISD::MULT";
-  case FgpuISD::MULTU:             return "FgpuISD::MULTU";
-  case FgpuISD::MADD_DSP:          return "FgpuISD::MADD_DSP";
-  case FgpuISD::MADDU_DSP:         return "FgpuISD::MADDU_DSP";
-  case FgpuISD::MSUB_DSP:          return "FgpuISD::MSUB_DSP";
-  case FgpuISD::MSUBU_DSP:         return "FgpuISD::MSUBU_DSP";
-  case FgpuISD::SHLL_DSP:          return "FgpuISD::SHLL_DSP";
-  case FgpuISD::SHRA_DSP:          return "FgpuISD::SHRA_DSP";
-  case FgpuISD::SHRL_DSP:          return "FgpuISD::SHRL_DSP";
-  case FgpuISD::SETCC_DSP:         return "FgpuISD::SETCC_DSP";
-  case FgpuISD::SELECT_CC_DSP:     return "FgpuISD::SELECT_CC_DSP";
-  case FgpuISD::VALL_ZERO:         return "FgpuISD::VALL_ZERO";
-  case FgpuISD::VANY_ZERO:         return "FgpuISD::VANY_ZERO";
-  case FgpuISD::VALL_NONZERO:      return "FgpuISD::VALL_NONZERO";
-  case FgpuISD::VANY_NONZERO:      return "FgpuISD::VANY_NONZERO";
-  case FgpuISD::VCEQ:              return "FgpuISD::VCEQ";
-  case FgpuISD::VCLE_S:            return "FgpuISD::VCLE_S";
-  case FgpuISD::VCLE_U:            return "FgpuISD::VCLE_U";
-  case FgpuISD::VCLT_S:            return "FgpuISD::VCLT_S";
-  case FgpuISD::VCLT_U:            return "FgpuISD::VCLT_U";
-  case FgpuISD::VEXTRACT_SEXT_ELT: return "FgpuISD::VEXTRACT_SEXT_ELT";
-  case FgpuISD::VEXTRACT_ZEXT_ELT: return "FgpuISD::VEXTRACT_ZEXT_ELT";
-  case FgpuISD::VNOR:              return "FgpuISD::VNOR";
-  case FgpuISD::VSHF:              return "FgpuISD::VSHF";
-  case FgpuISD::SHF:               return "FgpuISD::SHF";
-  case FgpuISD::ILVEV:             return "FgpuISD::ILVEV";
-  case FgpuISD::ILVOD:             return "FgpuISD::ILVOD";
-  case FgpuISD::ILVL:              return "FgpuISD::ILVL";
-  case FgpuISD::ILVR:              return "FgpuISD::ILVR";
-  case FgpuISD::PCKEV:             return "FgpuISD::PCKEV";
-  case FgpuISD::PCKOD:             return "FgpuISD::PCKOD";
-  case FgpuISD::INSVE:             return "FgpuISD::INSVE";
   }
   return nullptr;
 }
@@ -304,9 +199,6 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
   setBooleanVectorContents(ZeroOrNegativeOneBooleanContent);
   // The cmp.cond.fmt instruction in FGPU32r6/FGPU64r6 uses 0 and -1 like MSA
   // does. Integer booleans still use 0 and 1.
-  if (Subtarget.hasFgpu32r6())
-    setBooleanContents(ZeroOrOneBooleanContent,
-                       ZeroOrNegativeOneBooleanContent);
 
   // Load extented operations for i1 types must be promoted
   for (MVT VT : MVT::integer_valuetypes()) {
@@ -357,35 +249,14 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
   setOperationAction(ISD::FCOPYSIGN,          MVT::f64,   Custom);
   setOperationAction(ISD::FP_TO_SINT,         MVT::i32,   Custom);
 
-  if (!(TM.Options.NoNaNsFPMath || Subtarget.inAbs2008Mode())) {
     setOperationAction(ISD::FABS, MVT::f32, Custom);
     setOperationAction(ISD::FABS, MVT::f64, Custom);
-  }
 
-  if (Subtarget.isGP64bit()) {
-    setOperationAction(ISD::GlobalAddress,      MVT::i64,   Custom);
-    setOperationAction(ISD::BlockAddress,       MVT::i64,   Custom);
-    setOperationAction(ISD::GlobalTLSAddress,   MVT::i64,   Custom);
-    setOperationAction(ISD::JumpTable,          MVT::i64,   Custom);
-    setOperationAction(ISD::ConstantPool,       MVT::i64,   Custom);
-    setOperationAction(ISD::SELECT,             MVT::i64,   Custom);
-    setOperationAction(ISD::LOAD,               MVT::i64,   Custom);
-    setOperationAction(ISD::STORE,              MVT::i64,   Custom);
-    setOperationAction(ISD::FP_TO_SINT,         MVT::i64,   Custom);
-    setOperationAction(ISD::SHL_PARTS,          MVT::i64,   Custom);
-    setOperationAction(ISD::SRA_PARTS,          MVT::i64,   Custom);
-    setOperationAction(ISD::SRL_PARTS,          MVT::i64,   Custom);
-  }
-
-  if (!Subtarget.isGP64bit()) {
     setOperationAction(ISD::SHL_PARTS,          MVT::i32,   Custom);
     setOperationAction(ISD::SRA_PARTS,          MVT::i32,   Custom);
     setOperationAction(ISD::SRL_PARTS,          MVT::i32,   Custom);
-  }
 
   setOperationAction(ISD::EH_DWARF_CFA,         MVT::i32,   Custom);
-  if (Subtarget.isGP64bit())
-    setOperationAction(ISD::EH_DWARF_CFA,       MVT::i64,   Custom);
 
   setOperationAction(ISD::SDIV, MVT::i32, Expand);
   setOperationAction(ISD::SREM, MVT::i32, Expand);
@@ -410,26 +281,16 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
   setOperationAction(ISD::FP_TO_UINT,        MVT::i32,   Expand);
   setOperationAction(ISD::FP_TO_UINT,        MVT::i64,   Expand);
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1,    Expand);
-  if (Subtarget.hasCnFgpu()) {
-    setOperationAction(ISD::CTPOP,           MVT::i32,   Legal);
-    setOperationAction(ISD::CTPOP,           MVT::i64,   Legal);
-  } else {
     setOperationAction(ISD::CTPOP,           MVT::i32,   Expand);
     setOperationAction(ISD::CTPOP,           MVT::i64,   Expand);
-  }
   setOperationAction(ISD::CTTZ,              MVT::i32,   Expand);
   setOperationAction(ISD::CTTZ,              MVT::i64,   Expand);
   setOperationAction(ISD::ROTL,              MVT::i32,   Expand);
   setOperationAction(ISD::ROTL,              MVT::i64,   Expand);
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32,  Expand);
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64,  Expand);
-
-  if (!Subtarget.hasFgpu32r2())
     setOperationAction(ISD::ROTR, MVT::i32,   Expand);
-
-  if (!Subtarget.hasFgpu64r2())
     setOperationAction(ISD::ROTR, MVT::i64,   Expand);
-
   setOperationAction(ISD::FSIN,              MVT::f32,   Expand);
   setOperationAction(ISD::FSIN,              MVT::f64,   Expand);
   setOperationAction(ISD::FCOS,              MVT::f32,   Expand);
@@ -464,33 +325,17 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
   setOperationAction(ISD::STACKSAVE,         MVT::Other, Expand);
   setOperationAction(ISD::STACKRESTORE,      MVT::Other, Expand);
 
-  if (!Subtarget.isGP64bit()) {
     setOperationAction(ISD::ATOMIC_LOAD,     MVT::i64,   Expand);
     setOperationAction(ISD::ATOMIC_STORE,    MVT::i64,   Expand);
-  }
 
-  if (!Subtarget.hasFgpu32r2()) {
     setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8,  Expand);
     setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Expand);
-  }
 
-  // FGPU16 lacks FGPU32's clz and clo instructions.
-  if (!Subtarget.hasFgpu32())
     setOperationAction(ISD::CTLZ, MVT::i32, Expand);
-  if (!Subtarget.hasFgpu64())
     setOperationAction(ISD::CTLZ, MVT::i64, Expand);
 
-  if (!Subtarget.hasFgpu32r2())
     setOperationAction(ISD::BSWAP, MVT::i32, Expand);
-  if (!Subtarget.hasFgpu64r2())
     setOperationAction(ISD::BSWAP, MVT::i64, Expand);
-
-  if (Subtarget.isGP64bit()) {
-    setLoadExtAction(ISD::SEXTLOAD, MVT::i64, MVT::i32, Custom);
-    setLoadExtAction(ISD::ZEXTLOAD, MVT::i64, MVT::i32, Custom);
-    setLoadExtAction(ISD::EXTLOAD, MVT::i64, MVT::i32, Custom);
-    setTruncStoreAction(MVT::i64, MVT::i32, Custom);
-  }
 
   setOperationAction(ISD::TRAP, MVT::Other, Legal);
 
@@ -504,23 +349,20 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
   setTargetDAGCombine(ISD::AssertZext);
   setTargetDAGCombine(ISD::SHL);
 
-  if (ABI.IsO32()) {
     // These libcalls are not available in 32-bit.
     setLibcallName(RTLIB::SHL_I128, nullptr);
     setLibcallName(RTLIB::SRL_I128, nullptr);
     setLibcallName(RTLIB::SRA_I128, nullptr);
     setLibcallName(RTLIB::MULO_I64, nullptr);
     setLibcallName(RTLIB::MULO_I128, nullptr);
-  }
 
-  setMinFunctionAlignment(Subtarget.isGP64bit() ? Align(8) : Align(4));
+  setMinFunctionAlignment(Align(4));
 
   // The arguments on the stack are defined in terms of 4-byte slots on O32
   // and 8-byte slots on N32/N64.
-  setMinStackArgumentAlignment((ABI.IsN32() || ABI.IsN64()) ? Align(8)
-                                                            : Align(4));
+  setMinStackArgumentAlignment(Align(4));
 
-  setStackPointerRegisterToSaveRestore(ABI.IsN64() ? Fgpu::SP_64 : Fgpu::SP);
+  setStackPointerRegisterToSaveRestore(Fgpu::SP);
 
   MaxStoresPerMemcpy = 16;
 }
@@ -551,109 +393,110 @@ static SDValue performDivRemCombine(SDNode *N, SelectionDAG &DAG,
                                     const FgpuSubtarget &Subtarget) {
   if (DCI.isBeforeLegalizeOps())
     return SDValue();
-
-  EVT Ty = N->getValueType(0);
-  unsigned LO = (Ty == MVT::i32) ? Fgpu::LO0 : Fgpu::LO0_64;
-  unsigned HI = (Ty == MVT::i32) ? Fgpu::HI0 : Fgpu::HI0_64;
-  unsigned Opc = N->getOpcode() == ISD::SDIVREM ? FgpuISD::DivRem16 :
-                                                  FgpuISD::DivRemU16;
-  SDLoc DL(N);
-
-  SDValue DivRem = DAG.getNode(Opc, DL, MVT::Glue,
-                               N->getOperand(0), N->getOperand(1));
-  SDValue InChain = DAG.getEntryNode();
-  SDValue InGlue = DivRem;
-
-  // insert MFLO
-  if (N->hasAnyUseOfValue(0)) {
-    SDValue CopyFromLo = DAG.getCopyFromReg(InChain, DL, LO, Ty,
-                                            InGlue);
-    DAG.ReplaceAllUsesOfValueWith(SDValue(N, 0), CopyFromLo);
-    InChain = CopyFromLo.getValue(1);
-    InGlue = CopyFromLo.getValue(2);
-  }
-
-  // insert MFHI
-  if (N->hasAnyUseOfValue(1)) {
-    SDValue CopyFromHi = DAG.getCopyFromReg(InChain, DL,
-                                            HI, Ty, InGlue);
-    DAG.ReplaceAllUsesOfValueWith(SDValue(N, 1), CopyFromHi);
-  }
-
+  assert(false && "not supported");
   return SDValue();
+//  EVT Ty = N->getValueType(0);
+//  unsigned LO = (Ty == MVT::i32) ? Fgpu::LO0 : Fgpu::LO0_64;
+//  unsigned HI = (Ty == MVT::i32) ? Fgpu::HI0 : Fgpu::HI0_64;
+//  unsigned Opc = N->getOpcode() == ISD::SDIVREM ? FgpuISD::DivRem16 :
+//                                                  FgpuISD::DivRemU16;
+//  SDLoc DL(N);
+//
+//  SDValue DivRem = DAG.getNode(Opc, DL, MVT::Glue,
+//                               N->getOperand(0), N->getOperand(1));
+//  SDValue InChain = DAG.getEntryNode();
+//  SDValue InGlue = DivRem;
+//
+//  // insert MFLO
+//  if (N->hasAnyUseOfValue(0)) {
+//    SDValue CopyFromLo = DAG.getCopyFromReg(InChain, DL, LO, Ty,
+//                                            InGlue);
+//    DAG.ReplaceAllUsesOfValueWith(SDValue(N, 0), CopyFromLo);
+//    InChain = CopyFromLo.getValue(1);
+//    InGlue = CopyFromLo.getValue(2);
+//  }
+//
+//  // insert MFHI
+//  if (N->hasAnyUseOfValue(1)) {
+//    SDValue CopyFromHi = DAG.getCopyFromReg(InChain, DL,
+//                                            HI, Ty, InGlue);
+//    DAG.ReplaceAllUsesOfValueWith(SDValue(N, 1), CopyFromHi);
+//  }
+//
+//  return SDValue();
 }
-
-static Fgpu::CondCode condCodeToFCC(ISD::CondCode CC) {
-  switch (CC) {
-  default: llvm_unreachable("Unknown fp condition code!");
-  case ISD::SETEQ:
-  case ISD::SETOEQ: return Fgpu::FCOND_OEQ;
-  case ISD::SETUNE: return Fgpu::FCOND_UNE;
-  case ISD::SETLT:
-  case ISD::SETOLT: return Fgpu::FCOND_OLT;
-  case ISD::SETGT:
-  case ISD::SETOGT: return Fgpu::FCOND_OGT;
-  case ISD::SETLE:
-  case ISD::SETOLE: return Fgpu::FCOND_OLE;
-  case ISD::SETGE:
-  case ISD::SETOGE: return Fgpu::FCOND_OGE;
-  case ISD::SETULT: return Fgpu::FCOND_ULT;
-  case ISD::SETULE: return Fgpu::FCOND_ULE;
-  case ISD::SETUGT: return Fgpu::FCOND_UGT;
-  case ISD::SETUGE: return Fgpu::FCOND_UGE;
-  case ISD::SETUO:  return Fgpu::FCOND_UN;
-  case ISD::SETO:   return Fgpu::FCOND_OR;
-  case ISD::SETNE:
-  case ISD::SETONE: return Fgpu::FCOND_ONE;
-  case ISD::SETUEQ: return Fgpu::FCOND_UEQ;
-  }
-}
-
-/// This function returns true if the floating point conditional branches and
-/// conditional moves which use condition code CC should be inverted.
-static bool invertFPCondCodeUser(Fgpu::CondCode CC) {
-  if (CC >= Fgpu::FCOND_F && CC <= Fgpu::FCOND_NGT)
-    return false;
-
-  assert((CC >= Fgpu::FCOND_T && CC <= Fgpu::FCOND_GT) &&
-         "Illegal Condition Code");
-
-  return true;
-}
-
-// Creates and returns an FPCmp node from a setcc node.
-// Returns Op if setcc is not a floating point comparison.
-static SDValue createFPCmp(SelectionDAG &DAG, const SDValue &Op) {
-  // must be a SETCC node
-  if (Op.getOpcode() != ISD::SETCC)
-    return Op;
-
-  SDValue LHS = Op.getOperand(0);
-
-  if (!LHS.getValueType().isFloatingPoint())
-    return Op;
-
-  SDValue RHS = Op.getOperand(1);
-  SDLoc DL(Op);
-
-  // Assume the 3rd operand is a CondCodeSDNode. Add code to check the type of
-  // node if necessary.
-  ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(2))->get();
-
-  return DAG.getNode(FgpuISD::FPCmp, DL, MVT::Glue, LHS, RHS,
-                     DAG.getConstant(condCodeToFCC(CC), DL, MVT::i32));
-}
-
-// Creates and returns a CMovFPT/F node.
-static SDValue createCMovFP(SelectionDAG &DAG, SDValue Cond, SDValue True,
-                            SDValue False, const SDLoc &DL) {
-  ConstantSDNode *CC = cast<ConstantSDNode>(Cond.getOperand(2));
-  bool invert = invertFPCondCodeUser((Fgpu::CondCode)CC->getSExtValue());
-  SDValue FCC0 = DAG.getRegister(Fgpu::FCC0, MVT::i32);
-
-  return DAG.getNode((invert ? FgpuISD::CMovFP_F : FgpuISD::CMovFP_T), DL,
-                     True.getValueType(), True, FCC0, False, Cond);
-}
+//
+//static Fgpu::CondCode condCodeToFCC(ISD::CondCode CC) {
+//  switch (CC) {
+//  default: llvm_unreachable("Unknown fp condition code!");
+//  case ISD::SETEQ:
+//  case ISD::SETOEQ: return Fgpu::FCOND_OEQ;
+//  case ISD::SETUNE: return Fgpu::FCOND_UNE;
+//  case ISD::SETLT:
+//  case ISD::SETOLT: return Fgpu::FCOND_OLT;
+//  case ISD::SETGT:
+//  case ISD::SETOGT: return Fgpu::FCOND_OGT;
+//  case ISD::SETLE:
+//  case ISD::SETOLE: return Fgpu::FCOND_OLE;
+//  case ISD::SETGE:
+//  case ISD::SETOGE: return Fgpu::FCOND_OGE;
+//  case ISD::SETULT: return Fgpu::FCOND_ULT;
+//  case ISD::SETULE: return Fgpu::FCOND_ULE;
+//  case ISD::SETUGT: return Fgpu::FCOND_UGT;
+//  case ISD::SETUGE: return Fgpu::FCOND_UGE;
+//  case ISD::SETUO:  return Fgpu::FCOND_UN;
+//  case ISD::SETO:   return Fgpu::FCOND_OR;
+//  case ISD::SETNE:
+//  case ISD::SETONE: return Fgpu::FCOND_ONE;
+//  case ISD::SETUEQ: return Fgpu::FCOND_UEQ;
+//  }
+//}
+//
+///// This function returns true if the floating point conditional branches and
+///// conditional moves which use condition code CC should be inverted.
+//static bool invertFPCondCodeUser(Fgpu::CondCode CC) {
+//  if (CC >= Fgpu::FCOND_F && CC <= Fgpu::FCOND_NGT)
+//    return false;
+//
+//  assert((CC >= Fgpu::FCOND_T && CC <= Fgpu::FCOND_GT) &&
+//         "Illegal Condition Code");
+//
+//  return true;
+//}
+//
+//// Creates and returns an FPCmp node from a setcc node.
+//// Returns Op if setcc is not a floating point comparison.
+//static SDValue createFPCmp(SelectionDAG &DAG, const SDValue &Op) {
+//  // must be a SETCC node
+//  if (Op.getOpcode() != ISD::SETCC)
+//    return Op;
+//
+//  SDValue LHS = Op.getOperand(0);
+//
+//  if (!LHS.getValueType().isFloatingPoint())
+//    return Op;
+//
+//  SDValue RHS = Op.getOperand(1);
+//  SDLoc DL(Op);
+//
+//  // Assume the 3rd operand is a CondCodeSDNode. Add code to check the type of
+//  // node if necessary.
+//  ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(2))->get();
+//
+//  return DAG.getNode(FgpuISD::FPCmp, DL, MVT::Glue, LHS, RHS,
+//                     DAG.getConstant(condCodeToFCC(CC), DL, MVT::i32));
+//}
+//
+//// Creates and returns a CMovFPT/F node.
+//static SDValue createCMovFP(SelectionDAG &DAG, SDValue Cond, SDValue True,
+//                            SDValue False, const SDLoc &DL) {
+//  ConstantSDNode *CC = cast<ConstantSDNode>(Cond.getOperand(2));
+//  bool invert = invertFPCondCodeUser((Fgpu::CondCode)CC->getSExtValue());
+//  SDValue FCC0 = DAG.getRegister(Fgpu::FCC0, MVT::i32);
+//
+//  return DAG.getNode((invert ? FgpuISD::CMovFP_F : FgpuISD::CMovFP_T), DL,
+//                     True.getValueType(), True, FCC0, False, Cond);
+//}
 
 static SDValue performSELECTCombine(SDNode *N, SelectionDAG &DAG,
                                     TargetLowering::DAGCombinerInfo &DCI,
@@ -736,404 +579,6 @@ static SDValue performSELECTCombine(SDNode *N, SelectionDAG &DAG,
   return SDValue();
 }
 
-static SDValue performCMovFPCombine(SDNode *N, SelectionDAG &DAG,
-                                    TargetLowering::DAGCombinerInfo &DCI,
-                                    const FgpuSubtarget &Subtarget) {
-  if (DCI.isBeforeLegalizeOps())
-    return SDValue();
-
-  SDValue ValueIfTrue = N->getOperand(0), ValueIfFalse = N->getOperand(2);
-
-  ConstantSDNode *FalseC = dyn_cast<ConstantSDNode>(ValueIfFalse);
-  if (!FalseC || FalseC->getZExtValue())
-    return SDValue();
-
-  // Since RHS (False) is 0, we swap the order of the True/False operands
-  // (obviously also inverting the condition) so that we can
-  // take advantage of conditional moves using the $0 register.
-  // Example:
-  //   return (a != 0) ? x : 0;
-  //     load $reg, x
-  //     movz $reg, $0, a
-  unsigned Opc = (N->getOpcode() == FgpuISD::CMovFP_T) ? FgpuISD::CMovFP_F :
-                                                         FgpuISD::CMovFP_T;
-
-  SDValue FCC = N->getOperand(1), Glue = N->getOperand(3);
-  return DAG.getNode(Opc, SDLoc(N), ValueIfFalse.getValueType(),
-                     ValueIfFalse, FCC, ValueIfTrue, Glue);
-}
-
-static SDValue performANDCombine(SDNode *N, SelectionDAG &DAG,
-                                 TargetLowering::DAGCombinerInfo &DCI,
-                                 const FgpuSubtarget &Subtarget) {
-  if (DCI.isBeforeLegalizeOps() || !Subtarget.hasExtractInsert())
-    return SDValue();
-
-  SDValue FirstOperand = N->getOperand(0);
-  unsigned FirstOperandOpc = FirstOperand.getOpcode();
-  SDValue Mask = N->getOperand(1);
-  EVT ValTy = N->getValueType(0);
-  SDLoc DL(N);
-
-  uint64_t Pos = 0, SMPos, SMSize;
-  ConstantSDNode *CN;
-  SDValue NewOperand;
-  unsigned Opc;
-
-  // Op's second operand must be a shifted mask.
-  if (!(CN = dyn_cast<ConstantSDNode>(Mask)) ||
-      !isShiftedMask(CN->getZExtValue(), SMPos, SMSize))
-    return SDValue();
-
-  if (FirstOperandOpc == ISD::SRA || FirstOperandOpc == ISD::SRL) {
-    // Pattern match EXT.
-    //  $dst = and ((sra or srl) $src , pos), (2**size - 1)
-    //  => ext $dst, $src, pos, size
-
-    // The second operand of the shift must be an immediate.
-    if (!(CN = dyn_cast<ConstantSDNode>(FirstOperand.getOperand(1))))
-      return SDValue();
-
-    Pos = CN->getZExtValue();
-
-    // Return if the shifted mask does not start at bit 0 or the sum of its size
-    // and Pos exceeds the word's size.
-    if (SMPos != 0 || Pos + SMSize > ValTy.getSizeInBits())
-      return SDValue();
-
-    Opc = FgpuISD::Ext;
-    NewOperand = FirstOperand.getOperand(0);
-  } else if (FirstOperandOpc == ISD::SHL && Subtarget.hasCnFgpu()) {
-    // Pattern match CINS.
-    //  $dst = and (shl $src , pos), mask
-    //  => cins $dst, $src, pos, size
-    // mask is a shifted mask with consecutive 1's, pos = shift amount,
-    // size = population count.
-
-    // The second operand of the shift must be an immediate.
-    if (!(CN = dyn_cast<ConstantSDNode>(FirstOperand.getOperand(1))))
-      return SDValue();
-
-    Pos = CN->getZExtValue();
-
-    if (SMPos != Pos || Pos >= ValTy.getSizeInBits() || SMSize >= 32 ||
-        Pos + SMSize > ValTy.getSizeInBits())
-      return SDValue();
-
-    NewOperand = FirstOperand.getOperand(0);
-    // SMSize is 'location' (position) in this case, not size.
-    SMSize--;
-    Opc = FgpuISD::CIns;
-  } else {
-    // Pattern match EXT.
-    //  $dst = and $src, (2**size - 1) , if size > 16
-    //  => ext $dst, $src, pos, size , pos = 0
-
-    // If the mask is <= 0xffff, andi can be used instead.
-    if (CN->getZExtValue() <= 0xffff)
-      return SDValue();
-
-    // Return if the mask doesn't start at position 0.
-    if (SMPos)
-      return SDValue();
-
-    Opc = FgpuISD::Ext;
-    NewOperand = FirstOperand;
-  }
-  return DAG.getNode(Opc, DL, ValTy, NewOperand,
-                     DAG.getConstant(Pos, DL, MVT::i32),
-                     DAG.getConstant(SMSize, DL, MVT::i32));
-}
-
-static SDValue performORCombine(SDNode *N, SelectionDAG &DAG,
-                                TargetLowering::DAGCombinerInfo &DCI,
-                                const FgpuSubtarget &Subtarget) {
-  // Pattern match INS.
-  //  $dst = or (and $src1 , mask0), (and (shl $src, pos), mask1),
-  //  where mask1 = (2**size - 1) << pos, mask0 = ~mask1
-  //  => ins $dst, $src, size, pos, $src1
-  if (DCI.isBeforeLegalizeOps() || !Subtarget.hasExtractInsert())
-    return SDValue();
-
-  SDValue And0 = N->getOperand(0), And1 = N->getOperand(1);
-  uint64_t SMPos0, SMSize0, SMPos1, SMSize1;
-  ConstantSDNode *CN, *CN1;
-
-  // See if Op's first operand matches (and $src1 , mask0).
-  if (And0.getOpcode() != ISD::AND)
-    return SDValue();
-
-  if (!(CN = dyn_cast<ConstantSDNode>(And0.getOperand(1))) ||
-      !isShiftedMask(~CN->getSExtValue(), SMPos0, SMSize0))
-    return SDValue();
-
-  // See if Op's second operand matches (and (shl $src, pos), mask1).
-  if (And1.getOpcode() == ISD::AND &&
-      And1.getOperand(0).getOpcode() == ISD::SHL) {
-
-    if (!(CN = dyn_cast<ConstantSDNode>(And1.getOperand(1))) ||
-        !isShiftedMask(CN->getZExtValue(), SMPos1, SMSize1))
-      return SDValue();
-
-    // The shift masks must have the same position and size.
-    if (SMPos0 != SMPos1 || SMSize0 != SMSize1)
-      return SDValue();
-
-    SDValue Shl = And1.getOperand(0);
-
-    if (!(CN = dyn_cast<ConstantSDNode>(Shl.getOperand(1))))
-      return SDValue();
-
-    unsigned Shamt = CN->getZExtValue();
-
-    // Return if the shift amount and the first bit position of mask are not the
-    // same.
-    EVT ValTy = N->getValueType(0);
-    if ((Shamt != SMPos0) || (SMPos0 + SMSize0 > ValTy.getSizeInBits()))
-      return SDValue();
-
-    SDLoc DL(N);
-    return DAG.getNode(FgpuISD::Ins, DL, ValTy, Shl.getOperand(0),
-                       DAG.getConstant(SMPos0, DL, MVT::i32),
-                       DAG.getConstant(SMSize0, DL, MVT::i32),
-                       And0.getOperand(0));
-  } else {
-    // Pattern match DINS.
-    //  $dst = or (and $src, mask0), mask1
-    //  where mask0 = ((1 << SMSize0) -1) << SMPos0
-    //  => dins $dst, $src, pos, size
-    if (~CN->getSExtValue() == ((((int64_t)1 << SMSize0) - 1) << SMPos0) &&
-        ((SMSize0 + SMPos0 <= 64 && Subtarget.hasFgpu64r2()) ||
-         (SMSize0 + SMPos0 <= 32))) {
-      // Check if AND instruction has constant as argument
-      bool isConstCase = And1.getOpcode() != ISD::AND;
-      if (And1.getOpcode() == ISD::AND) {
-        if (!(CN1 = dyn_cast<ConstantSDNode>(And1->getOperand(1))))
-          return SDValue();
-      } else {
-        if (!(CN1 = dyn_cast<ConstantSDNode>(N->getOperand(1))))
-          return SDValue();
-      }
-      // Don't generate INS if constant OR operand doesn't fit into bits
-      // cleared by constant AND operand.
-      if (CN->getSExtValue() & CN1->getSExtValue())
-        return SDValue();
-
-      SDLoc DL(N);
-      EVT ValTy = N->getOperand(0)->getValueType(0);
-      SDValue Const1;
-      SDValue SrlX;
-      if (!isConstCase) {
-        Const1 = DAG.getConstant(SMPos0, DL, MVT::i32);
-        SrlX = DAG.getNode(ISD::SRL, DL, And1->getValueType(0), And1, Const1);
-      }
-      return DAG.getNode(
-          FgpuISD::Ins, DL, N->getValueType(0),
-          isConstCase
-              ? DAG.getConstant(CN1->getSExtValue() >> SMPos0, DL, ValTy)
-              : SrlX,
-          DAG.getConstant(SMPos0, DL, MVT::i32),
-          DAG.getConstant(ValTy.getSizeInBits() / 8 < 8 ? SMSize0 & 31
-                                                        : SMSize0,
-                          DL, MVT::i32),
-          And0->getOperand(0));
-
-    }
-    return SDValue();
-  }
-}
-
-static SDValue performMADD_MSUBCombine(SDNode *ROOTNode, SelectionDAG &CurDAG,
-                                       const FgpuSubtarget &Subtarget) {
-  // ROOTNode must have a multiplication as an operand for the match to be
-  // successful.
-  if (ROOTNode->getOperand(0).getOpcode() != ISD::MUL &&
-      ROOTNode->getOperand(1).getOpcode() != ISD::MUL)
-    return SDValue();
-
-  // We don't handle vector types here.
-  if (ROOTNode->getValueType(0).isVector())
-    return SDValue();
-
-  // For FGPU64, madd / msub instructions are inefficent to use with 64 bit
-  // arithmetic. E.g.
-  // (add (mul a b) c) =>
-  //   let res = (madd (mthi (drotr c 32))x(mtlo c) a b) in
-  //   FGPU64:   (or (dsll (mfhi res) 32) (dsrl (dsll (mflo res) 32) 32)
-  //   or
-  //   FGPU64R2: (dins (mflo res) (mfhi res) 32 32)
-  //
-  // The overhead of setting up the Hi/Lo registers and reassembling the
-  // result makes this a dubious optimzation for FGPU64. The core of the
-  // problem is that Hi/Lo contain the upper and lower 32 bits of the
-  // operand and result.
-  //
-  // It requires a chain of 4 add/mul for FGPU64R2 to get better code
-  // density than doing it naively, 5 for FGPU64. Additionally, using
-  // madd/msub on FGPU64 requires the operands actually be 32 bit sign
-  // extended operands, not true 64 bit values.
-  //
-  // FIXME: For the moment, disable this completely for FGPU64.
-  if (Subtarget.hasFgpu64())
-    return SDValue();
-
-  SDValue Mult = ROOTNode->getOperand(0).getOpcode() == ISD::MUL
-                     ? ROOTNode->getOperand(0)
-                     : ROOTNode->getOperand(1);
-
-  SDValue AddOperand = ROOTNode->getOperand(0).getOpcode() == ISD::MUL
-                     ? ROOTNode->getOperand(1)
-                     : ROOTNode->getOperand(0);
-
-  // Transform this to a MADD only if the user of this node is the add.
-  // If there are other users of the mul, this function returns here.
-  if (!Mult.hasOneUse())
-    return SDValue();
-
-  // maddu and madd are unusual instructions in that on FGPU64 bits 63..31
-  // must be in canonical form, i.e. sign extended. For FGPU32, the operands
-  // of the multiply must have 32 or more sign bits, otherwise we cannot
-  // perform this optimization. We have to check this here as we're performing
-  // this optimization pre-legalization.
-  SDValue MultLHS = Mult->getOperand(0);
-  SDValue MultRHS = Mult->getOperand(1);
-
-  bool IsSigned = MultLHS->getOpcode() == ISD::SIGN_EXTEND &&
-                  MultRHS->getOpcode() == ISD::SIGN_EXTEND;
-  bool IsUnsigned = MultLHS->getOpcode() == ISD::ZERO_EXTEND &&
-                    MultRHS->getOpcode() == ISD::ZERO_EXTEND;
-
-  if (!IsSigned && !IsUnsigned)
-    return SDValue();
-
-  // Initialize accumulator.
-  SDLoc DL(ROOTNode);
-  SDValue TopHalf;
-  SDValue BottomHalf;
-  BottomHalf = CurDAG.getNode(ISD::EXTRACT_ELEMENT, DL, MVT::i32, AddOperand,
-                              CurDAG.getIntPtrConstant(0, DL));
-
-  TopHalf = CurDAG.getNode(ISD::EXTRACT_ELEMENT, DL, MVT::i32, AddOperand,
-                           CurDAG.getIntPtrConstant(1, DL));
-  SDValue ACCIn = CurDAG.getNode(FgpuISD::MTLOHI, DL, MVT::Untyped,
-                                  BottomHalf,
-                                  TopHalf);
-
-  // Create FgpuMAdd(u) / FgpuMSub(u) node.
-  bool IsAdd = ROOTNode->getOpcode() == ISD::ADD;
-  unsigned Opcode = IsAdd ? (IsUnsigned ? FgpuISD::MAddu : FgpuISD::MAdd)
-                          : (IsUnsigned ? FgpuISD::MSubu : FgpuISD::MSub);
-  SDValue MAddOps[3] = {
-      CurDAG.getNode(ISD::TRUNCATE, DL, MVT::i32, Mult->getOperand(0)),
-      CurDAG.getNode(ISD::TRUNCATE, DL, MVT::i32, Mult->getOperand(1)), ACCIn};
-  EVT VTs[2] = {MVT::i32, MVT::i32};
-  SDValue MAdd = CurDAG.getNode(Opcode, DL, VTs, MAddOps);
-
-  SDValue ResLo = CurDAG.getNode(FgpuISD::MFLO, DL, MVT::i32, MAdd);
-  SDValue ResHi = CurDAG.getNode(FgpuISD::MFHI, DL, MVT::i32, MAdd);
-  SDValue Combined =
-      CurDAG.getNode(ISD::BUILD_PAIR, DL, MVT::i64, ResLo, ResHi);
-  return Combined;
-}
-
-static SDValue performSUBCombine(SDNode *N, SelectionDAG &DAG,
-                                 TargetLowering::DAGCombinerInfo &DCI,
-                                 const FgpuSubtarget &Subtarget) {
-  // (sub v0 (mul v1, v2)) => (msub v1, v2, v0)
-  if (DCI.isBeforeLegalizeOps()) {
-    if (Subtarget.hasFgpu32() && !Subtarget.hasFgpu32r6() &&
-        N->getValueType(0) == MVT::i64)
-      return performMADD_MSUBCombine(N, DAG, Subtarget);
-
-    return SDValue();
-  }
-
-  return SDValue();
-}
-
-static SDValue performADDCombine(SDNode *N, SelectionDAG &DAG,
-                                 TargetLowering::DAGCombinerInfo &DCI,
-                                 const FgpuSubtarget &Subtarget) {
-  // (add v0 (mul v1, v2)) => (madd v1, v2, v0)
-  if (DCI.isBeforeLegalizeOps()) {
-    if (Subtarget.hasFgpu32() && !Subtarget.hasFgpu32r6() &&
-        N->getValueType(0) == MVT::i64)
-      return performMADD_MSUBCombine(N, DAG, Subtarget);
-
-    return SDValue();
-  }
-
-  // (add v0, (add v1, abs_lo(tjt))) => (add (add v0, v1), abs_lo(tjt))
-  SDValue Add = N->getOperand(1);
-
-  if (Add.getOpcode() != ISD::ADD)
-    return SDValue();
-
-  SDValue Lo = Add.getOperand(1);
-
-  if ((Lo.getOpcode() != FgpuISD::Lo) ||
-      (Lo.getOperand(0).getOpcode() != ISD::TargetJumpTable))
-    return SDValue();
-
-  EVT ValTy = N->getValueType(0);
-  SDLoc DL(N);
-
-  SDValue Add1 = DAG.getNode(ISD::ADD, DL, ValTy, N->getOperand(0),
-                             Add.getOperand(0));
-  return DAG.getNode(ISD::ADD, DL, ValTy, Add1, Lo);
-}
-
-static SDValue performSHLCombine(SDNode *N, SelectionDAG &DAG,
-                                 TargetLowering::DAGCombinerInfo &DCI,
-                                 const FgpuSubtarget &Subtarget) {
-  // Pattern match CINS.
-  //  $dst = shl (and $src , imm), pos
-  //  => cins $dst, $src, pos, size
-
-  if (DCI.isBeforeLegalizeOps() || !Subtarget.hasCnFgpu())
-    return SDValue();
-
-  SDValue FirstOperand = N->getOperand(0);
-  unsigned FirstOperandOpc = FirstOperand.getOpcode();
-  SDValue SecondOperand = N->getOperand(1);
-  EVT ValTy = N->getValueType(0);
-  SDLoc DL(N);
-
-  uint64_t Pos = 0, SMPos, SMSize;
-  ConstantSDNode *CN;
-  SDValue NewOperand;
-
-  // The second operand of the shift must be an immediate.
-  if (!(CN = dyn_cast<ConstantSDNode>(SecondOperand)))
-    return SDValue();
-
-  Pos = CN->getZExtValue();
-
-  if (Pos >= ValTy.getSizeInBits())
-    return SDValue();
-
-  if (FirstOperandOpc != ISD::AND)
-    return SDValue();
-
-  // AND's second operand must be a shifted mask.
-  if (!(CN = dyn_cast<ConstantSDNode>(FirstOperand.getOperand(1))) ||
-      !isShiftedMask(CN->getZExtValue(), SMPos, SMSize))
-    return SDValue();
-
-  // Return if the shifted mask does not start at bit 0 or the sum of its size
-  // and Pos exceeds the word's size.
-  if (SMPos != 0 || SMSize > 32 || Pos + SMSize > ValTy.getSizeInBits())
-    return SDValue();
-
-  NewOperand = FirstOperand.getOperand(0);
-  // SMSize is 'location' (position) in this case, not size.
-  SMSize--;
-
-  return DAG.getNode(FgpuISD::CIns, DL, ValTy, NewOperand,
-                     DAG.getConstant(Pos, DL, MVT::i32),
-                     DAG.getConstant(SMSize, DL, MVT::i32));
-}
-
 SDValue  FgpuTargetLowering::PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI)
   const {
   SelectionDAG &DAG = DCI.DAG;
@@ -1141,35 +586,11 @@ SDValue  FgpuTargetLowering::PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI)
 
   switch (Opc) {
   default: break;
-  case ISD::SDIVREM:
-  case ISD::UDIVREM:
-    return performDivRemCombine(N, DAG, DCI, Subtarget);
   case ISD::SELECT:
     return performSELECTCombine(N, DAG, DCI, Subtarget);
-  case FgpuISD::CMovFP_F:
-  case FgpuISD::CMovFP_T:
-    return performCMovFPCombine(N, DAG, DCI, Subtarget);
-  case ISD::AND:
-    return performANDCombine(N, DAG, DCI, Subtarget);
-  case ISD::OR:
-    return performORCombine(N, DAG, DCI, Subtarget);
-  case ISD::ADD:
-    return performADDCombine(N, DAG, DCI, Subtarget);
-  case ISD::SHL:
-    return performSHLCombine(N, DAG, DCI, Subtarget);
-  case ISD::SUB:
-    return performSUBCombine(N, DAG, DCI, Subtarget);
   }
 
   return SDValue();
-}
-
-bool FgpuTargetLowering::isCheapToSpeculateCttz() const {
-  return Subtarget.hasFgpu32();
-}
-
-bool FgpuTargetLowering::isCheapToSpeculateCtlz() const {
-  return Subtarget.hasFgpu32();
 }
 
 bool FgpuTargetLowering::shouldFoldConstantShiftPairToMask(
@@ -1237,30 +658,30 @@ static MachineBasicBlock *insertDivByZeroTrap(MachineInstr &MI,
                                               MachineBasicBlock &MBB,
                                               const TargetInstrInfo &TII,
                                               bool Is64Bit) {
-  if (NoZeroDivCheck)
+//  if (NoZeroDivCheck)
     return &MBB;
 
-  // Insert instruction "teq $divisor_reg, $zero, 7".
-  MachineBasicBlock::iterator I(MI);
-  MachineInstrBuilder MIB;
-  MachineOperand &Divisor = MI.getOperand(2);
-  MIB = BuildMI(MBB, std::next(I), MI.getDebugLoc(),
-                TII.get(Fgpu::TEQ))
-            .addReg(Divisor.getReg(), getKillRegState(Divisor.isKill()))
-            .addReg(Fgpu::ZERO)
-            .addImm(7);
-
-  // Use the 32-bit sub-register if this is a 64-bit division.
-  if (Is64Bit)
-    MIB->getOperand(0).setSubReg(Fgpu::sub_32);
-
-  // Clear Divisor's kill flag.
-  Divisor.setIsKill(false);
-
-  // We would normally delete the original instruction here but in this case
-  // we only needed to inject an additional instruction rather than replace it.
-
-  return &MBB;
+//  // Insert instruction "teq $divisor_reg, $zero, 7".
+//  MachineBasicBlock::iterator I(MI);
+//  MachineInstrBuilder MIB;
+//  MachineOperand &Divisor = MI.getOperand(2);
+//  MIB = BuildMI(MBB, std::next(I), MI.getDebugLoc(),
+//                TII.get(Fgpu::TEQ))
+//            .addReg(Divisor.getReg(), getKillRegState(Divisor.isKill()))
+//            .addReg(Fgpu::ZERO)
+//            .addImm(7);
+//
+//  // Use the 32-bit sub-register if this is a 64-bit division.
+//  if (Is64Bit)
+//    MIB->getOperand(0).setSubReg(Fgpu::sub_32);
+//
+//  // Clear Divisor's kill flag.
+//  Divisor.setIsKill(false);
+//
+//  // We would normally delete the original instruction here but in this case
+//  // we only needed to inject an additional instruction rather than replace it.
+//
+//  return &MBB;
 }
 
 MachineBasicBlock *
@@ -1269,317 +690,21 @@ FgpuTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   switch (MI.getOpcode()) {
   default:
     llvm_unreachable("Unexpected instr type to insert");
-  case Fgpu::ATOMIC_LOAD_ADD_I8:
-    return emitAtomicBinaryPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_LOAD_ADD_I16:
-    return emitAtomicBinaryPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_LOAD_ADD_I32:
-    return emitAtomicBinary(MI, BB);
-  case Fgpu::ATOMIC_LOAD_ADD_I64:
-    return emitAtomicBinary(MI, BB);
-
-  case Fgpu::ATOMIC_LOAD_AND_I8:
-    return emitAtomicBinaryPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_LOAD_AND_I16:
-    return emitAtomicBinaryPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_LOAD_AND_I32:
-    return emitAtomicBinary(MI, BB);
-  case Fgpu::ATOMIC_LOAD_AND_I64:
-    return emitAtomicBinary(MI, BB);
-
-  case Fgpu::ATOMIC_LOAD_OR_I8:
-    return emitAtomicBinaryPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_LOAD_OR_I16:
-    return emitAtomicBinaryPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_LOAD_OR_I32:
-    return emitAtomicBinary(MI, BB);
-  case Fgpu::ATOMIC_LOAD_OR_I64:
-    return emitAtomicBinary(MI, BB);
-
-  case Fgpu::ATOMIC_LOAD_XOR_I8:
-    return emitAtomicBinaryPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_LOAD_XOR_I16:
-    return emitAtomicBinaryPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_LOAD_XOR_I32:
-    return emitAtomicBinary(MI, BB);
-  case Fgpu::ATOMIC_LOAD_XOR_I64:
-    return emitAtomicBinary(MI, BB);
-
-  case Fgpu::ATOMIC_LOAD_NAND_I8:
-    return emitAtomicBinaryPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_LOAD_NAND_I16:
-    return emitAtomicBinaryPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_LOAD_NAND_I32:
-    return emitAtomicBinary(MI, BB);
-  case Fgpu::ATOMIC_LOAD_NAND_I64:
-    return emitAtomicBinary(MI, BB);
-
-  case Fgpu::ATOMIC_LOAD_SUB_I8:
-    return emitAtomicBinaryPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_LOAD_SUB_I16:
-    return emitAtomicBinaryPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_LOAD_SUB_I32:
-    return emitAtomicBinary(MI, BB);
-  case Fgpu::ATOMIC_LOAD_SUB_I64:
-    return emitAtomicBinary(MI, BB);
-
-  case Fgpu::ATOMIC_SWAP_I8:
-    return emitAtomicBinaryPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_SWAP_I16:
-    return emitAtomicBinaryPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_SWAP_I32:
-    return emitAtomicBinary(MI, BB);
-  case Fgpu::ATOMIC_SWAP_I64:
-    return emitAtomicBinary(MI, BB);
-
-  case Fgpu::ATOMIC_CMP_SWAP_I8:
-    return emitAtomicCmpSwapPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_CMP_SWAP_I16:
-    return emitAtomicCmpSwapPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_CMP_SWAP_I32:
-    return emitAtomicCmpSwap(MI, BB);
-  case Fgpu::ATOMIC_CMP_SWAP_I64:
-    return emitAtomicCmpSwap(MI, BB);
-
-  case Fgpu::ATOMIC_LOAD_MIN_I8:
-    return emitAtomicBinaryPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_LOAD_MIN_I16:
-    return emitAtomicBinaryPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_LOAD_MIN_I32:
-    return emitAtomicBinary(MI, BB);
-  case Fgpu::ATOMIC_LOAD_MIN_I64:
-    return emitAtomicBinary(MI, BB);
-
-  case Fgpu::ATOMIC_LOAD_MAX_I8:
-    return emitAtomicBinaryPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_LOAD_MAX_I16:
-    return emitAtomicBinaryPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_LOAD_MAX_I32:
-    return emitAtomicBinary(MI, BB);
-  case Fgpu::ATOMIC_LOAD_MAX_I64:
-    return emitAtomicBinary(MI, BB);
-
-  case Fgpu::ATOMIC_LOAD_UMIN_I8:
-    return emitAtomicBinaryPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_LOAD_UMIN_I16:
-    return emitAtomicBinaryPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_LOAD_UMIN_I32:
-    return emitAtomicBinary(MI, BB);
-  case Fgpu::ATOMIC_LOAD_UMIN_I64:
-    return emitAtomicBinary(MI, BB);
-
-  case Fgpu::ATOMIC_LOAD_UMAX_I8:
-    return emitAtomicBinaryPartword(MI, BB, 1);
-  case Fgpu::ATOMIC_LOAD_UMAX_I16:
-    return emitAtomicBinaryPartword(MI, BB, 2);
-  case Fgpu::ATOMIC_LOAD_UMAX_I32:
-    return emitAtomicBinary(MI, BB);
-  case Fgpu::ATOMIC_LOAD_UMAX_I64:
-    return emitAtomicBinary(MI, BB);
-
-  case Fgpu::PseudoSDIV:
-  case Fgpu::PseudoUDIV:
-  case Fgpu::DIV:
-  case Fgpu::DIVU:
-  case Fgpu::MOD:
-  case Fgpu::MODU:
-    return insertDivByZeroTrap(MI, *BB, *Subtarget.getInstrInfo(), false);
-  case Fgpu::PseudoDSDIV:
-  case Fgpu::PseudoDUDIV:
-  case Fgpu::DDIV:
-  case Fgpu::DDIVU:
-  case Fgpu::DMOD:
-  case Fgpu::DMODU:
-    return insertDivByZeroTrap(MI, *BB, *Subtarget.getInstrInfo(), true);
-  case Fgpu::PseudoSELECT_I:
-  case Fgpu::PseudoSELECT_I64:
-  case Fgpu::PseudoSELECT_S:
-  case Fgpu::PseudoSELECT_D32:
-  case Fgpu::PseudoSELECT_D64:
-    return emitPseudoSELECT(MI, BB, false, Fgpu::BNE);
-  case Fgpu::PseudoSELECTFP_F_I:
-  case Fgpu::PseudoSELECTFP_F_I64:
-  case Fgpu::PseudoSELECTFP_F_S:
-  case Fgpu::PseudoSELECTFP_F_D32:
-  case Fgpu::PseudoSELECTFP_F_D64:
-    return emitPseudoSELECT(MI, BB, true, Fgpu::BC1F);
-  case Fgpu::PseudoSELECTFP_T_I:
-  case Fgpu::PseudoSELECTFP_T_I64:
-  case Fgpu::PseudoSELECTFP_T_S:
-  case Fgpu::PseudoSELECTFP_T_D32:
-  case Fgpu::PseudoSELECTFP_T_D64:
-    return emitPseudoSELECT(MI, BB, true, Fgpu::BC1T);
-  case Fgpu::PseudoD_SELECT_I:
-  case Fgpu::PseudoD_SELECT_I64:
-    return emitPseudoD_SELECT(MI, BB);
-  case Fgpu::LDR_W:
-    return emitLDR_W(MI, BB);
-  case Fgpu::LDR_D:
-    return emitLDR_D(MI, BB);
-  case Fgpu::STR_W:
-    return emitSTR_W(MI, BB);
-  case Fgpu::STR_D:
-    return emitSTR_D(MI, BB);
+//  case Fgpu::PseudoSELECT_I:
+//  case Fgpu::PseudoSELECT_I64:
+//  case Fgpu::PseudoSELECT_S:
+//  case Fgpu::PseudoSELECT_D32:
+//  case Fgpu::PseudoSELECT_D64:
+//    return emitPseudoSELECT(MI, BB, false, Fgpu::BNE);
+//  case Fgpu::LDR_W:
+//    return emitLDR_W(MI, BB);
+//  case Fgpu::LDR_D:
+//    return emitLDR_D(MI, BB);
+//  case Fgpu::STR_W:
+//    return emitSTR_W(MI, BB);
+//  case Fgpu::STR_D:
+//    return emitSTR_D(MI, BB);
   }
-}
-
-// This function also handles Fgpu::ATOMIC_SWAP_I32 (when BinOpcode == 0), and
-// Fgpu::ATOMIC_LOAD_NAND_I32 (when Nand == true)
-MachineBasicBlock *
-FgpuTargetLowering::emitAtomicBinary(MachineInstr &MI,
-                                     MachineBasicBlock *BB) const {
-
-  MachineFunction *MF = BB->getParent();
-  MachineRegisterInfo &RegInfo = MF->getRegInfo();
-  const TargetInstrInfo *TII = Subtarget.getInstrInfo();
-  DebugLoc DL = MI.getDebugLoc();
-
-  unsigned AtomicOp;
-  bool NeedsAdditionalReg = false;
-  switch (MI.getOpcode()) {
-  case Fgpu::ATOMIC_LOAD_ADD_I32:
-    AtomicOp = Fgpu::ATOMIC_LOAD_ADD_I32_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_SUB_I32:
-    AtomicOp = Fgpu::ATOMIC_LOAD_SUB_I32_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_AND_I32:
-    AtomicOp = Fgpu::ATOMIC_LOAD_AND_I32_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_OR_I32:
-    AtomicOp = Fgpu::ATOMIC_LOAD_OR_I32_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_XOR_I32:
-    AtomicOp = Fgpu::ATOMIC_LOAD_XOR_I32_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_NAND_I32:
-    AtomicOp = Fgpu::ATOMIC_LOAD_NAND_I32_POSTRA;
-    break;
-  case Fgpu::ATOMIC_SWAP_I32:
-    AtomicOp = Fgpu::ATOMIC_SWAP_I32_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_ADD_I64:
-    AtomicOp = Fgpu::ATOMIC_LOAD_ADD_I64_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_SUB_I64:
-    AtomicOp = Fgpu::ATOMIC_LOAD_SUB_I64_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_AND_I64:
-    AtomicOp = Fgpu::ATOMIC_LOAD_AND_I64_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_OR_I64:
-    AtomicOp = Fgpu::ATOMIC_LOAD_OR_I64_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_XOR_I64:
-    AtomicOp = Fgpu::ATOMIC_LOAD_XOR_I64_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_NAND_I64:
-    AtomicOp = Fgpu::ATOMIC_LOAD_NAND_I64_POSTRA;
-    break;
-  case Fgpu::ATOMIC_SWAP_I64:
-    AtomicOp = Fgpu::ATOMIC_SWAP_I64_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_MIN_I32:
-    AtomicOp = Fgpu::ATOMIC_LOAD_MIN_I32_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_MAX_I32:
-    AtomicOp = Fgpu::ATOMIC_LOAD_MAX_I32_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_UMIN_I32:
-    AtomicOp = Fgpu::ATOMIC_LOAD_UMIN_I32_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_UMAX_I32:
-    AtomicOp = Fgpu::ATOMIC_LOAD_UMAX_I32_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_MIN_I64:
-    AtomicOp = Fgpu::ATOMIC_LOAD_MIN_I64_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_MAX_I64:
-    AtomicOp = Fgpu::ATOMIC_LOAD_MAX_I64_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_UMIN_I64:
-    AtomicOp = Fgpu::ATOMIC_LOAD_UMIN_I64_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_UMAX_I64:
-    AtomicOp = Fgpu::ATOMIC_LOAD_UMAX_I64_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  default:
-    llvm_unreachable("Unknown pseudo atomic for replacement!");
-  }
-
-  Register OldVal = MI.getOperand(0).getReg();
-  Register Ptr = MI.getOperand(1).getReg();
-  Register Incr = MI.getOperand(2).getReg();
-  Register Scratch = RegInfo.createVirtualRegister(RegInfo.getRegClass(OldVal));
-
-  MachineBasicBlock::iterator II(MI);
-
-  // The scratch registers here with the EarlyClobber | Define | Implicit
-  // flags is used to persuade the register allocator and the machine
-  // verifier to accept the usage of this register. This has to be a real
-  // register which has an UNDEF value but is dead after the instruction which
-  // is unique among the registers chosen for the instruction.
-
-  // The EarlyClobber flag has the semantic properties that the operand it is
-  // attached to is clobbered before the rest of the inputs are read. Hence it
-  // must be unique among the operands to the instruction.
-  // The Define flag is needed to coerce the machine verifier that an Undef
-  // value isn't a problem.
-  // The Dead flag is needed as the value in scratch isn't used by any other
-  // instruction. Kill isn't used as Dead is more precise.
-  // The implicit flag is here due to the interaction between the other flags
-  // and the machine verifier.
-
-  // For correctness purpose, a new pseudo is introduced here. We need this
-  // new pseudo, so that FastRegisterAllocator does not see an ll/sc sequence
-  // that is spread over >1 basic blocks. A register allocator which
-  // introduces (or any codegen infact) a store, can violate the expectations
-  // of the hardware.
-  //
-  // An atomic read-modify-write sequence starts with a linked load
-  // instruction and ends with a store conditional instruction. The atomic
-  // read-modify-write sequence fails if any of the following conditions
-  // occur between the execution of ll and sc:
-  //   * A coherent store is completed by another process or coherent I/O
-  //     module into the block of synchronizable physical memory containing
-  //     the word. The size and alignment of the block is
-  //     implementation-dependent.
-  //   * A coherent store is executed between an LL and SC sequence on the
-  //     same processor to the block of synchornizable physical memory
-  //     containing the word.
-  //
-
-  Register PtrCopy = RegInfo.createVirtualRegister(RegInfo.getRegClass(Ptr));
-  Register IncrCopy = RegInfo.createVirtualRegister(RegInfo.getRegClass(Incr));
-
-  BuildMI(*BB, II, DL, TII->get(Fgpu::COPY), IncrCopy).addReg(Incr);
-  BuildMI(*BB, II, DL, TII->get(Fgpu::COPY), PtrCopy).addReg(Ptr);
-
-  MachineInstrBuilder MIB =
-      BuildMI(*BB, II, DL, TII->get(AtomicOp))
-          .addReg(OldVal, RegState::Define | RegState::EarlyClobber)
-          .addReg(PtrCopy)
-          .addReg(IncrCopy)
-          .addReg(Scratch, RegState::Define | RegState::EarlyClobber |
-                               RegState::Implicit | RegState::Dead);
-  if (NeedsAdditionalReg) {
-    Register Scratch2 =
-        RegInfo.createVirtualRegister(RegInfo.getRegClass(OldVal));
-    MIB.addReg(Scratch2, RegState::Define | RegState::EarlyClobber |
-                             RegState::Implicit | RegState::Dead);
-  }
-
-  MI.eraseFromParent();
-
-  return BB;
 }
 
 MachineBasicBlock *FgpuTargetLowering::emitSignExtendToI32InReg(
@@ -1587,16 +712,6 @@ MachineBasicBlock *FgpuTargetLowering::emitSignExtendToI32InReg(
     unsigned SrcReg) const {
   const TargetInstrInfo *TII = Subtarget.getInstrInfo();
   const DebugLoc &DL = MI.getDebugLoc();
-
-  if (Subtarget.hasFgpu32r2() && Size == 1) {
-    BuildMI(BB, DL, TII->get(Fgpu::SEB), DstReg).addReg(SrcReg);
-    return BB;
-  }
-
-  if (Subtarget.hasFgpu32r2() && Size == 2) {
-    BuildMI(BB, DL, TII->get(Fgpu::SEH), DstReg).addReg(SrcReg);
-    return BB;
-  }
 
   MachineFunction *MF = BB->getParent();
   MachineRegisterInfo &RegInfo = MF->getRegInfo();
@@ -1612,378 +727,6 @@ MachineBasicBlock *FgpuTargetLowering::emitSignExtendToI32InReg(
   return BB;
 }
 
-MachineBasicBlock *FgpuTargetLowering::emitAtomicBinaryPartword(
-    MachineInstr &MI, MachineBasicBlock *BB, unsigned Size) const {
-  assert((Size == 1 || Size == 2) &&
-         "Unsupported size for EmitAtomicBinaryPartial.");
-
-  MachineFunction *MF = BB->getParent();
-  MachineRegisterInfo &RegInfo = MF->getRegInfo();
-  const TargetRegisterClass *RC = getRegClassFor(MVT::i32);
-  const bool ArePtrs64bit = ABI.ArePtrs64bit();
-  const TargetRegisterClass *RCp =
-    getRegClassFor(ArePtrs64bit ? MVT::i64 : MVT::i32);
-  const TargetInstrInfo *TII = Subtarget.getInstrInfo();
-  DebugLoc DL = MI.getDebugLoc();
-
-  Register Dest = MI.getOperand(0).getReg();
-  Register Ptr = MI.getOperand(1).getReg();
-  Register Incr = MI.getOperand(2).getReg();
-
-  Register AlignedAddr = RegInfo.createVirtualRegister(RCp);
-  Register ShiftAmt = RegInfo.createVirtualRegister(RC);
-  Register Mask = RegInfo.createVirtualRegister(RC);
-  Register Mask2 = RegInfo.createVirtualRegister(RC);
-  Register Incr2 = RegInfo.createVirtualRegister(RC);
-  Register MaskLSB2 = RegInfo.createVirtualRegister(RCp);
-  Register PtrLSB2 = RegInfo.createVirtualRegister(RC);
-  Register MaskUpper = RegInfo.createVirtualRegister(RC);
-  Register Scratch = RegInfo.createVirtualRegister(RC);
-  Register Scratch2 = RegInfo.createVirtualRegister(RC);
-  Register Scratch3 = RegInfo.createVirtualRegister(RC);
-
-  unsigned AtomicOp = 0;
-  bool NeedsAdditionalReg = false;
-  switch (MI.getOpcode()) {
-  case Fgpu::ATOMIC_LOAD_NAND_I8:
-    AtomicOp = Fgpu::ATOMIC_LOAD_NAND_I8_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_NAND_I16:
-    AtomicOp = Fgpu::ATOMIC_LOAD_NAND_I16_POSTRA;
-    break;
-  case Fgpu::ATOMIC_SWAP_I8:
-    AtomicOp = Fgpu::ATOMIC_SWAP_I8_POSTRA;
-    break;
-  case Fgpu::ATOMIC_SWAP_I16:
-    AtomicOp = Fgpu::ATOMIC_SWAP_I16_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_ADD_I8:
-    AtomicOp = Fgpu::ATOMIC_LOAD_ADD_I8_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_ADD_I16:
-    AtomicOp = Fgpu::ATOMIC_LOAD_ADD_I16_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_SUB_I8:
-    AtomicOp = Fgpu::ATOMIC_LOAD_SUB_I8_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_SUB_I16:
-    AtomicOp = Fgpu::ATOMIC_LOAD_SUB_I16_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_AND_I8:
-    AtomicOp = Fgpu::ATOMIC_LOAD_AND_I8_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_AND_I16:
-    AtomicOp = Fgpu::ATOMIC_LOAD_AND_I16_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_OR_I8:
-    AtomicOp = Fgpu::ATOMIC_LOAD_OR_I8_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_OR_I16:
-    AtomicOp = Fgpu::ATOMIC_LOAD_OR_I16_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_XOR_I8:
-    AtomicOp = Fgpu::ATOMIC_LOAD_XOR_I8_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_XOR_I16:
-    AtomicOp = Fgpu::ATOMIC_LOAD_XOR_I16_POSTRA;
-    break;
-  case Fgpu::ATOMIC_LOAD_MIN_I8:
-    AtomicOp = Fgpu::ATOMIC_LOAD_MIN_I8_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_MIN_I16:
-    AtomicOp = Fgpu::ATOMIC_LOAD_MIN_I16_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_MAX_I8:
-    AtomicOp = Fgpu::ATOMIC_LOAD_MAX_I8_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_MAX_I16:
-    AtomicOp = Fgpu::ATOMIC_LOAD_MAX_I16_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_UMIN_I8:
-    AtomicOp = Fgpu::ATOMIC_LOAD_UMIN_I8_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_UMIN_I16:
-    AtomicOp = Fgpu::ATOMIC_LOAD_UMIN_I16_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_UMAX_I8:
-    AtomicOp = Fgpu::ATOMIC_LOAD_UMAX_I8_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  case Fgpu::ATOMIC_LOAD_UMAX_I16:
-    AtomicOp = Fgpu::ATOMIC_LOAD_UMAX_I16_POSTRA;
-    NeedsAdditionalReg = true;
-    break;
-  default:
-    llvm_unreachable("Unknown subword atomic pseudo for expansion!");
-  }
-
-  // insert new blocks after the current block
-  const BasicBlock *LLVM_BB = BB->getBasicBlock();
-  MachineBasicBlock *exitMBB = MF->CreateMachineBasicBlock(LLVM_BB);
-  MachineFunction::iterator It = ++BB->getIterator();
-  MF->insert(It, exitMBB);
-
-  // Transfer the remainder of BB and its successor edges to exitMBB.
-  exitMBB->splice(exitMBB->begin(), BB,
-                  std::next(MachineBasicBlock::iterator(MI)), BB->end());
-  exitMBB->transferSuccessorsAndUpdatePHIs(BB);
-
-  BB->addSuccessor(exitMBB, BranchProbability::getOne());
-
-  //  thisMBB:
-  //    addiu   masklsb2,$0,-4                # 0xfffffffc
-  //    and     alignedaddr,ptr,masklsb2
-  //    andi    ptrlsb2,ptr,3
-  //    sll     shiftamt,ptrlsb2,3
-  //    ori     maskupper,$0,255               # 0xff
-  //    sll     mask,maskupper,shiftamt
-  //    nor     mask2,$0,mask
-  //    sll     incr2,incr,shiftamt
-
-  int64_t MaskImm = (Size == 1) ? 255 : 65535;
-  BuildMI(BB, DL, TII->get(ABI.GetPtrAddiuOp()), MaskLSB2)
-    .addReg(ABI.GetNullPtr()).addImm(-4);
-  BuildMI(BB, DL, TII->get(ABI.GetPtrAndOp()), AlignedAddr)
-    .addReg(Ptr).addReg(MaskLSB2);
-  BuildMI(BB, DL, TII->get(Fgpu::ANDi), PtrLSB2)
-      .addReg(Ptr, 0, ArePtrs64bit ? Fgpu::sub_32 : 0).addImm(3);
-  if (Subtarget.isLittle()) {
-    BuildMI(BB, DL, TII->get(Fgpu::SLL), ShiftAmt).addReg(PtrLSB2).addImm(3);
-  } else {
-    Register Off = RegInfo.createVirtualRegister(RC);
-    BuildMI(BB, DL, TII->get(Fgpu::XORi), Off)
-      .addReg(PtrLSB2).addImm((Size == 1) ? 3 : 2);
-    BuildMI(BB, DL, TII->get(Fgpu::SLL), ShiftAmt).addReg(Off).addImm(3);
-  }
-  BuildMI(BB, DL, TII->get(Fgpu::ORi), MaskUpper)
-    .addReg(Fgpu::ZERO).addImm(MaskImm);
-  BuildMI(BB, DL, TII->get(Fgpu::SLLV), Mask)
-    .addReg(MaskUpper).addReg(ShiftAmt);
-  BuildMI(BB, DL, TII->get(Fgpu::NOR), Mask2).addReg(Fgpu::ZERO).addReg(Mask);
-  BuildMI(BB, DL, TII->get(Fgpu::SLLV), Incr2).addReg(Incr).addReg(ShiftAmt);
-
-
-  // The purposes of the flags on the scratch registers is explained in
-  // emitAtomicBinary. In summary, we need a scratch register which is going to
-  // be undef, that is unique among registers chosen for the instruction.
-
-  MachineInstrBuilder MIB =
-      BuildMI(BB, DL, TII->get(AtomicOp))
-          .addReg(Dest, RegState::Define | RegState::EarlyClobber)
-          .addReg(AlignedAddr)
-          .addReg(Incr2)
-          .addReg(Mask)
-          .addReg(Mask2)
-          .addReg(ShiftAmt)
-          .addReg(Scratch, RegState::EarlyClobber | RegState::Define |
-                               RegState::Dead | RegState::Implicit)
-          .addReg(Scratch2, RegState::EarlyClobber | RegState::Define |
-                                RegState::Dead | RegState::Implicit)
-          .addReg(Scratch3, RegState::EarlyClobber | RegState::Define |
-                                RegState::Dead | RegState::Implicit);
-  if (NeedsAdditionalReg) {
-    Register Scratch4 = RegInfo.createVirtualRegister(RC);
-    MIB.addReg(Scratch4, RegState::EarlyClobber | RegState::Define |
-                             RegState::Dead | RegState::Implicit);
-  }
-
-  MI.eraseFromParent(); // The instruction is gone now.
-
-  return exitMBB;
-}
-
-// Lower atomic compare and swap to a pseudo instruction, taking care to
-// define a scratch register for the pseudo instruction's expansion. The
-// instruction is expanded after the register allocator as to prevent
-// the insertion of stores between the linked load and the store conditional.
-
-MachineBasicBlock *
-FgpuTargetLowering::emitAtomicCmpSwap(MachineInstr &MI,
-                                      MachineBasicBlock *BB) const {
-
-  assert((MI.getOpcode() == Fgpu::ATOMIC_CMP_SWAP_I32 ||
-          MI.getOpcode() == Fgpu::ATOMIC_CMP_SWAP_I64) &&
-         "Unsupported atomic pseudo for EmitAtomicCmpSwap.");
-
-  const unsigned Size = MI.getOpcode() == Fgpu::ATOMIC_CMP_SWAP_I32 ? 4 : 8;
-
-  MachineFunction *MF = BB->getParent();
-  MachineRegisterInfo &MRI = MF->getRegInfo();
-  const TargetRegisterClass *RC = getRegClassFor(MVT::getIntegerVT(Size * 8));
-  const TargetInstrInfo *TII = Subtarget.getInstrInfo();
-  DebugLoc DL = MI.getDebugLoc();
-
-  unsigned AtomicOp = MI.getOpcode() == Fgpu::ATOMIC_CMP_SWAP_I32
-                          ? Fgpu::ATOMIC_CMP_SWAP_I32_POSTRA
-                          : Fgpu::ATOMIC_CMP_SWAP_I64_POSTRA;
-  Register Dest = MI.getOperand(0).getReg();
-  Register Ptr = MI.getOperand(1).getReg();
-  Register OldVal = MI.getOperand(2).getReg();
-  Register NewVal = MI.getOperand(3).getReg();
-
-  Register Scratch = MRI.createVirtualRegister(RC);
-  MachineBasicBlock::iterator II(MI);
-
-  // We need to create copies of the various registers and kill them at the
-  // atomic pseudo. If the copies are not made, when the atomic is expanded
-  // after fast register allocation, the spills will end up outside of the
-  // blocks that their values are defined in, causing livein errors.
-
-  Register PtrCopy = MRI.createVirtualRegister(MRI.getRegClass(Ptr));
-  Register OldValCopy = MRI.createVirtualRegister(MRI.getRegClass(OldVal));
-  Register NewValCopy = MRI.createVirtualRegister(MRI.getRegClass(NewVal));
-
-  BuildMI(*BB, II, DL, TII->get(Fgpu::COPY), PtrCopy).addReg(Ptr);
-  BuildMI(*BB, II, DL, TII->get(Fgpu::COPY), OldValCopy).addReg(OldVal);
-  BuildMI(*BB, II, DL, TII->get(Fgpu::COPY), NewValCopy).addReg(NewVal);
-
-  // The purposes of the flags on the scratch registers is explained in
-  // emitAtomicBinary. In summary, we need a scratch register which is going to
-  // be undef, that is unique among registers chosen for the instruction.
-
-  BuildMI(*BB, II, DL, TII->get(AtomicOp))
-      .addReg(Dest, RegState::Define | RegState::EarlyClobber)
-      .addReg(PtrCopy, RegState::Kill)
-      .addReg(OldValCopy, RegState::Kill)
-      .addReg(NewValCopy, RegState::Kill)
-      .addReg(Scratch, RegState::EarlyClobber | RegState::Define |
-                           RegState::Dead | RegState::Implicit);
-
-  MI.eraseFromParent(); // The instruction is gone now.
-
-  return BB;
-}
-
-MachineBasicBlock *FgpuTargetLowering::emitAtomicCmpSwapPartword(
-    MachineInstr &MI, MachineBasicBlock *BB, unsigned Size) const {
-  assert((Size == 1 || Size == 2) &&
-      "Unsupported size for EmitAtomicCmpSwapPartial.");
-
-  MachineFunction *MF = BB->getParent();
-  MachineRegisterInfo &RegInfo = MF->getRegInfo();
-  const TargetRegisterClass *RC = getRegClassFor(MVT::i32);
-  const bool ArePtrs64bit = ABI.ArePtrs64bit();
-  const TargetRegisterClass *RCp =
-    getRegClassFor(ArePtrs64bit ? MVT::i64 : MVT::i32);
-  const TargetInstrInfo *TII = Subtarget.getInstrInfo();
-  DebugLoc DL = MI.getDebugLoc();
-
-  Register Dest = MI.getOperand(0).getReg();
-  Register Ptr = MI.getOperand(1).getReg();
-  Register CmpVal = MI.getOperand(2).getReg();
-  Register NewVal = MI.getOperand(3).getReg();
-
-  Register AlignedAddr = RegInfo.createVirtualRegister(RCp);
-  Register ShiftAmt = RegInfo.createVirtualRegister(RC);
-  Register Mask = RegInfo.createVirtualRegister(RC);
-  Register Mask2 = RegInfo.createVirtualRegister(RC);
-  Register ShiftedCmpVal = RegInfo.createVirtualRegister(RC);
-  Register ShiftedNewVal = RegInfo.createVirtualRegister(RC);
-  Register MaskLSB2 = RegInfo.createVirtualRegister(RCp);
-  Register PtrLSB2 = RegInfo.createVirtualRegister(RC);
-  Register MaskUpper = RegInfo.createVirtualRegister(RC);
-  Register MaskedCmpVal = RegInfo.createVirtualRegister(RC);
-  Register MaskedNewVal = RegInfo.createVirtualRegister(RC);
-  unsigned AtomicOp = MI.getOpcode() == Fgpu::ATOMIC_CMP_SWAP_I8
-                          ? Fgpu::ATOMIC_CMP_SWAP_I8_POSTRA
-                          : Fgpu::ATOMIC_CMP_SWAP_I16_POSTRA;
-
-  // The scratch registers here with the EarlyClobber | Define | Dead | Implicit
-  // flags are used to coerce the register allocator and the machine verifier to
-  // accept the usage of these registers.
-  // The EarlyClobber flag has the semantic properties that the operand it is
-  // attached to is clobbered before the rest of the inputs are read. Hence it
-  // must be unique among the operands to the instruction.
-  // The Define flag is needed to coerce the machine verifier that an Undef
-  // value isn't a problem.
-  // The Dead flag is needed as the value in scratch isn't used by any other
-  // instruction. Kill isn't used as Dead is more precise.
-  Register Scratch = RegInfo.createVirtualRegister(RC);
-  Register Scratch2 = RegInfo.createVirtualRegister(RC);
-
-  // insert new blocks after the current block
-  const BasicBlock *LLVM_BB = BB->getBasicBlock();
-  MachineBasicBlock *exitMBB = MF->CreateMachineBasicBlock(LLVM_BB);
-  MachineFunction::iterator It = ++BB->getIterator();
-  MF->insert(It, exitMBB);
-
-  // Transfer the remainder of BB and its successor edges to exitMBB.
-  exitMBB->splice(exitMBB->begin(), BB,
-                  std::next(MachineBasicBlock::iterator(MI)), BB->end());
-  exitMBB->transferSuccessorsAndUpdatePHIs(BB);
-
-  BB->addSuccessor(exitMBB, BranchProbability::getOne());
-
-  //  thisMBB:
-  //    addiu   masklsb2,$0,-4                # 0xfffffffc
-  //    and     alignedaddr,ptr,masklsb2
-  //    andi    ptrlsb2,ptr,3
-  //    xori    ptrlsb2,ptrlsb2,3              # Only for BE
-  //    sll     shiftamt,ptrlsb2,3
-  //    ori     maskupper,$0,255               # 0xff
-  //    sll     mask,maskupper,shiftamt
-  //    nor     mask2,$0,mask
-  //    andi    maskedcmpval,cmpval,255
-  //    sll     shiftedcmpval,maskedcmpval,shiftamt
-  //    andi    maskednewval,newval,255
-  //    sll     shiftednewval,maskednewval,shiftamt
-  int64_t MaskImm = (Size == 1) ? 255 : 65535;
-  BuildMI(BB, DL, TII->get(ArePtrs64bit ? Fgpu::DADDiu : Fgpu::ADDiu), MaskLSB2)
-    .addReg(ABI.GetNullPtr()).addImm(-4);
-  BuildMI(BB, DL, TII->get(ArePtrs64bit ? Fgpu::AND64 : Fgpu::AND), AlignedAddr)
-    .addReg(Ptr).addReg(MaskLSB2);
-  BuildMI(BB, DL, TII->get(Fgpu::ANDi), PtrLSB2)
-      .addReg(Ptr, 0, ArePtrs64bit ? Fgpu::sub_32 : 0).addImm(3);
-  if (Subtarget.isLittle()) {
-    BuildMI(BB, DL, TII->get(Fgpu::SLL), ShiftAmt).addReg(PtrLSB2).addImm(3);
-  } else {
-    Register Off = RegInfo.createVirtualRegister(RC);
-    BuildMI(BB, DL, TII->get(Fgpu::XORi), Off)
-      .addReg(PtrLSB2).addImm((Size == 1) ? 3 : 2);
-    BuildMI(BB, DL, TII->get(Fgpu::SLL), ShiftAmt).addReg(Off).addImm(3);
-  }
-  BuildMI(BB, DL, TII->get(Fgpu::ORi), MaskUpper)
-    .addReg(Fgpu::ZERO).addImm(MaskImm);
-  BuildMI(BB, DL, TII->get(Fgpu::SLLV), Mask)
-    .addReg(MaskUpper).addReg(ShiftAmt);
-  BuildMI(BB, DL, TII->get(Fgpu::NOR), Mask2).addReg(Fgpu::ZERO).addReg(Mask);
-  BuildMI(BB, DL, TII->get(Fgpu::ANDi), MaskedCmpVal)
-    .addReg(CmpVal).addImm(MaskImm);
-  BuildMI(BB, DL, TII->get(Fgpu::SLLV), ShiftedCmpVal)
-    .addReg(MaskedCmpVal).addReg(ShiftAmt);
-  BuildMI(BB, DL, TII->get(Fgpu::ANDi), MaskedNewVal)
-    .addReg(NewVal).addImm(MaskImm);
-  BuildMI(BB, DL, TII->get(Fgpu::SLLV), ShiftedNewVal)
-    .addReg(MaskedNewVal).addReg(ShiftAmt);
-
-  // The purposes of the flags on the scratch registers are explained in
-  // emitAtomicBinary. In summary, we need a scratch register which is going to
-  // be undef, that is unique among the register chosen for the instruction.
-
-  BuildMI(BB, DL, TII->get(AtomicOp))
-      .addReg(Dest, RegState::Define | RegState::EarlyClobber)
-      .addReg(AlignedAddr)
-      .addReg(Mask)
-      .addReg(ShiftedCmpVal)
-      .addReg(Mask2)
-      .addReg(ShiftedNewVal)
-      .addReg(ShiftAmt)
-      .addReg(Scratch, RegState::EarlyClobber | RegState::Define |
-                           RegState::Dead | RegState::Implicit)
-      .addReg(Scratch2, RegState::EarlyClobber | RegState::Define |
-                            RegState::Dead | RegState::Implicit);
-
-  MI.eraseFromParent(); // The instruction is gone now.
-
-  return exitMBB;
-}
-
 SDValue FgpuTargetLowering::lowerBRCOND(SDValue Op, SelectionDAG &DAG) const {
   // The first operand is the chain, the second is the condition, the third is
   // the block to branch to if the condition is true.
@@ -1991,49 +734,51 @@ SDValue FgpuTargetLowering::lowerBRCOND(SDValue Op, SelectionDAG &DAG) const {
   SDValue Dest = Op.getOperand(2);
   SDLoc DL(Op);
 
-  assert(!Subtarget.hasFgpu32r6() && !Subtarget.hasFgpu64r6());
-  SDValue CondRes = createFPCmp(DAG, Op.getOperand(1));
-
-  // Return if flag is not set by a floating point comparison.
-  if (CondRes.getOpcode() != FgpuISD::FPCmp)
-    return Op;
-
-  SDValue CCNode  = CondRes.getOperand(2);
-  Fgpu::CondCode CC =
-    (Fgpu::CondCode)cast<ConstantSDNode>(CCNode)->getZExtValue();
-  unsigned Opc = invertFPCondCodeUser(CC) ? Fgpu::BRANCH_F : Fgpu::BRANCH_T;
-  SDValue BrCode = DAG.getConstant(Opc, DL, MVT::i32);
-  SDValue FCC0 = DAG.getRegister(Fgpu::FCC0, MVT::i32);
-  return DAG.getNode(FgpuISD::FPBrcond, DL, Op.getValueType(), Chain, BrCode,
-                     FCC0, Dest, CondRes);
+  return Op;
+//
+//  SDValue CondRes = createFPCmp(DAG, Op.getOperand(1));
+//
+//  // Return if flag is not set by a floating point comparison.
+//  if (CondRes.getOpcode() != FgpuISD::FPCmp)
+//    return Op;
+//
+//  SDValue CCNode  = CondRes.getOperand(2);
+//  Fgpu::CondCode CC =
+//    (Fgpu::CondCode)cast<ConstantSDNode>(CCNode)->getZExtValue();
+//  unsigned Opc = invertFPCondCodeUser(CC) ? Fgpu::BRANCH_F : Fgpu::BRANCH_T;
+//  SDValue BrCode = DAG.getConstant(Opc, DL, MVT::i32);
+//  SDValue FCC0 = DAG.getRegister(Fgpu::FCC0, MVT::i32);
+//  return DAG.getNode(FgpuISD::FPBrcond, DL, Op.getValueType(), Chain, BrCode,
+//                     FCC0, Dest, CondRes);
 }
 
 SDValue FgpuTargetLowering::
 lowerSELECT(SDValue Op, SelectionDAG &DAG) const
 {
-  assert(!Subtarget.hasFgpu32r6() && !Subtarget.hasFgpu64r6());
-  SDValue Cond = createFPCmp(DAG, Op.getOperand(0));
-
-  // Return if flag is not set by a floating point comparison.
-  if (Cond.getOpcode() != FgpuISD::FPCmp)
     return Op;
-
-  return createCMovFP(DAG, Cond, Op.getOperand(1), Op.getOperand(2),
-                      SDLoc(Op));
+//  SDValue Cond = createFPCmp(DAG, Op.getOperand(0));
+//
+//  // Return if flag is not set by a floating point comparison.
+//  if (Cond.getOpcode() != FgpuISD::FPCmp)
+//    return Op;
+//
+//  return createCMovFP(DAG, Cond, Op.getOperand(1), Op.getOperand(2),
+//                      SDLoc(Op));
 }
 
 SDValue FgpuTargetLowering::lowerSETCC(SDValue Op, SelectionDAG &DAG) const {
-  assert(!Subtarget.hasFgpu32r6() && !Subtarget.hasFgpu64r6());
-  SDValue Cond = createFPCmp(DAG, Op);
-
-  assert(Cond.getOpcode() == FgpuISD::FPCmp &&
-         "Floating point operand expected.");
-
-  SDLoc DL(Op);
-  SDValue True  = DAG.getConstant(1, DL, MVT::i32);
-  SDValue False = DAG.getConstant(0, DL, MVT::i32);
-
-  return createCMovFP(DAG, Cond, True, False, DL);
+  return Op;
+//
+//  SDValue Cond = createFPCmp(DAG, Op);
+//
+//  assert(Cond.getOpcode() == FgpuISD::FPCmp &&
+//         "Floating point operand expected.");
+//
+//  SDLoc DL(Op);
+//  SDValue True  = DAG.getConstant(1, DL, MVT::i32);
+//  SDValue False = DAG.getConstant(0, DL, MVT::i32);
+//
+//  return createCMovFP(DAG, Cond, True, False, DL);
 }
 
 SDValue FgpuTargetLowering::lowerGlobalAddress(SDValue Op,
@@ -2049,12 +794,10 @@ SDValue FgpuTargetLowering::lowerGlobalAddress(SDValue Op,
     const GlobalObject *GO = GV->getBaseObject();
     if (GO && TLOF->IsGlobalInSmallSection(GO, getTargetMachine()))
       // %gp_rel relocation
-      return getAddrGPRel(N, SDLoc(N), Ty, DAG, ABI.IsN64());
+      return getAddrGPRel(N, SDLoc(N), Ty, DAG, false);
 
                                 // %hi/%lo relocation
-    return Subtarget.hasSym32() ? getAddrNonPIC(N, SDLoc(N), Ty, DAG)
-                                // %highest/%higher/%hi/%lo relocation
-                                : getAddrNonPICSym64(N, SDLoc(N), Ty, DAG);
+    return getAddrNonPIC(N, SDLoc(N), Ty, DAG);
   }
 
   // Every other architecture would use shouldAssumeDSOLocal in here, but
@@ -2069,7 +812,7 @@ SDValue FgpuTargetLowering::lowerGlobalAddress(SDValue Op,
   //   the same symbol.
   // * Given all that, we have to use a full got entry for hidden symbols :-(
   if (GV->hasLocalLinkage())
-    return getAddrLocal(N, SDLoc(N), Ty, DAG, ABI.IsN32() || ABI.IsN64());
+    return getAddrLocal(N, SDLoc(N), Ty, DAG, false);
 
   if (Subtarget.useXGOT())
     return getAddrGlobalLargeGOT(
@@ -2079,7 +822,7 @@ SDValue FgpuTargetLowering::lowerGlobalAddress(SDValue Op,
 
   return getAddrGlobal(
       N, SDLoc(N), Ty, DAG,
-      (ABI.IsN32() || ABI.IsN64()) ? FgpuII::MO_GOT_DISP : FgpuII::MO_GOT,
+      (false) ? FgpuII::MO_GOT_DISP : FgpuII::MO_GOT,
       DAG.getEntryNode(), MachinePointerInfo::getGOT(DAG.getMachineFunction()));
 }
 
@@ -2089,10 +832,9 @@ SDValue FgpuTargetLowering::lowerBlockAddress(SDValue Op,
   EVT Ty = Op.getValueType();
 
   if (!isPositionIndependent())
-    return Subtarget.hasSym32() ? getAddrNonPIC(N, SDLoc(N), Ty, DAG)
-                                : getAddrNonPICSym64(N, SDLoc(N), Ty, DAG);
+    return getAddrNonPIC(N, SDLoc(N), Ty, DAG);
 
-  return getAddrLocal(N, SDLoc(N), Ty, DAG, ABI.IsN32() || ABI.IsN64());
+  return getAddrLocal(N, SDLoc(N), Ty, DAG, false);
 }
 
 SDValue FgpuTargetLowering::
@@ -2144,10 +886,11 @@ lowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const
 
     SDValue TGAHi = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0,
                                                FgpuII::MO_DTPREL_HI);
-    SDValue Hi = DAG.getNode(FgpuISD::TlsHi, DL, PtrVT, TGAHi);
+    //SDValue Hi = DAG.getNode(FgpuISD::TlsHi, DL, PtrVT, TGAHi);
+    SDValue Hi = DAG.getNode(FgpuISD::LUi, DL, PtrVT, TGAHi);
     SDValue TGALo = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0,
                                                FgpuII::MO_DTPREL_LO);
-    SDValue Lo = DAG.getNode(FgpuISD::Lo, DL, PtrVT, TGALo);
+    SDValue Lo = DAG.getNode(FgpuISD::Li, DL, PtrVT, TGALo);
     SDValue Add = DAG.getNode(ISD::ADD, DL, PtrVT, Hi, Ret);
     return DAG.getNode(ISD::ADD, DL, PtrVT, Add, Lo);
   }
@@ -2168,8 +911,9 @@ lowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const
                                                FgpuII::MO_TPREL_HI);
     SDValue TGALo = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0,
                                                FgpuII::MO_TPREL_LO);
-    SDValue Hi = DAG.getNode(FgpuISD::TlsHi, DL, PtrVT, TGAHi);
-    SDValue Lo = DAG.getNode(FgpuISD::Lo, DL, PtrVT, TGALo);
+    //SDValue Hi = DAG.getNode(FgpuISD::TlsHi, DL, PtrVT, TGAHi);
+    SDValue Hi = DAG.getNode(FgpuISD::LUi, DL, PtrVT, TGAHi);
+    SDValue Lo = DAG.getNode(FgpuISD::Li, DL, PtrVT, TGALo);
     Offset = DAG.getNode(ISD::ADD, DL, PtrVT, Hi, Lo);
   }
 
@@ -2184,10 +928,9 @@ lowerJumpTable(SDValue Op, SelectionDAG &DAG) const
   EVT Ty = Op.getValueType();
 
   if (!isPositionIndependent())
-    return Subtarget.hasSym32() ? getAddrNonPIC(N, SDLoc(N), Ty, DAG)
-                                : getAddrNonPICSym64(N, SDLoc(N), Ty, DAG);
+    return getAddrNonPIC(N, SDLoc(N), Ty, DAG);
 
-  return getAddrLocal(N, SDLoc(N), Ty, DAG, ABI.IsN32() || ABI.IsN64());
+  return getAddrLocal(N, SDLoc(N), Ty, DAG, false);
 }
 
 SDValue FgpuTargetLowering::
@@ -2204,13 +947,12 @@ lowerConstantPool(SDValue Op, SelectionDAG &DAG) const
     if (TLOF->IsConstantInSmallSection(DAG.getDataLayout(), N->getConstVal(),
                                        getTargetMachine()))
       // %gp_rel relocation
-      return getAddrGPRel(N, SDLoc(N), Ty, DAG, ABI.IsN64());
+      return getAddrGPRel(N, SDLoc(N), Ty, DAG, false);
 
-    return Subtarget.hasSym32() ? getAddrNonPIC(N, SDLoc(N), Ty, DAG)
-                                : getAddrNonPICSym64(N, SDLoc(N), Ty, DAG);
+    return getAddrNonPIC(N, SDLoc(N), Ty, DAG);
   }
 
- return getAddrLocal(N, SDLoc(N), Ty, DAG, ABI.IsN32() || ABI.IsN64());
+ return getAddrLocal(N, SDLoc(N), Ty, DAG, false);
 }
 
 SDValue FgpuTargetLowering::lowerVASTART(SDValue Op, SelectionDAG &DAG) const {
@@ -2237,7 +979,7 @@ SDValue FgpuTargetLowering::lowerVAARG(SDValue Op, SelectionDAG &DAG) const {
       llvm::MaybeAlign(Node->getConstantOperandVal(3)).valueOrOne();
   const Value *SV = cast<SrcValueSDNode>(Node->getOperand(2))->getValue();
   SDLoc DL(Node);
-  unsigned ArgSlotSizeInBytes = (ABI.IsN32() || ABI.IsN64()) ? 8 : 4;
+  unsigned ArgSlotSizeInBytes = 4;
 
   SDValue VAListLoad = DAG.getLoad(getPointerTy(DAG.getDataLayout()), DL, Chain,
                                    VAListPtr, MachinePointerInfo(SV));
@@ -2272,188 +1014,105 @@ SDValue FgpuTargetLowering::lowerVAARG(SDValue Op, SelectionDAG &DAG) const {
   Chain = DAG.getStore(VAListLoad.getValue(1), DL, Tmp3, VAListPtr,
                        MachinePointerInfo(SV));
 
-  // In big-endian mode we must adjust the pointer when the load size is smaller
-  // than the argument slot size. We must also reduce the known alignment to
-  // match. For example in the N64 ABI, we must add 4 bytes to the offset to get
-  // the correct half of the slot, and reduce the alignment from 8 (slot
-  // alignment) down to 4 (type alignment).
-  if (!Subtarget.isLittle() && ArgSizeInBytes < ArgSlotSizeInBytes) {
-    unsigned Adjustment = ArgSlotSizeInBytes - ArgSizeInBytes;
-    VAList = DAG.getNode(ISD::ADD, DL, VAListPtr.getValueType(), VAList,
-                         DAG.getIntPtrConstant(Adjustment, DL));
-  }
   // Load the actual argument out of the pointer VAList
   return DAG.getLoad(VT, DL, Chain, VAList, MachinePointerInfo());
 }
 
 static SDValue lowerFCOPYSIGN32(SDValue Op, SelectionDAG &DAG,
                                 bool HasExtractInsert) {
-  EVT TyX = Op.getOperand(0).getValueType();
-  EVT TyY = Op.getOperand(1).getValueType();
-  SDLoc DL(Op);
-  SDValue Const1 = DAG.getConstant(1, DL, MVT::i32);
-  SDValue Const31 = DAG.getConstant(31, DL, MVT::i32);
-  SDValue Res;
-
-  // If operand is of type f64, extract the upper 32-bit. Otherwise, bitcast it
-  // to i32.
-  SDValue X = (TyX == MVT::f32) ?
-    DAG.getNode(ISD::BITCAST, DL, MVT::i32, Op.getOperand(0)) :
-    DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32, Op.getOperand(0),
-                Const1);
-  SDValue Y = (TyY == MVT::f32) ?
-    DAG.getNode(ISD::BITCAST, DL, MVT::i32, Op.getOperand(1)) :
-    DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32, Op.getOperand(1),
-                Const1);
-
-  if (HasExtractInsert) {
-    // ext  E, Y, 31, 1  ; extract bit31 of Y
-    // ins  X, E, 31, 1  ; insert extracted bit at bit31 of X
-    SDValue E = DAG.getNode(FgpuISD::Ext, DL, MVT::i32, Y, Const31, Const1);
-    Res = DAG.getNode(FgpuISD::Ins, DL, MVT::i32, E, Const31, Const1, X);
-  } else {
-    // sll SllX, X, 1
-    // srl SrlX, SllX, 1
-    // srl SrlY, Y, 31
-    // sll SllY, SrlX, 31
-    // or  Or, SrlX, SllY
-    SDValue SllX = DAG.getNode(ISD::SHL, DL, MVT::i32, X, Const1);
-    SDValue SrlX = DAG.getNode(ISD::SRL, DL, MVT::i32, SllX, Const1);
-    SDValue SrlY = DAG.getNode(ISD::SRL, DL, MVT::i32, Y, Const31);
-    SDValue SllY = DAG.getNode(ISD::SHL, DL, MVT::i32, SrlY, Const31);
-    Res = DAG.getNode(ISD::OR, DL, MVT::i32, SrlX, SllY);
-  }
-
-  if (TyX == MVT::f32)
-    return DAG.getNode(ISD::BITCAST, DL, Op.getOperand(0).getValueType(), Res);
-
-  SDValue LowX = DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32,
-                             Op.getOperand(0),
-                             DAG.getConstant(0, DL, MVT::i32));
-  return DAG.getNode(FgpuISD::BuildPairF64, DL, MVT::f64, LowX, Res);
-}
-
-static SDValue lowerFCOPYSIGN64(SDValue Op, SelectionDAG &DAG,
-                                bool HasExtractInsert) {
-  unsigned WidthX = Op.getOperand(0).getValueSizeInBits();
-  unsigned WidthY = Op.getOperand(1).getValueSizeInBits();
-  EVT TyX = MVT::getIntegerVT(WidthX), TyY = MVT::getIntegerVT(WidthY);
-  SDLoc DL(Op);
-  SDValue Const1 = DAG.getConstant(1, DL, MVT::i32);
-
-  // Bitcast to integer nodes.
-  SDValue X = DAG.getNode(ISD::BITCAST, DL, TyX, Op.getOperand(0));
-  SDValue Y = DAG.getNode(ISD::BITCAST, DL, TyY, Op.getOperand(1));
-
-  if (HasExtractInsert) {
-    // ext  E, Y, width(Y) - 1, 1  ; extract bit width(Y)-1 of Y
-    // ins  X, E, width(X) - 1, 1  ; insert extracted bit at bit width(X)-1 of X
-    SDValue E = DAG.getNode(FgpuISD::Ext, DL, TyY, Y,
-                            DAG.getConstant(WidthY - 1, DL, MVT::i32), Const1);
-
-    if (WidthX > WidthY)
-      E = DAG.getNode(ISD::ZERO_EXTEND, DL, TyX, E);
-    else if (WidthY > WidthX)
-      E = DAG.getNode(ISD::TRUNCATE, DL, TyX, E);
-
-    SDValue I = DAG.getNode(FgpuISD::Ins, DL, TyX, E,
-                            DAG.getConstant(WidthX - 1, DL, MVT::i32), Const1,
-                            X);
-    return DAG.getNode(ISD::BITCAST, DL, Op.getOperand(0).getValueType(), I);
-  }
-
-  // (d)sll SllX, X, 1
-  // (d)srl SrlX, SllX, 1
-  // (d)srl SrlY, Y, width(Y)-1
-  // (d)sll SllY, SrlX, width(Y)-1
-  // or     Or, SrlX, SllY
-  SDValue SllX = DAG.getNode(ISD::SHL, DL, TyX, X, Const1);
-  SDValue SrlX = DAG.getNode(ISD::SRL, DL, TyX, SllX, Const1);
-  SDValue SrlY = DAG.getNode(ISD::SRL, DL, TyY, Y,
-                             DAG.getConstant(WidthY - 1, DL, MVT::i32));
-
-  if (WidthX > WidthY)
-    SrlY = DAG.getNode(ISD::ZERO_EXTEND, DL, TyX, SrlY);
-  else if (WidthY > WidthX)
-    SrlY = DAG.getNode(ISD::TRUNCATE, DL, TyX, SrlY);
-
-  SDValue SllY = DAG.getNode(ISD::SHL, DL, TyX, SrlY,
-                             DAG.getConstant(WidthX - 1, DL, MVT::i32));
-  SDValue Or = DAG.getNode(ISD::OR, DL, TyX, SrlX, SllY);
-  return DAG.getNode(ISD::BITCAST, DL, Op.getOperand(0).getValueType(), Or);
+  assert(false && "FP not supportrd");
+  return Op;
+//  EVT TyX = Op.getOperand(0).getValueType();
+//  EVT TyY = Op.getOperand(1).getValueType();
+//  SDLoc DL(Op);
+//  SDValue Const1 = DAG.getConstant(1, DL, MVT::i32);
+//  SDValue Const31 = DAG.getConstant(31, DL, MVT::i32);
+//  SDValue Res;
+//
+//  // If operand is of type f64, extract the upper 32-bit. Otherwise, bitcast it
+//  // to i32.
+//  SDValue X = (TyX == MVT::f32) ?
+//    DAG.getNode(ISD::BITCAST, DL, MVT::i32, Op.getOperand(0)) :
+//    DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32, Op.getOperand(0),
+//                Const1);
+//  SDValue Y = (TyY == MVT::f32) ?
+//    DAG.getNode(ISD::BITCAST, DL, MVT::i32, Op.getOperand(1)) :
+//    DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32, Op.getOperand(1),
+//                Const1);
+//
+//  if (HasExtractInsert) {
+//    // ext  E, Y, 31, 1  ; extract bit31 of Y
+//    // ins  X, E, 31, 1  ; insert extracted bit at bit31 of X
+//    SDValue E = DAG.getNode(FgpuISD::Ext, DL, MVT::i32, Y, Const31, Const1);
+//    Res = DAG.getNode(FgpuISD::Ins, DL, MVT::i32, E, Const31, Const1, X);
+//  } else {
+//    // sll SllX, X, 1
+//    // srl SrlX, SllX, 1
+//    // srl SrlY, Y, 31
+//    // sll SllY, SrlX, 31
+//    // or  Or, SrlX, SllY
+//    SDValue SllX = DAG.getNode(ISD::SHL, DL, MVT::i32, X, Const1);
+//    SDValue SrlX = DAG.getNode(ISD::SRL, DL, MVT::i32, SllX, Const1);
+//    SDValue SrlY = DAG.getNode(ISD::SRL, DL, MVT::i32, Y, Const31);
+//    SDValue SllY = DAG.getNode(ISD::SHL, DL, MVT::i32, SrlY, Const31);
+//    Res = DAG.getNode(ISD::OR, DL, MVT::i32, SrlX, SllY);
+//  }
+//
+//  if (TyX == MVT::f32)
+//    return DAG.getNode(ISD::BITCAST, DL, Op.getOperand(0).getValueType(), Res);
+//
+//  SDValue LowX = DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32,
+//                             Op.getOperand(0),
+//                             DAG.getConstant(0, DL, MVT::i32));
+//  return DAG.getNode(FgpuISD::BuildPairF64, DL, MVT::f64, LowX, Res);
 }
 
 SDValue
 FgpuTargetLowering::lowerFCOPYSIGN(SDValue Op, SelectionDAG &DAG) const {
-  if (Subtarget.isGP64bit())
-    return lowerFCOPYSIGN64(Op, DAG, Subtarget.hasExtractInsert());
-
-  return lowerFCOPYSIGN32(Op, DAG, Subtarget.hasExtractInsert());
+  return lowerFCOPYSIGN32(Op, DAG, false);
 }
 
 static SDValue lowerFABS32(SDValue Op, SelectionDAG &DAG,
                            bool HasExtractInsert) {
-  SDLoc DL(Op);
-  SDValue Res, Const1 = DAG.getConstant(1, DL, MVT::i32);
-
-  // If operand is of type f64, extract the upper 32-bit. Otherwise, bitcast it
-  // to i32.
-  SDValue X = (Op.getValueType() == MVT::f32)
-                  ? DAG.getNode(ISD::BITCAST, DL, MVT::i32, Op.getOperand(0))
-                  : DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32,
-                                Op.getOperand(0), Const1);
-
-  // Clear MSB.
-  if (HasExtractInsert)
-    Res = DAG.getNode(FgpuISD::Ins, DL, MVT::i32,
-                      DAG.getRegister(Fgpu::ZERO, MVT::i32),
-                      DAG.getConstant(31, DL, MVT::i32), Const1, X);
-  else {
-    // TODO: Provide DAG patterns which transform (and x, cst)
-    // back to a (shl (srl x (clz cst)) (clz cst)) sequence.
-    SDValue SllX = DAG.getNode(ISD::SHL, DL, MVT::i32, X, Const1);
-    Res = DAG.getNode(ISD::SRL, DL, MVT::i32, SllX, Const1);
-  }
-
-  if (Op.getValueType() == MVT::f32)
-    return DAG.getNode(ISD::BITCAST, DL, MVT::f32, Res);
-
-  // FIXME: For fgpu32r2, the sequence of (BuildPairF64 (ins (ExtractElementF64
-  // Op 1), $zero, 31 1) (ExtractElementF64 Op 0)) and the Op has one use, we
-  // should be able to drop the usage of mfc1/mtc1 and rewrite the register in
-  // place.
-  SDValue LowX =
-      DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32, Op.getOperand(0),
-                  DAG.getConstant(0, DL, MVT::i32));
-  return DAG.getNode(FgpuISD::BuildPairF64, DL, MVT::f64, LowX, Res);
-}
-
-static SDValue lowerFABS64(SDValue Op, SelectionDAG &DAG,
-                           bool HasExtractInsert) {
-  SDLoc DL(Op);
-  SDValue Res, Const1 = DAG.getConstant(1, DL, MVT::i32);
-
-  // Bitcast to integer node.
-  SDValue X = DAG.getNode(ISD::BITCAST, DL, MVT::i64, Op.getOperand(0));
-
-  // Clear MSB.
-  if (HasExtractInsert)
-    Res = DAG.getNode(FgpuISD::Ins, DL, MVT::i64,
-                      DAG.getRegister(Fgpu::ZERO_64, MVT::i64),
-                      DAG.getConstant(63, DL, MVT::i32), Const1, X);
-  else {
-    SDValue SllX = DAG.getNode(ISD::SHL, DL, MVT::i64, X, Const1);
-    Res = DAG.getNode(ISD::SRL, DL, MVT::i64, SllX, Const1);
-  }
-
-  return DAG.getNode(ISD::BITCAST, DL, MVT::f64, Res);
+  assert(false && "FP not supportrd");
+  return Op;
+//  SDLoc DL(Op);
+//  SDValue Res, Const1 = DAG.getConstant(1, DL, MVT::i32);
+//
+//  // If operand is of type f64, extract the upper 32-bit. Otherwise, bitcast it
+//  // to i32.
+//  SDValue X = (Op.getValueType() == MVT::f32)
+//                  ? DAG.getNode(ISD::BITCAST, DL, MVT::i32, Op.getOperand(0))
+//                  : DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32,
+//                                Op.getOperand(0), Const1);
+//
+//  // Clear MSB.
+//  if (HasExtractInsert)
+//    Res = DAG.getNode(FgpuISD::Ins, DL, MVT::i32,
+//                      DAG.getRegister(Fgpu::ZERO, MVT::i32),
+//                      DAG.getConstant(31, DL, MVT::i32), Const1, X);
+//  else {
+//    // TODO: Provide DAG patterns which transform (and x, cst)
+//    // back to a (shl (srl x (clz cst)) (clz cst)) sequence.
+//    SDValue SllX = DAG.getNode(ISD::SHL, DL, MVT::i32, X, Const1);
+//    Res = DAG.getNode(ISD::SRL, DL, MVT::i32, SllX, Const1);
+//  }
+//
+//  if (Op.getValueType() == MVT::f32)
+//    return DAG.getNode(ISD::BITCAST, DL, MVT::f32, Res);
+//
+//  // FIXME: For fgpu32r2, the sequence of (BuildPairF64 (ins (ExtractElementF64
+//  // Op 1), $zero, 31 1) (ExtractElementF64 Op 0)) and the Op has one use, we
+//  // should be able to drop the usage of mfc1/mtc1 and rewrite the register in
+//  // place.
+//  SDValue LowX =
+//      DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32, Op.getOperand(0),
+//                  DAG.getConstant(0, DL, MVT::i32));
+//  return DAG.getNode(FgpuISD::BuildPairF64, DL, MVT::f64, LowX, Res);
 }
 
 SDValue FgpuTargetLowering::lowerFABS(SDValue Op, SelectionDAG &DAG) const {
-  if ((ABI.IsN32() || ABI.IsN64()) && (Op.getValueType() == MVT::f64))
-    return lowerFABS64(Op, DAG, Subtarget.hasExtractInsert());
-
-  return lowerFABS32(Op, DAG, Subtarget.hasExtractInsert());
+  return lowerFABS32(Op, DAG, false);
 }
 
 SDValue FgpuTargetLowering::
@@ -2470,7 +1129,7 @@ lowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const {
   EVT VT = Op.getValueType();
   SDLoc DL(Op);
   SDValue FrameAddr = DAG.getCopyFromReg(
-      DAG.getEntryNode(), DL, ABI.IsN64() ? Fgpu::FP_64 : Fgpu::FP, VT);
+      DAG.getEntryNode(), DL, Fgpu::R28, VT);
   return FrameAddr;
 }
 
@@ -2489,7 +1148,7 @@ SDValue FgpuTargetLowering::lowerRETURNADDR(SDValue Op,
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   MVT VT = Op.getSimpleValueType();
-  unsigned RA = ABI.IsN64() ? Fgpu::RA_64 : Fgpu::RA;
+  unsigned RA = Fgpu::LR;
   MFI.setReturnAddressIsTaken(true);
 
   // Return RA, which contains the return address. Mark it an implicit live-in.
@@ -2511,15 +1170,15 @@ SDValue FgpuTargetLowering::lowerEH_RETURN(SDValue Op, SelectionDAG &DAG)
   SDValue Offset    = Op.getOperand(1);
   SDValue Handler   = Op.getOperand(2);
   SDLoc DL(Op);
-  EVT Ty = ABI.IsN64() ? MVT::i64 : MVT::i32;
+  EVT Ty = MVT::i32;
 
   // Store stack offset in V1, store jump target in V0. Glue CopyToReg and
   // EH_RETURN nodes, so that instructions are emitted back-to-back.
-  unsigned OffsetReg = ABI.IsN64() ? Fgpu::V1_64 : Fgpu::V1;
-  unsigned AddrReg = ABI.IsN64() ? Fgpu::V0_64 : Fgpu::V0;
+  unsigned OffsetReg = Fgpu::R3;
+  unsigned AddrReg = Fgpu::R2;
   Chain = DAG.getCopyToReg(Chain, DL, OffsetReg, Offset, SDValue());
   Chain = DAG.getCopyToReg(Chain, DL, AddrReg, Handler, Chain.getValue(1));
-  return DAG.getNode(FgpuISD::EH_RETURN, DL, MVT::Other, Chain,
+  return DAG.getNode(ISD::EH_RETURN, DL, MVT::Other, Chain,
                      DAG.getRegister(OffsetReg, Ty),
                      DAG.getRegister(AddrReg, getPointerTy(MF.getDataLayout())),
                      Chain.getValue(1));
@@ -2538,7 +1197,7 @@ SDValue FgpuTargetLowering::lowerATOMIC_FENCE(SDValue Op,
 SDValue FgpuTargetLowering::lowerShiftLeftParts(SDValue Op,
                                                 SelectionDAG &DAG) const {
   SDLoc DL(Op);
-  MVT VT = Subtarget.isGP64bit() ? MVT::i64 : MVT::i32;
+  MVT VT = MVT::i32;
 
   SDValue Lo = Op.getOperand(0), Hi = Op.getOperand(1);
   SDValue Shamt = Op.getOperand(2);
@@ -2571,7 +1230,7 @@ SDValue FgpuTargetLowering::lowerShiftRightParts(SDValue Op, SelectionDAG &DAG,
   SDLoc DL(Op);
   SDValue Lo = Op.getOperand(0), Hi = Op.getOperand(1);
   SDValue Shamt = Op.getOperand(2);
-  MVT VT = Subtarget.isGP64bit() ? MVT::i64 : MVT::i32;
+  MVT VT = MVT::i32;
 
   // if shamt < (VT.bits):
   //  lo = (or (shl (shl hi, 1), ~shamt) (srl lo, shamt))
@@ -2599,15 +1258,6 @@ SDValue FgpuTargetLowering::lowerShiftRightParts(SDValue Op, SelectionDAG &DAG,
                              DAG.getConstant(VT.getSizeInBits(), DL, MVT::i32));
   SDValue Ext = DAG.getNode(ISD::SRA, DL, VT, Hi,
                             DAG.getConstant(VT.getSizeInBits() - 1, DL, VT));
-
-  if (!(Subtarget.hasFgpu4() || Subtarget.hasFgpu32())) {
-    SDVTList VTList = DAG.getVTList(VT, VT);
-    return DAG.getNode(Subtarget.isGP64bit() ? Fgpu::PseudoD_SELECT_I64
-                                             : Fgpu::PseudoD_SELECT_I,
-                       DL, VTList, Cond, ShiftRightHi,
-                       IsSRA ? Ext : DAG.getConstant(0, DL, VT), Or,
-                       ShiftRightHi);
-  }
 
   Lo = DAG.getNode(ISD::SELECT, DL, VT, Cond, ShiftRightHi, Or);
   Hi = DAG.getNode(ISD::SELECT, DL, VT, Cond,
@@ -2646,57 +1296,57 @@ SDValue FgpuTargetLowering::lowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   if ((LD->getAlignment() >= MemVT.getSizeInBits() / 8) ||
       ((MemVT != MVT::i32) && (MemVT != MVT::i64)))
     return SDValue();
-
-  bool IsLittle = Subtarget.isLittle();
-  EVT VT = Op.getValueType();
-  ISD::LoadExtType ExtType = LD->getExtensionType();
-  SDValue Chain = LD->getChain(), Undef = DAG.getUNDEF(VT);
-
-  assert((VT == MVT::i32) || (VT == MVT::i64));
-
-  // Expand
-  //  (set dst, (i64 (load baseptr)))
-  // to
-  //  (set tmp, (ldl (add baseptr, 7), undef))
-  //  (set dst, (ldr baseptr, tmp))
-  if ((VT == MVT::i64) && (ExtType == ISD::NON_EXTLOAD)) {
-    SDValue LDL = createLoadLR(FgpuISD::LDL, DAG, LD, Chain, Undef,
-                               IsLittle ? 7 : 0);
-    return createLoadLR(FgpuISD::LDR, DAG, LD, LDL.getValue(1), LDL,
-                        IsLittle ? 0 : 7);
-  }
-
-  SDValue LWL = createLoadLR(FgpuISD::LWL, DAG, LD, Chain, Undef,
-                             IsLittle ? 3 : 0);
-  SDValue LWR = createLoadLR(FgpuISD::LWR, DAG, LD, LWL.getValue(1), LWL,
-                             IsLittle ? 0 : 3);
-
-  // Expand
-  //  (set dst, (i32 (load baseptr))) or
-  //  (set dst, (i64 (sextload baseptr))) or
-  //  (set dst, (i64 (extload baseptr)))
-  // to
-  //  (set tmp, (lwl (add baseptr, 3), undef))
-  //  (set dst, (lwr baseptr, tmp))
-  if ((VT == MVT::i32) || (ExtType == ISD::SEXTLOAD) ||
-      (ExtType == ISD::EXTLOAD))
-    return LWR;
-
-  assert((VT == MVT::i64) && (ExtType == ISD::ZEXTLOAD));
-
-  // Expand
-  //  (set dst, (i64 (zextload baseptr)))
-  // to
-  //  (set tmp0, (lwl (add baseptr, 3), undef))
-  //  (set tmp1, (lwr baseptr, tmp0))
-  //  (set tmp2, (shl tmp1, 32))
-  //  (set dst, (srl tmp2, 32))
-  SDLoc DL(LD);
-  SDValue Const32 = DAG.getConstant(32, DL, MVT::i32);
-  SDValue SLL = DAG.getNode(ISD::SHL, DL, MVT::i64, LWR, Const32);
-  SDValue SRL = DAG.getNode(ISD::SRL, DL, MVT::i64, SLL, Const32);
-  SDValue Ops[] = { SRL, LWR.getValue(1) };
-  return DAG.getMergeValues(Ops, DL);
+  assert(false && "Misaligned");
+//  bool IsLittle = true;
+//  EVT VT = Op.getValueType();
+//  ISD::LoadExtType ExtType = LD->getExtensionType();
+//  SDValue Chain = LD->getChain(), Undef = DAG.getUNDEF(VT);
+//
+//  assert((VT == MVT::i32) || (VT == MVT::i64));
+//
+//  // Expand
+//  //  (set dst, (i64 (load baseptr)))
+//  // to
+//  //  (set tmp, (ldl (add baseptr, 7), undef))
+//  //  (set dst, (ldr baseptr, tmp))
+//  if ((VT == MVT::i64) && (ExtType == ISD::NON_EXTLOAD)) {
+//    SDValue LDL = createLoadLR(FgpuISD::LDL, DAG, LD, Chain, Undef,
+//                               IsLittle ? 7 : 0);
+//    return createLoadLR(FgpuISD::LDR, DAG, LD, LDL.getValue(1), LDL,
+//                        IsLittle ? 0 : 7);
+//  }
+//
+//  SDValue LWL = createLoadLR(FgpuISD::LWL, DAG, LD, Chain, Undef,
+//                             IsLittle ? 3 : 0);
+//  SDValue LWR = createLoadLR(FgpuISD::LWR, DAG, LD, LWL.getValue(1), LWL,
+//                             IsLittle ? 0 : 3);
+//
+//  // Expand
+//  //  (set dst, (i32 (load baseptr))) or
+//  //  (set dst, (i64 (sextload baseptr))) or
+//  //  (set dst, (i64 (extload baseptr)))
+//  // to
+//  //  (set tmp, (lwl (add baseptr, 3), undef))
+//  //  (set dst, (lwr baseptr, tmp))
+//  if ((VT == MVT::i32) || (ExtType == ISD::SEXTLOAD) ||
+//      (ExtType == ISD::EXTLOAD))
+//    return LWR;
+//
+//  assert((VT == MVT::i64) && (ExtType == ISD::ZEXTLOAD));
+//
+//  // Expand
+//  //  (set dst, (i64 (zextload baseptr)))
+//  // to
+//  //  (set tmp0, (lwl (add baseptr, 3), undef))
+//  //  (set tmp1, (lwr baseptr, tmp0))
+//  //  (set tmp2, (shl tmp1, 32))
+//  //  (set dst, (srl tmp2, 32))
+//  SDLoc DL(LD);
+//  SDValue Const32 = DAG.getConstant(32, DL, MVT::i32);
+//  SDValue SLL = DAG.getNode(ISD::SHL, DL, MVT::i64, LWR, Const32);
+//  SDValue SRL = DAG.getNode(ISD::SRL, DL, MVT::i64, SLL, Const32);
+//  SDValue Ops[] = { SRL, LWR.getValue(1) };
+//  return DAG.getMergeValues(Ops, DL);
 }
 
 static SDValue createStoreLR(unsigned Opc, SelectionDAG &DAG, StoreSDNode *SD,
@@ -2720,45 +1370,48 @@ static SDValue lowerUnalignedIntStore(StoreSDNode *SD, SelectionDAG &DAG,
                                       bool IsLittle) {
   SDValue Value = SD->getValue(), Chain = SD->getChain();
   EVT VT = Value.getValueType();
+  assert(false && "Unalinged not supported");
 
-  // Expand
-  //  (store val, baseptr) or
-  //  (truncstore val, baseptr)
-  // to
-  //  (swl val, (add baseptr, 3))
-  //  (swr val, baseptr)
-  if ((VT == MVT::i32) || SD->isTruncatingStore()) {
-    SDValue SWL = createStoreLR(FgpuISD::SWL, DAG, SD, Chain,
-                                IsLittle ? 3 : 0);
-    return createStoreLR(FgpuISD::SWR, DAG, SD, SWL, IsLittle ? 0 : 3);
-  }
-
-  assert(VT == MVT::i64);
-
-  // Expand
-  //  (store val, baseptr)
-  // to
-  //  (sdl val, (add baseptr, 7))
-  //  (sdr val, baseptr)
-  SDValue SDL = createStoreLR(FgpuISD::SDL, DAG, SD, Chain, IsLittle ? 7 : 0);
-  return createStoreLR(FgpuISD::SDR, DAG, SD, SDL, IsLittle ? 0 : 7);
+//  // Expand
+//  //  (store val, baseptr) or
+//  //  (truncstore val, baseptr)
+//  // to
+//  //  (swl val, (add baseptr, 3))
+//  //  (swr val, baseptr)
+//  if ((VT == MVT::i32) || SD->isTruncatingStore()) {
+//    SDValue SWL = createStoreLR(FgpuISD::SWL, DAG, SD, Chain,
+//                                IsLittle ? 3 : 0);
+//    return createStoreLR(FgpuISD::SWR, DAG, SD, SWL, IsLittle ? 0 : 3);
+//  }
+//
+//  assert(VT == MVT::i64);
+//
+//  // Expand
+//  //  (store val, baseptr)
+//  // to
+//  //  (sdl val, (add baseptr, 7))
+//  //  (sdr val, baseptr)
+//  SDValue SDL = createStoreLR(FgpuISD::SDL, DAG, SD, Chain, IsLittle ? 7 : 0);
+//  return createStoreLR(FgpuISD::SDR, DAG, SD, SDL, IsLittle ? 0 : 7);
 }
 
 // Lower (store (fp_to_sint $fp) $ptr) to (store (TruncIntFP $fp), $ptr).
 static SDValue lowerFP_TO_SINT_STORE(StoreSDNode *SD, SelectionDAG &DAG,
                                      bool SingleFloat) {
-  SDValue Val = SD->getValue();
-
-  if (Val.getOpcode() != ISD::FP_TO_SINT ||
-      (Val.getValueSizeInBits() > 32 && SingleFloat))
-    return SDValue();
-
-  EVT FPTy = EVT::getFloatingPointVT(Val.getValueSizeInBits());
-  SDValue Tr = DAG.getNode(FgpuISD::TruncIntFP, SDLoc(Val), FPTy,
-                           Val.getOperand(0));
-  return DAG.getStore(SD->getChain(), SDLoc(SD), Tr, SD->getBasePtr(),
-                      SD->getPointerInfo(), SD->getAlignment(),
-                      SD->getMemOperand()->getFlags());
+  assert(false && "Not supported");
+  return SDValue();
+//  SDValue Val = SD->getValue();
+//
+//  if (Val.getOpcode() != ISD::FP_TO_SINT ||
+//      (Val.getValueSizeInBits() > 32 && SingleFloat))
+//    return SDValue();
+//
+//  EVT FPTy = EVT::getFloatingPointVT(Val.getValueSizeInBits());
+//  SDValue Tr = DAG.getNode(FgpuISD::TruncIntFP, SDLoc(Val), FPTy,
+//                           Val.getOperand(0));
+//  return DAG.getStore(SD->getChain(), SDLoc(SD), Tr, SD->getBasePtr(),
+//                      SD->getPointerInfo(), SD->getAlignment(),
+//                      SD->getMemOperand()->getFlags());
 }
 
 SDValue FgpuTargetLowering::lowerSTORE(SDValue Op, SelectionDAG &DAG) const {
@@ -2769,9 +1422,9 @@ SDValue FgpuTargetLowering::lowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   if (!Subtarget.systemSupportsUnalignedAccess() &&
       (SD->getAlignment() < MemVT.getSizeInBits() / 8) &&
       ((MemVT == MVT::i32) || (MemVT == MVT::i64)))
-    return lowerUnalignedIntStore(SD, DAG, Subtarget.isLittle());
+    return lowerUnalignedIntStore(SD, DAG, true);
 
-  return lowerFP_TO_SINT_STORE(SD, DAG, Subtarget.isSingleFloat());
+  return lowerFP_TO_SINT_STORE(SD, DAG, true);
 }
 
 SDValue FgpuTargetLowering::lowerEH_DWARF_CFA(SDValue Op,
@@ -2787,13 +1440,16 @@ SDValue FgpuTargetLowering::lowerEH_DWARF_CFA(SDValue Op,
 
 SDValue FgpuTargetLowering::lowerFP_TO_SINT(SDValue Op,
                                             SelectionDAG &DAG) const {
-  if (Op.getValueSizeInBits() > 32 && Subtarget.isSingleFloat())
+  if (Op.getValueSizeInBits() > 32)
     return SDValue();
 
-  EVT FPTy = EVT::getFloatingPointVT(Op.getValueSizeInBits());
-  SDValue Trunc = DAG.getNode(FgpuISD::TruncIntFP, SDLoc(Op), FPTy,
-                              Op.getOperand(0));
-  return DAG.getNode(ISD::BITCAST, SDLoc(Op), Op.getValueType(), Trunc);
+  assert(false && "No "
+                  "fp");
+  return SDValue();
+//  EVT FPTy = EVT::getFloatingPointVT(Op.getValueSizeInBits());
+//  SDValue Trunc = DAG.getNode(FgpuISD::TruncIntFP, SDLoc(Op), FPTy,
+//                              Op.getOperand(0));
+//  return DAG.getNode(ISD::BITCAST, SDLoc(Op), Op.getValueType(), Trunc);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2820,7 +1476,7 @@ SDValue FgpuTargetLowering::lowerFP_TO_SINT(SDValue Op,
 //  For vararg functions, all arguments are passed in A0, A1, A2, A3 and stack.
 //===----------------------------------------------------------------------===//
 
-static bool CC_FgpuO32(unsigned ValNo, MVT ValVT, MVT LocVT,
+static bool CC_Fgpu(unsigned ValNo, MVT ValVT, MVT LocVT,
                        CCValAssign::LocInfo LocInfo, ISD::ArgFlagsTy ArgFlags,
                        CCState &State, ArrayRef<MCPhysReg> F64Regs) {
   const FgpuSubtarget &Subtarget = static_cast<const FgpuSubtarget &>(
@@ -2942,23 +1598,15 @@ static bool CC_FgpuO32(unsigned ValNo, MVT ValVT, MVT LocVT,
   return false;
 }
 
-static bool CC_FgpuO32_FP32(unsigned ValNo, MVT ValVT,
+static bool CC_Fgpu_FP32(unsigned ValNo, MVT ValVT,
                             MVT LocVT, CCValAssign::LocInfo LocInfo,
                             ISD::ArgFlagsTy ArgFlags, CCState &State) {
   static const MCPhysReg F64Regs[] = { Fgpu::D6, Fgpu::D7 };
 
-  return CC_FgpuO32(ValNo, ValVT, LocVT, LocInfo, ArgFlags, State, F64Regs);
+  return CC_Fgpu(ValNo, ValVT, LocVT, LocInfo, ArgFlags, State, F64Regs);
 }
 
-static bool CC_FgpuO32_FP64(unsigned ValNo, MVT ValVT,
-                            MVT LocVT, CCValAssign::LocInfo LocInfo,
-                            ISD::ArgFlagsTy ArgFlags, CCState &State) {
-  static const MCPhysReg F64Regs[] = { Fgpu::D12_64, Fgpu::D14_64 };
-
-  return CC_FgpuO32(ValNo, ValVT, LocVT, LocInfo, ArgFlags, State, F64Regs);
-}
-
-static bool CC_FgpuO32(unsigned ValNo, MVT ValVT, MVT LocVT,
+static bool CC_Fgpu(unsigned ValNo, MVT ValVT, MVT LocVT,
                        CCValAssign::LocInfo LocInfo, ISD::ArgFlagsTy ArgFlags,
                        CCState &State) LLVM_ATTRIBUTE_UNUSED;
 
@@ -3010,8 +1658,8 @@ getOpndList(SmallVectorImpl<SDValue> &Ops,
   // used for the function (that is, Fgpu linker doesn't generate lazy binding
   // stub for a function whose address is taken in the program).
   if (IsPICCall && !InternalLinkage && IsCallReloc) {
-    unsigned GPReg = ABI.IsN64() ? Fgpu::GP_64 : Fgpu::GP;
-    EVT Ty = ABI.IsN64() ? MVT::i64 : MVT::i32;
+    unsigned GPReg = Fgpu::R29;
+    EVT Ty = MVT::i32;
     RegsToPass.push_back(std::make_pair(GPReg, getGlobalReg(CLI.DAG, Ty)));
   }
 
@@ -3652,8 +2300,6 @@ SDValue FgpuTargetLowering::LowerFormalArguments(
         unsigned Reg2 =
             addLiveIn(DAG.getMachineFunction(), NextVA.getLocReg(), RC);
         SDValue ArgValue2 = DAG.getCopyFromReg(Chain, DL, Reg2, RegVT);
-        if (!Subtarget.isLittle())
-          std::swap(ArgValue, ArgValue2);
         ArgValue = DAG.getNode(FgpuISD::BuildPairF64, DL, MVT::f64,
                                ArgValue, ArgValue2);
       }
@@ -3864,7 +2510,7 @@ FgpuTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     return LowerInterruptReturn(RetOps, DL, DAG);
 
   // Standard return on Fgpu is a "jr $ra"
-  return DAG.getNode(FgpuISD::Ret, DL, MVT::Other, RetOps);
+  return DAG.getNode(FgpuISD::RET, DL, MVT::Other, RetOps);
 }
 
 //===----------------------------------------------------------------------===//

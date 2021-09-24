@@ -99,7 +99,7 @@ bool FgpuInstructionSelector::isRegInGprb(Register Reg,
 
 bool FgpuInstructionSelector::isRegInFprb(Register Reg,
                                           MachineRegisterInfo &MRI) const {
-  return RBI.getRegBank(Reg, MRI, TRI)->getID() == Fgpu::FPRBRegBankID;
+  return RBI.getRegBank(Reg, MRI, TRI)->getID() == Fgpu::VFPRegBankID;
 }
 
 bool FgpuInstructionSelector::selectCopy(MachineInstr &I,

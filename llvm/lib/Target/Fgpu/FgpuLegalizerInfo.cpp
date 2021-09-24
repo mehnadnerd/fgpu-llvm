@@ -81,8 +81,6 @@ FgpuLegalizerInfo::FgpuLegalizerInfo(const FgpuSubtarget &ST) {
       .legalIf([=, &ST](const LegalityQuery &Query) {
         if (CheckTyN(0, Query, {s32}))
           return true;
-        if (ST.hasMSA() && CheckTyN(0, Query, {v16s8, v8s16, v4s32, v2s64}))
-          return true;
         return false;
       })
       .clampScalar(0, s32, s32);
@@ -99,7 +97,7 @@ FgpuLegalizerInfo::FgpuLegalizerInfo(const FgpuSubtarget &ST) {
   // to at least a multiple of its own size. There is however a two instruction
   // combination that performs 4 byte unaligned access (lwr/lwl and swl/swr)
   // therefore 4 byte load and store are legal and will use NoAlignRequirements.
-  bool NoAlignRequirements = true;
+  bool NoAlignRequirements = true; // TODO: check
 
   getActionDefinitionsBuilder({G_LOAD, G_STORE})
       .legalIf([=, &ST](const LegalityQuery &Query) {
@@ -109,12 +107,6 @@ FgpuLegalizerInfo::FgpuLegalizerInfo(const FgpuSubtarget &ST) {
                         {s32, p0, 32, NoAlignRequirements},
                         {p0, p0, 32, NoAlignRequirements},
                         {s64, p0, 64, ST.systemSupportsUnalignedAccess()}}))
-          return true;
-        if (ST.hasMSA() && CheckTy0Ty1MemSizeAlign(
-                               Query, {{v16s8, p0, 128, NoAlignRequirements},
-                                       {v8s16, p0, 128, NoAlignRequirements},
-                                       {v4s32, p0, 128, NoAlignRequirements},
-                                       {v2s64, p0, 128, NoAlignRequirements}}))
           return true;
         return false;
       })
@@ -197,8 +189,6 @@ FgpuLegalizerInfo::FgpuLegalizerInfo(const FgpuSubtarget &ST) {
       .legalIf([=, &ST](const LegalityQuery &Query) {
         if (CheckTyN(0, Query, {s32}))
           return true;
-        if (ST.hasMSA() && CheckTyN(0, Query, {v16s8, v8s16, v4s32, v2s64}))
-          return true;
         return false;
       })
       .minScalar(0, s32)
@@ -238,13 +228,9 @@ FgpuLegalizerInfo::FgpuLegalizerInfo(const FgpuSubtarget &ST) {
 
   getActionDefinitionsBuilder(G_BSWAP)
       .legalIf([=, &ST](const LegalityQuery &Query) {
-        if (ST.hasFgpu32r2() && CheckTyN(0, Query, {s32}))
-          return true;
         return false;
       })
       .lowerIf([=, &ST](const LegalityQuery &Query) {
-        if (!ST.hasFgpu32r2() && CheckTyN(0, Query, {s32}))
-          return true;
         return false;
       })
       .maxScalar(0, s32);
@@ -279,8 +265,6 @@ FgpuLegalizerInfo::FgpuLegalizerInfo(const FgpuSubtarget &ST) {
   getActionDefinitionsBuilder({G_FADD, G_FSUB, G_FMUL, G_FDIV, G_FABS, G_FSQRT})
       .legalIf([=, &ST](const LegalityQuery &Query) {
         if (CheckTyN(0, Query, {s32, s64}))
-          return true;
-        if (ST.hasMSA() && CheckTyN(0, Query, {v16s8, v8s16, v4s32, v2s64}))
           return true;
         return false;
       });
@@ -464,39 +448,22 @@ bool FgpuLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
 static bool SelectMSA3OpIntrinsic(MachineInstr &MI, unsigned Opcode,
                                   MachineIRBuilder &MIRBuilder,
                                   const FgpuSubtarget &ST) {
-  assert(ST.hasMSA() && "MSA intrinsic not supported on target without MSA.");
-  if (!MIRBuilder.buildInstr(Opcode)
-           .add(MI.getOperand(0))
-           .add(MI.getOperand(2))
-           .add(MI.getOperand(3))
-           .constrainAllUses(MIRBuilder.getTII(), *ST.getRegisterInfo(),
-                             *ST.getRegBankInfo()))
-    return false;
-  MI.eraseFromParent();
-  return true;
+  assert(false && "Not supported");
+      return false;
 }
 
 static bool MSA3OpIntrinsicToGeneric(MachineInstr &MI, unsigned Opcode,
                                      MachineIRBuilder &MIRBuilder,
                                      const FgpuSubtarget &ST) {
-  assert(ST.hasMSA() && "MSA intrinsic not supported on target without MSA.");
-  MIRBuilder.buildInstr(Opcode)
-      .add(MI.getOperand(0))
-      .add(MI.getOperand(2))
-      .add(MI.getOperand(3));
-  MI.eraseFromParent();
-  return true;
+  assert(false && "Not supported");
+  return false;
 }
 
 static bool MSA2OpIntrinsicToGeneric(MachineInstr &MI, unsigned Opcode,
                                      MachineIRBuilder &MIRBuilder,
                                      const FgpuSubtarget &ST) {
-  assert(ST.hasMSA() && "MSA intrinsic not supported on target without MSA.");
-  MIRBuilder.buildInstr(Opcode)
-      .add(MI.getOperand(0))
-      .add(MI.getOperand(2));
-  MI.eraseFromParent();
-  return true;
+  assert(false && "Not supported");
+  return false;
 }
 
 bool FgpuLegalizerInfo::legalizeIntrinsic(LegalizerHelper &Helper,
@@ -508,98 +475,100 @@ bool FgpuLegalizerInfo::legalizeIntrinsic(LegalizerHelper &Helper,
   const FgpuRegisterInfo &TRI = *ST.getRegisterInfo();
   const RegisterBankInfo &RBI = *ST.getRegBankInfo();
 
-  switch (MI.getIntrinsicID()) {
-  case Intrinsic::trap: {
-    MachineInstr *Trap = MIRBuilder.buildInstr(Fgpu::TRAP);
-    MI.eraseFromParent();
-    return constrainSelectedInstRegOperands(*Trap, TII, TRI, RBI);
-  }
-  case Intrinsic::vacopy: {
-    MachinePointerInfo MPO;
-    LLT PtrTy = LLT::pointer(0, 32);
-    auto Tmp =
-        MIRBuilder.buildLoad(PtrTy, MI.getOperand(2),
-                             *MI.getMF()->getMachineMemOperand(
-                                 MPO, MachineMemOperand::MOLoad, PtrTy, Align(4)));
-    MIRBuilder.buildStore(Tmp, MI.getOperand(1),
-                          *MI.getMF()->getMachineMemOperand(
-                              MPO, MachineMemOperand::MOStore, PtrTy, Align(4)));
-    MI.eraseFromParent();
-    return true;
-  }
-  case Intrinsic::fgpu_addv_b:
-  case Intrinsic::fgpu_addv_h:
-  case Intrinsic::fgpu_addv_w:
-  case Intrinsic::fgpu_addv_d:
-    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_ADD, MIRBuilder, ST);
-  case Intrinsic::fgpu_addvi_b:
-    return SelectMSA3OpIntrinsic(MI, Fgpu::ADDVI_B, MIRBuilder, ST);
-  case Intrinsic::fgpu_addvi_h:
-    return SelectMSA3OpIntrinsic(MI, Fgpu::ADDVI_H, MIRBuilder, ST);
-  case Intrinsic::fgpu_addvi_w:
-    return SelectMSA3OpIntrinsic(MI, Fgpu::ADDVI_W, MIRBuilder, ST);
-  case Intrinsic::fgpu_addvi_d:
-    return SelectMSA3OpIntrinsic(MI, Fgpu::ADDVI_D, MIRBuilder, ST);
-  case Intrinsic::fgpu_subv_b:
-  case Intrinsic::fgpu_subv_h:
-  case Intrinsic::fgpu_subv_w:
-  case Intrinsic::fgpu_subv_d:
-    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_SUB, MIRBuilder, ST);
-  case Intrinsic::fgpu_subvi_b:
-    return SelectMSA3OpIntrinsic(MI, Fgpu::SUBVI_B, MIRBuilder, ST);
-  case Intrinsic::fgpu_subvi_h:
-    return SelectMSA3OpIntrinsic(MI, Fgpu::SUBVI_H, MIRBuilder, ST);
-  case Intrinsic::fgpu_subvi_w:
-    return SelectMSA3OpIntrinsic(MI, Fgpu::SUBVI_W, MIRBuilder, ST);
-  case Intrinsic::fgpu_subvi_d:
-    return SelectMSA3OpIntrinsic(MI, Fgpu::SUBVI_D, MIRBuilder, ST);
-  case Intrinsic::fgpu_mulv_b:
-  case Intrinsic::fgpu_mulv_h:
-  case Intrinsic::fgpu_mulv_w:
-  case Intrinsic::fgpu_mulv_d:
-    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_MUL, MIRBuilder, ST);
-  case Intrinsic::fgpu_div_s_b:
-  case Intrinsic::fgpu_div_s_h:
-  case Intrinsic::fgpu_div_s_w:
-  case Intrinsic::fgpu_div_s_d:
-    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_SDIV, MIRBuilder, ST);
-  case Intrinsic::fgpu_mod_s_b:
-  case Intrinsic::fgpu_mod_s_h:
-  case Intrinsic::fgpu_mod_s_w:
-  case Intrinsic::fgpu_mod_s_d:
-    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_SREM, MIRBuilder, ST);
-  case Intrinsic::fgpu_div_u_b:
-  case Intrinsic::fgpu_div_u_h:
-  case Intrinsic::fgpu_div_u_w:
-  case Intrinsic::fgpu_div_u_d:
-    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_UDIV, MIRBuilder, ST);
-  case Intrinsic::fgpu_mod_u_b:
-  case Intrinsic::fgpu_mod_u_h:
-  case Intrinsic::fgpu_mod_u_w:
-  case Intrinsic::fgpu_mod_u_d:
-    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_UREM, MIRBuilder, ST);
-  case Intrinsic::fgpu_fadd_w:
-  case Intrinsic::fgpu_fadd_d:
-    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_FADD, MIRBuilder, ST);
-  case Intrinsic::fgpu_fsub_w:
-  case Intrinsic::fgpu_fsub_d:
-    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_FSUB, MIRBuilder, ST);
-  case Intrinsic::fgpu_fmul_w:
-  case Intrinsic::fgpu_fmul_d:
-    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_FMUL, MIRBuilder, ST);
-  case Intrinsic::fgpu_fdiv_w:
-  case Intrinsic::fgpu_fdiv_d:
-    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_FDIV, MIRBuilder, ST);
-  case Intrinsic::fgpu_fmax_a_w:
-    return SelectMSA3OpIntrinsic(MI, Fgpu::FMAX_A_W, MIRBuilder, ST);
-  case Intrinsic::fgpu_fmax_a_d:
-    return SelectMSA3OpIntrinsic(MI, Fgpu::FMAX_A_D, MIRBuilder, ST);
-  case Intrinsic::fgpu_fsqrt_w:
-    return MSA2OpIntrinsicToGeneric(MI, TargetOpcode::G_FSQRT, MIRBuilder, ST);
-  case Intrinsic::fgpu_fsqrt_d:
-    return MSA2OpIntrinsicToGeneric(MI, TargetOpcode::G_FSQRT, MIRBuilder, ST);
-  default:
-    break;
-  }
-  return true;
+  return false; // TODO: I will make it legal
+//
+//  switch (MI.getIntrinsicID()) {
+//  case Intrinsic::trap: {
+//    MachineInstr *Trap = MIRBuilder.buildInstr(Fgpu::TRAP);
+//    MI.eraseFromParent();
+//    return constrainSelectedInstRegOperands(*Trap, TII, TRI, RBI);
+//  }
+//  case Intrinsic::vacopy: {
+//    MachinePointerInfo MPO;
+//    LLT PtrTy = LLT::pointer(0, 32);
+//    auto Tmp =
+//        MIRBuilder.buildLoad(PtrTy, MI.getOperand(2),
+//                             *MI.getMF()->getMachineMemOperand(
+//                                 MPO, MachineMemOperand::MOLoad, PtrTy, Align(4)));
+//    MIRBuilder.buildStore(Tmp, MI.getOperand(1),
+//                          *MI.getMF()->getMachineMemOperand(
+//                              MPO, MachineMemOperand::MOStore, PtrTy, Align(4)));
+//    MI.eraseFromParent();
+//    return true;
+//  }
+//  case Intrinsic::fgpu_addv_b:
+//  case Intrinsic::fgpu_addv_h:
+//  case Intrinsic::fgpu_addv_w:
+//  case Intrinsic::fgpu_addv_d:
+//    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_ADD, MIRBuilder, ST);
+//  case Intrinsic::fgpu_addvi_b:
+//    return SelectMSA3OpIntrinsic(MI, Fgpu::ADDVI_B, MIRBuilder, ST);
+//  case Intrinsic::fgpu_addvi_h:
+//    return SelectMSA3OpIntrinsic(MI, Fgpu::ADDVI_H, MIRBuilder, ST);
+//  case Intrinsic::fgpu_addvi_w:
+//    return SelectMSA3OpIntrinsic(MI, Fgpu::ADDVI_W, MIRBuilder, ST);
+//  case Intrinsic::fgpu_addvi_d:
+//    return SelectMSA3OpIntrinsic(MI, Fgpu::ADDVI_D, MIRBuilder, ST);
+//  case Intrinsic::fgpu_subv_b:
+//  case Intrinsic::fgpu_subv_h:
+//  case Intrinsic::fgpu_subv_w:
+//  case Intrinsic::fgpu_subv_d:
+//    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_SUB, MIRBuilder, ST);
+//  case Intrinsic::fgpu_subvi_b:
+//    return SelectMSA3OpIntrinsic(MI, Fgpu::SUBVI_B, MIRBuilder, ST);
+//  case Intrinsic::fgpu_subvi_h:
+//    return SelectMSA3OpIntrinsic(MI, Fgpu::SUBVI_H, MIRBuilder, ST);
+//  case Intrinsic::fgpu_subvi_w:
+//    return SelectMSA3OpIntrinsic(MI, Fgpu::SUBVI_W, MIRBuilder, ST);
+//  case Intrinsic::fgpu_subvi_d:
+//    return SelectMSA3OpIntrinsic(MI, Fgpu::SUBVI_D, MIRBuilder, ST);
+//  case Intrinsic::fgpu_mulv_b:
+//  case Intrinsic::fgpu_mulv_h:
+//  case Intrinsic::fgpu_mulv_w:
+//  case Intrinsic::fgpu_mulv_d:
+//    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_MUL, MIRBuilder, ST);
+//  case Intrinsic::fgpu_div_s_b:
+//  case Intrinsic::fgpu_div_s_h:
+//  case Intrinsic::fgpu_div_s_w:
+//  case Intrinsic::fgpu_div_s_d:
+//    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_SDIV, MIRBuilder, ST);
+//  case Intrinsic::fgpu_mod_s_b:
+//  case Intrinsic::fgpu_mod_s_h:
+//  case Intrinsic::fgpu_mod_s_w:
+//  case Intrinsic::fgpu_mod_s_d:
+//    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_SREM, MIRBuilder, ST);
+//  case Intrinsic::fgpu_div_u_b:
+//  case Intrinsic::fgpu_div_u_h:
+//  case Intrinsic::fgpu_div_u_w:
+//  case Intrinsic::fgpu_div_u_d:
+//    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_UDIV, MIRBuilder, ST);
+//  case Intrinsic::fgpu_mod_u_b:
+//  case Intrinsic::fgpu_mod_u_h:
+//  case Intrinsic::fgpu_mod_u_w:
+//  case Intrinsic::fgpu_mod_u_d:
+//    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_UREM, MIRBuilder, ST);
+//  case Intrinsic::fgpu_fadd_w:
+//  case Intrinsic::fgpu_fadd_d:
+//    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_FADD, MIRBuilder, ST);
+//  case Intrinsic::fgpu_fsub_w:
+//  case Intrinsic::fgpu_fsub_d:
+//    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_FSUB, MIRBuilder, ST);
+//  case Intrinsic::fgpu_fmul_w:
+//  case Intrinsic::fgpu_fmul_d:
+//    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_FMUL, MIRBuilder, ST);
+//  case Intrinsic::fgpu_fdiv_w:
+//  case Intrinsic::fgpu_fdiv_d:
+//    return MSA3OpIntrinsicToGeneric(MI, TargetOpcode::G_FDIV, MIRBuilder, ST);
+//  case Intrinsic::fgpu_fmax_a_w:
+//    return SelectMSA3OpIntrinsic(MI, Fgpu::FMAX_A_W, MIRBuilder, ST);
+//  case Intrinsic::fgpu_fmax_a_d:
+//    return SelectMSA3OpIntrinsic(MI, Fgpu::FMAX_A_D, MIRBuilder, ST);
+//  case Intrinsic::fgpu_fsqrt_w:
+//    return MSA2OpIntrinsicToGeneric(MI, TargetOpcode::G_FSQRT, MIRBuilder, ST);
+//  case Intrinsic::fgpu_fsqrt_d:
+//    return MSA2OpIntrinsicToGeneric(MI, TargetOpcode::G_FSQRT, MIRBuilder, ST);
+//  default:
+//    break;
+//  }
+//  return true;
 }

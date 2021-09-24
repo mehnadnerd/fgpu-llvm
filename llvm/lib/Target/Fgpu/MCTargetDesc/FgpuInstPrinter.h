@@ -31,42 +31,42 @@ enum FPBranchCode {
 // Fgpu Condition Codes
 enum CondCode {
   // To be used with float branch True
-  FCOND_F,
-  FCOND_UN,
-  FCOND_OEQ,
-  FCOND_UEQ,
-  FCOND_OLT,
-  FCOND_ULT,
-  FCOND_OLE,
-  FCOND_ULE,
-  FCOND_SF,
-  FCOND_NGLE,
-  FCOND_SEQ,
-  FCOND_NGL,
-  FCOND_LT,
-  FCOND_NGE,
-  FCOND_LE,
-  FCOND_NGT,
-
-  // To be used with float branch False
-  // This conditions have the same mnemonic as the
-  // above ones, but are used with a branch False;
-  FCOND_T,
-  FCOND_OR,
-  FCOND_UNE,
-  FCOND_ONE,
-  FCOND_UGE,
-  FCOND_OGE,
-  FCOND_UGT,
-  FCOND_OGT,
-  FCOND_ST,
-  FCOND_GLE,
-  FCOND_SNE,
-  FCOND_GL,
-  FCOND_NLT,
-  FCOND_GE,
-  FCOND_NLE,
-  FCOND_GT
+//  FCOND_F,
+//  FCOND_UN,
+//  FCOND_OEQ,
+//  FCOND_UEQ,
+//  FCOND_OLT,
+//  FCOND_ULT,
+//  FCOND_OLE,
+//  FCOND_ULE,
+//  FCOND_SF,
+//  FCOND_NGLE,
+//  FCOND_SEQ,
+//  FCOND_NGL,
+//  FCOND_LT,
+//  FCOND_NGE,
+//  FCOND_LE,
+//  FCOND_NGT,
+//
+//  // To be used with float branch False
+//  // This conditions have the same mnemonic as the
+//  // above ones, but are used with a branch False;
+//  FCOND_T,
+//  FCOND_OR,
+//  FCOND_UNE,
+//  FCOND_ONE,
+//  FCOND_UGE,
+//  FCOND_OGE,
+//  FCOND_UGT,
+//  FCOND_OGT,
+//  FCOND_ST,
+//  FCOND_GLE,
+//  FCOND_SNE,
+//  FCOND_GL,
+//  FCOND_NLT,
+//  FCOND_GE,
+//  FCOND_NLE,
+//  FCOND_GT
 };
 
 const char *FgpuFCCToString(Fgpu::CondCode CC);
@@ -100,6 +100,8 @@ private:
   }
   template <unsigned Bits, unsigned Offset = 0>
   void printUImm(const MCInst *MI, int opNum, raw_ostream &O);
+  void printUnsignedImm(const MCInst *MI, int opNum, raw_ostream &O);
+  void printUnsignedShortImm(const MCInst *MI, int opNum, raw_ostream &O);
   void printMemOperand(const MCInst *MI, int opNum, raw_ostream &O);
   void printMemOperandEA(const MCInst *MI, int opNum, raw_ostream &O);
   void printFCCOperand(const MCInst *MI, int opNum, raw_ostream &O);
