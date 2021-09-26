@@ -394,9 +394,7 @@ class FgpuAsmParser : public MCTargetAsmParser {
 
   int matchCPURegisterName(StringRef Symbol);
 
-  int matchHWRegsRegisterName(StringRef Symbol);
-
-  int matchFPURegisterName(StringRef Name);
+  int matchVFPRegisterName(StringRef Name);
 
   unsigned getReg(int RC, int RegNo);
 
@@ -1325,14 +1323,14 @@ bool FgpuAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
     //        of the assembler. We ought to leave it to those later stages.
     const MCSymbol *JalSym = getSingleMCSymbol(JalExpr);
 
-    if (expandLoadAddress(Fgpu::R26, Fgpu::NoRegister, Inst.getOperand(0),
+    if (expandLoadAddress(Fgpu::R25, Fgpu::NoRegister, Inst.getOperand(0),
                           true, IDLoc, Out, STI))
       return true;
 
     MCInst JalrInst;
     JalrInst.setOpcode(Fgpu::JSUB); // TODO add JALR
     JalrInst.addOperand(MCOperand::createReg(Fgpu::LR));
-    JalrInst.addOperand(MCOperand::createReg(Fgpu::R26));
+    JalrInst.addOperand(MCOperand::createReg(Fgpu::R25));
 
     if (isJalrRelocAvailable(JalExpr)) {
       // As an optimization hint for the linker, before the JALR we add:
@@ -1705,7 +1703,7 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
                                   const MCSubtargetInfo *STI) {
   FgpuTargetStreamer &TOut = getTargetStreamer();
 
-  if (!Is32BitImm && !isGP64bit()) {
+  if (!Is32BitImm) {
     Error(IDLoc, "instruction requires a 64-bit architecture");
     return true;
   }
@@ -1723,7 +1721,7 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
   }
 
   unsigned ZeroReg = IsAddress ? ABI.GetNullPtr() : ABI.GetZeroReg();
-  unsigned AdduOp = !Is32BitImm ? Fgpu::DADDu : Fgpu::ADDu;
+  unsigned AdduOp = Fgpu::ADD;
 
   bool UseSrcReg = false;
   if (SrcReg != Fgpu::NoRegister)
@@ -1744,15 +1742,7 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
     if (!UseSrcReg)
       SrcReg = ZeroReg;
 
-    // This doesn't quite follow the usual ABI expectations for N32 but matches
-    // traditional assembler behaviour. N32 would normally use addiu for both
-    // integers and addresses.
-    if (IsAddress && !Is32BitImm) {
-      TOut.emitRRI(Fgpu::DADDiu, DstReg, SrcReg, ImmValue, IDLoc, STI);
-      return false;
-    }
-
-    TOut.emitRRI(Fgpu::ADDiu, DstReg, SrcReg, ImmValue, IDLoc, STI);
+    TOut.emitRRI(Fgpu::ADDi, DstReg, SrcReg, ImmValue, IDLoc, STI);
     return false;
   }
 
@@ -1764,7 +1754,7 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
         return true;
     }
 
-    TOut.emitRRI(Fgpu::ORi, TmpReg, ZeroReg, ImmValue, IDLoc, STI);
+    TOut.emitRRI(Fgpu::ORi, TmpReg, ZeroReg, ImmValue, IDLoc, STI); // TODO: should be Li??
     if (UseSrcReg)
       TOut.emitRRR(ABI.GetPtrAdduOp(), DstReg, TmpReg, SrcReg, IDLoc, STI);
     return false;
@@ -1775,27 +1765,6 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
 
     uint16_t Bits31To16 = (ImmValue >> 16) & 0xffff;
     uint16_t Bits15To0 = ImmValue & 0xffff;
-    if (!Is32BitImm && !isInt<32>(ImmValue)) {
-      // Traditional behaviour seems to special case this particular value. It's
-      // not clear why other masks are handled differently.
-      if (ImmValue == 0xffffffff) {
-        TOut.emitRI(Fgpu::LUi, TmpReg, 0xffff, IDLoc, STI);
-        TOut.emitRRI(Fgpu::DSRL32, TmpReg, TmpReg, 0, IDLoc, STI);
-        if (UseSrcReg)
-          TOut.emitRRR(AdduOp, DstReg, TmpReg, SrcReg, IDLoc, STI);
-        return false;
-      }
-
-      // Expand to an ORi instead of a LUi to avoid sign-extending into the
-      // upper 32 bits.
-      TOut.emitRRI(Fgpu::ORi, TmpReg, ZeroReg, Bits31To16, IDLoc, STI);
-      TOut.emitRRI(Fgpu::DSLL, TmpReg, TmpReg, 16, IDLoc, STI);
-      if (Bits15To0)
-        TOut.emitRRI(Fgpu::ORi, TmpReg, TmpReg, Bits15To0, IDLoc, STI);
-      if (UseSrcReg)
-        TOut.emitRRR(AdduOp, DstReg, TmpReg, SrcReg, IDLoc, STI);
-      return false;
-    }
 
     TOut.emitRI(Fgpu::LUi, TmpReg, Bits31To16, IDLoc, STI);
     if (Bits15To0)
@@ -1882,27 +1851,10 @@ bool FgpuAsmParser::expandLoadAddress(unsigned DstReg, unsigned BaseReg,
                                       bool Is32BitAddress, SMLoc IDLoc,
                                       MCStreamer &Out,
                                       const MCSubtargetInfo *STI) {
-  // la can't produce a usable address when addresses are 64-bit.
-  if (Is32BitAddress && ABI.ArePtrs64bit()) {
-    Warning(IDLoc, "la used to load 64-bit address");
-    // Continue as if we had 'dla' instead.
-    Is32BitAddress = false;
-  }
-
-  // dla requires 64-bit addresses.
-  if (!Is32BitAddress && !hasFgpu3()) {
-    Error(IDLoc, "instruction requires a 64-bit architecture");
-    return true;
-  }
 
   if (!Offset.isImm())
     return loadAndAddSymbolAddress(Offset.getExpr(), DstReg, BaseReg,
                                    Is32BitAddress, IDLoc, Out, STI);
-
-  if (!ABI.ArePtrs64bit()) {
-    // Continue as if we had 'la' whether we had 'la' or 'dla'.
-    Is32BitAddress = true;
-  }
 
   return loadImmediate(Offset.getImm(), DstReg, BaseReg, Is32BitAddress, true,
                        IDLoc, Out, STI);
@@ -1914,8 +1866,7 @@ bool FgpuAsmParser::loadAndAddSymbolAddress(const MCExpr *SymExpr,
                                             MCStreamer &Out,
                                             const MCSubtargetInfo *STI) {
   FgpuTargetStreamer &TOut = getTargetStreamer();
-  bool UseSrcReg = SrcReg != Fgpu::NoRegister && SrcReg != Fgpu::ZERO &&
-                   SrcReg != Fgpu::ZERO_64;
+  bool UseSrcReg = SrcReg != Fgpu::NoRegister && SrcReg != Fgpu::ZERO;
   warnIfNoMacro(IDLoc);
 
   if (inPicMode()) {
@@ -1929,33 +1880,22 @@ bool FgpuAsmParser::loadAndAddSymbolAddress(const MCExpr *SymExpr,
       return true;
     }
 
-    bool IsPtr64 = ABI.ArePtrs64bit();
+    bool IsPtr64 = false;
     bool IsLocalSym =
         Res.getSymA()->getSymbol().isInSection() ||
         Res.getSymA()->getSymbol().isTemporary() ||
         (Res.getSymA()->getSymbol().isELF() &&
          cast<MCSymbolELF>(Res.getSymA()->getSymbol()).getBinding() ==
              ELF::STB_LOCAL);
-    bool UseXGOT = STI->getFeatureBits()[Fgpu::FeatureXGOT] && !IsLocalSym;
+    bool UseXGOT = false && !IsLocalSym;
 
     // The case where the result register is $25 is somewhat special. If the
     // symbol in the final relocation is external and not modified with a
     // constant then we must use R_FGPU_CALL16 instead of R_FGPU_GOT16
     // or R_FGPU_CALL16 instead of R_FGPU_GOT_DISP in 64-bit case.
-    if ((DstReg == Fgpu::T9 || DstReg == Fgpu::T9_64) && !UseSrcReg &&
+    if ((DstReg == Fgpu::R25) && !UseSrcReg &&
         Res.getConstant() == 0 && !IsLocalSym) {
-      if (UseXGOT) {
-        const MCExpr *CallHiExpr = FgpuMCExpr::create(FgpuMCExpr::MEK_CALL_HI16,
-                                                      SymExpr, getContext());
-        const MCExpr *CallLoExpr = FgpuMCExpr::create(FgpuMCExpr::MEK_CALL_LO16,
-                                                      SymExpr, getContext());
-        TOut.emitRX(Fgpu::LUi, DstReg, MCOperand::createExpr(CallHiExpr), IDLoc,
-                    STI);
-        TOut.emitRRR(IsPtr64 ? Fgpu::DADDu : Fgpu::ADDu, DstReg, DstReg, GPReg,
-                     IDLoc, STI);
-        TOut.emitRRX(IsPtr64 ? Fgpu::LD : Fgpu::LW, DstReg, DstReg,
-                     MCOperand::createExpr(CallLoExpr), IDLoc, STI);
-      } else {
+      {
         const MCExpr *CallExpr =
             FgpuMCExpr::create(FgpuMCExpr::MEK_GOT_CALL, SymExpr, getContext());
         TOut.emitRRX(IsPtr64 ? Fgpu::LD : Fgpu::LW, DstReg, GPReg,
@@ -1976,70 +1916,10 @@ bool FgpuAsmParser::loadAndAddSymbolAddress(const MCExpr *SymExpr,
       TmpReg = ATReg;
     }
 
-    // FIXME: In case of N32 / N64 ABI and emabled XGOT, local addresses
-    // loaded using R_FGPU_GOT_PAGE / R_FGPU_GOT_OFST pair of relocations.
-    // FIXME: Implement XGOT for microFGPU.
-    if (UseXGOT) {
-      // Loading address from XGOT
-      //   External GOT: lui $tmp, %got_hi(symbol)($gp)
-      //                 addu $tmp, $tmp, $gp
-      //                 lw $tmp, %got_lo(symbol)($tmp)
-      //                >addiu $tmp, $tmp, offset
-      //                >addiu $rd, $tmp, $rs
-      // The addiu's marked with a '>' may be omitted if they are redundant. If
-      // this happens then the last instruction must use $rd as the result
-      // register.
-      const MCExpr *CallHiExpr =
-          FgpuMCExpr::create(FgpuMCExpr::MEK_GOT_HI16, SymExpr, getContext());
-      const MCExpr *CallLoExpr = FgpuMCExpr::create(
-          FgpuMCExpr::MEK_GOT_LO16, Res.getSymA(), getContext());
-
-      TOut.emitRX(Fgpu::LUi, TmpReg, MCOperand::createExpr(CallHiExpr), IDLoc,
-                  STI);
-      TOut.emitRRR(IsPtr64 ? Fgpu::DADDu : Fgpu::ADDu, TmpReg, TmpReg, GPReg,
-                   IDLoc, STI);
-      TOut.emitRRX(IsPtr64 ? Fgpu::LD : Fgpu::LW, TmpReg, TmpReg,
-                   MCOperand::createExpr(CallLoExpr), IDLoc, STI);
-
-      if (Res.getConstant() != 0)
-        TOut.emitRRX(IsPtr64 ? Fgpu::DADDiu : Fgpu::ADDiu, TmpReg, TmpReg,
-                     MCOperand::createExpr(MCConstantExpr::create(
-                         Res.getConstant(), getContext())),
-                     IDLoc, STI);
-
-      if (UseSrcReg)
-        TOut.emitRRR(IsPtr64 ? Fgpu::DADDu : Fgpu::ADDu, DstReg, TmpReg, SrcReg,
-                     IDLoc, STI);
-      return false;
-    }
 
     const FgpuMCExpr *GotExpr = nullptr;
     const MCExpr *LoExpr = nullptr;
-    if (ABI.IsN32() || ABI.IsN64()) {
-      // The remaining cases are:
-      //   Small offset: ld $tmp, %got_disp(symbol)($gp)
-      //                >daddiu $tmp, $tmp, offset
-      //                >daddu $rd, $tmp, $rs
-      // The daddiu's marked with a '>' may be omitted if they are redundant. If
-      // this happens then the last instruction must use $rd as the result
-      // register.
-      GotExpr = FgpuMCExpr::create(FgpuMCExpr::MEK_GOT_DISP, Res.getSymA(),
-                                   getContext());
-      if (Res.getConstant() != 0) {
-        // Symbols fully resolve with just the %got_disp(symbol) but we
-        // must still account for any offset to the symbol for
-        // expressions like symbol+8.
-        LoExpr = MCConstantExpr::create(Res.getConstant(), getContext());
-
-        // FIXME: Offsets greater than 16 bits are not yet implemented.
-        // FIXME: The correct range is a 32-bit sign-extended number.
-        if (Res.getConstant() < -0x8000 || Res.getConstant() > 0x7fff) {
-          Error(IDLoc, "macro instruction uses large offset, which is not "
-                       "currently supported");
-          return true;
-        }
-      }
-    } else {
+    {
       // The remaining cases are:
       //   External GOT: lw $tmp, %got(symbol)($gp)
       //                >addiu $tmp, $tmp, offset
@@ -2065,15 +1945,15 @@ bool FgpuAsmParser::loadAndAddSymbolAddress(const MCExpr *SymExpr,
       }
     }
 
-    TOut.emitRRX(IsPtr64 ? Fgpu::LD : Fgpu::LW, TmpReg, GPReg,
+    TOut.emitRRX(Fgpu::LW, TmpReg, GPReg,
                  MCOperand::createExpr(GotExpr), IDLoc, STI);
 
     if (LoExpr)
-      TOut.emitRRX(IsPtr64 ? Fgpu::DADDiu : Fgpu::ADDiu, TmpReg, TmpReg,
+      TOut.emitRRX(Fgpu::ADDi, TmpReg, TmpReg, // TODO: should be Li??
                    MCOperand::createExpr(LoExpr), IDLoc, STI);
 
     if (UseSrcReg)
-      TOut.emitRRR(IsPtr64 ? Fgpu::DADDu : Fgpu::ADDu, DstReg, TmpReg, SrcReg,
+      TOut.emitRRR(Fgpu::ADD, DstReg, TmpReg, SrcReg,
                    IDLoc, STI);
 
     return false;
@@ -2083,109 +1963,6 @@ bool FgpuAsmParser::loadAndAddSymbolAddress(const MCExpr *SymExpr,
       FgpuMCExpr::create(FgpuMCExpr::MEK_HI, SymExpr, getContext());
   const FgpuMCExpr *LoExpr =
       FgpuMCExpr::create(FgpuMCExpr::MEK_LO, SymExpr, getContext());
-
-  // This is the 64-bit symbol address expansion.
-  if (ABI.ArePtrs64bit() && isGP64bit()) {
-    // We need AT for the 64-bit expansion in the cases where the optional
-    // source register is the destination register and for the superscalar
-    // scheduled form.
-    //
-    // If it is not available we exit if the destination is the same as the
-    // source register.
-
-    const FgpuMCExpr *HighestExpr =
-        FgpuMCExpr::create(FgpuMCExpr::MEK_HIGHEST, SymExpr, getContext());
-    const FgpuMCExpr *HigherExpr =
-        FgpuMCExpr::create(FgpuMCExpr::MEK_HIGHER, SymExpr, getContext());
-
-    bool RdRegIsRsReg =
-        getContext().getRegisterInfo()->isSuperOrSubRegisterEq(DstReg, SrcReg);
-
-    if (canUseATReg() && UseSrcReg && RdRegIsRsReg) {
-      unsigned ATReg = getATReg(IDLoc);
-
-      // If $rs is the same as $rd:
-      // (d)la $rd, sym($rd) => lui    $at, %highest(sym)
-      //                        daddiu $at, $at, %higher(sym)
-      //                        dsll   $at, $at, 16
-      //                        daddiu $at, $at, %hi(sym)
-      //                        dsll   $at, $at, 16
-      //                        daddiu $at, $at, %lo(sym)
-      //                        daddu  $rd, $at, $rd
-      TOut.emitRX(Fgpu::LUi, ATReg, MCOperand::createExpr(HighestExpr), IDLoc,
-                  STI);
-      TOut.emitRRX(Fgpu::DADDiu, ATReg, ATReg,
-                   MCOperand::createExpr(HigherExpr), IDLoc, STI);
-      TOut.emitRRI(Fgpu::DSLL, ATReg, ATReg, 16, IDLoc, STI);
-      TOut.emitRRX(Fgpu::DADDiu, ATReg, ATReg, MCOperand::createExpr(HiExpr),
-                   IDLoc, STI);
-      TOut.emitRRI(Fgpu::DSLL, ATReg, ATReg, 16, IDLoc, STI);
-      TOut.emitRRX(Fgpu::DADDiu, ATReg, ATReg, MCOperand::createExpr(LoExpr),
-                   IDLoc, STI);
-      TOut.emitRRR(Fgpu::DADDu, DstReg, ATReg, SrcReg, IDLoc, STI);
-
-      return false;
-    } else if (canUseATReg() && !RdRegIsRsReg && DstReg != getATReg(IDLoc)) {
-      unsigned ATReg = getATReg(IDLoc);
-
-      // If the $rs is different from $rd or if $rs isn't specified and we
-      // have $at available:
-      // (d)la $rd, sym/sym($rs) => lui    $rd, %highest(sym)
-      //                            lui    $at, %hi(sym)
-      //                            daddiu $rd, $rd, %higher(sym)
-      //                            daddiu $at, $at, %lo(sym)
-      //                            dsll32 $rd, $rd, 0
-      //                            daddu  $rd, $rd, $at
-      //                            (daddu  $rd, $rd, $rs)
-      //
-      // Which is preferred for superscalar issue.
-      TOut.emitRX(Fgpu::LUi, DstReg, MCOperand::createExpr(HighestExpr), IDLoc,
-                  STI);
-      TOut.emitRX(Fgpu::LUi, ATReg, MCOperand::createExpr(HiExpr), IDLoc, STI);
-      TOut.emitRRX(Fgpu::DADDiu, DstReg, DstReg,
-                   MCOperand::createExpr(HigherExpr), IDLoc, STI);
-      TOut.emitRRX(Fgpu::DADDiu, ATReg, ATReg, MCOperand::createExpr(LoExpr),
-                   IDLoc, STI);
-      TOut.emitRRI(Fgpu::DSLL32, DstReg, DstReg, 0, IDLoc, STI);
-      TOut.emitRRR(Fgpu::DADDu, DstReg, DstReg, ATReg, IDLoc, STI);
-      if (UseSrcReg)
-        TOut.emitRRR(Fgpu::DADDu, DstReg, DstReg, SrcReg, IDLoc, STI);
-
-      return false;
-    } else if ((!canUseATReg() && !RdRegIsRsReg) ||
-               (canUseATReg() && DstReg == getATReg(IDLoc))) {
-      // Otherwise, synthesize the address in the destination register
-      // serially:
-      // (d)la $rd, sym/sym($rs) => lui    $rd, %highest(sym)
-      //                            daddiu $rd, $rd, %higher(sym)
-      //                            dsll   $rd, $rd, 16
-      //                            daddiu $rd, $rd, %hi(sym)
-      //                            dsll   $rd, $rd, 16
-      //                            daddiu $rd, $rd, %lo(sym)
-      TOut.emitRX(Fgpu::LUi, DstReg, MCOperand::createExpr(HighestExpr), IDLoc,
-                  STI);
-      TOut.emitRRX(Fgpu::DADDiu, DstReg, DstReg,
-                   MCOperand::createExpr(HigherExpr), IDLoc, STI);
-      TOut.emitRRI(Fgpu::DSLL, DstReg, DstReg, 16, IDLoc, STI);
-      TOut.emitRRX(Fgpu::DADDiu, DstReg, DstReg,
-                   MCOperand::createExpr(HiExpr), IDLoc, STI);
-      TOut.emitRRI(Fgpu::DSLL, DstReg, DstReg, 16, IDLoc, STI);
-      TOut.emitRRX(Fgpu::DADDiu, DstReg, DstReg,
-                   MCOperand::createExpr(LoExpr), IDLoc, STI);
-      if (UseSrcReg)
-        TOut.emitRRR(Fgpu::DADDu, DstReg, DstReg, SrcReg, IDLoc, STI);
-
-      return false;
-    } else {
-      // We have a case where SrcReg == DstReg and we don't have $at
-      // available. We can't expand this case, so error out appropriately.
-      assert(SrcReg == DstReg && !canUseATReg() &&
-             "Could have expanded dla but didn't?");
-      reportParseError(IDLoc,
-                     "pseudo-instruction requires $at, which is not available");
-      return true;
-    }
-  }
 
   // And now, the 32-bit symbol address expansion:
   // If $rs is the same as $rd:
@@ -2208,75 +1985,16 @@ bool FgpuAsmParser::loadAndAddSymbolAddress(const MCExpr *SymExpr,
   }
 
   TOut.emitRX(Fgpu::LUi, TmpReg, MCOperand::createExpr(HiExpr), IDLoc, STI);
-  TOut.emitRRX(Fgpu::ADDiu, TmpReg, TmpReg, MCOperand::createExpr(LoExpr),
+  TOut.emitRRX(Fgpu::ADDi, TmpReg, TmpReg, MCOperand::createExpr(LoExpr), // TODO: should be Li??
                IDLoc, STI);
 
   if (UseSrcReg)
-    TOut.emitRRR(Fgpu::ADDu, DstReg, TmpReg, SrcReg, IDLoc, STI);
+    TOut.emitRRR(Fgpu::ADD, DstReg, TmpReg, SrcReg, IDLoc, STI);
   else
     assert(
         getContext().getRegisterInfo()->isSuperOrSubRegisterEq(DstReg, TmpReg));
 
   return false;
-}
-
-// Each double-precision register DO-D15 overlaps with two of the single
-// precision registers F0-F31. As an example, all of the following hold true:
-// D0 + 1 == F1, F1 + 1 == D1, F1 + 1 == F2, depending on the context.
-static unsigned nextReg(unsigned Reg) {
-  if (FgpuMCRegisterClasses[Fgpu::FGR32RegClassID].contains(Reg))
-    return Reg == (unsigned)Fgpu::F31 ? (unsigned)Fgpu::F0 : Reg + 1;
-  switch (Reg) {
-  default: llvm_unreachable("Unknown register in assembly macro expansion!");
-  case Fgpu::ZERO: return Fgpu::AT;
-  case Fgpu::AT:   return Fgpu::V0;
-  case Fgpu::V0:   return Fgpu::V1;
-  case Fgpu::V1:   return Fgpu::A0;
-  case Fgpu::A0:   return Fgpu::A1;
-  case Fgpu::A1:   return Fgpu::A2;
-  case Fgpu::A2:   return Fgpu::A3;
-  case Fgpu::A3:   return Fgpu::T0;
-  case Fgpu::T0:   return Fgpu::T1;
-  case Fgpu::T1:   return Fgpu::T2;
-  case Fgpu::T2:   return Fgpu::T3;
-  case Fgpu::T3:   return Fgpu::T4;
-  case Fgpu::T4:   return Fgpu::T5;
-  case Fgpu::T5:   return Fgpu::T6;
-  case Fgpu::T6:   return Fgpu::T7;
-  case Fgpu::T7:   return Fgpu::S0;
-  case Fgpu::S0:   return Fgpu::S1;
-  case Fgpu::S1:   return Fgpu::S2;
-  case Fgpu::S2:   return Fgpu::S3;
-  case Fgpu::S3:   return Fgpu::S4;
-  case Fgpu::S4:   return Fgpu::S5;
-  case Fgpu::S5:   return Fgpu::S6;
-  case Fgpu::S6:   return Fgpu::S7;
-  case Fgpu::S7:   return Fgpu::T8;
-  case Fgpu::T8:   return Fgpu::T9;
-  case Fgpu::T9:   return Fgpu::K0;
-  case Fgpu::K0:   return Fgpu::K1;
-  case Fgpu::K1:   return Fgpu::GP;
-  case Fgpu::GP:   return Fgpu::SP;
-  case Fgpu::SP:   return Fgpu::FP;
-  case Fgpu::FP:   return Fgpu::LR;
-  case Fgpu::LR:   return Fgpu::ZERO;
-  case Fgpu::D0:   return Fgpu::F1;
-  case Fgpu::D1:   return Fgpu::F3;
-  case Fgpu::D2:   return Fgpu::F5;
-  case Fgpu::D3:   return Fgpu::F7;
-  case Fgpu::D4:   return Fgpu::F9;
-  case Fgpu::D5:   return Fgpu::F11;
-  case Fgpu::D6:   return Fgpu::F13;
-  case Fgpu::D7:   return Fgpu::F15;
-  case Fgpu::D8:   return Fgpu::F17;
-  case Fgpu::D9:   return Fgpu::F19;
-  case Fgpu::D10:   return Fgpu::F21;
-  case Fgpu::D11:   return Fgpu::F23;
-  case Fgpu::D12:   return Fgpu::F25;
-  case Fgpu::D13:   return Fgpu::F27;
-  case Fgpu::D14:   return Fgpu::F29;
-  case Fgpu::D15:   return Fgpu::F31;
-  }
 }
 
 // FIXME: This method is too general. In principle we should compute the number
@@ -2297,13 +2015,8 @@ bool FgpuAsmParser::emitPartialAddress(FgpuTargetStreamer &TOut, SMLoc IDLoc,
     const FgpuMCExpr *GotExpr =
         FgpuMCExpr::create(FgpuMCExpr::MEK_GOT, GotSym, getContext());
 
-    if(isABI_O32() || isABI_N32()) {
       TOut.emitRRX(Fgpu::LW, ATReg, GPReg, MCOperand::createExpr(GotExpr),
                    IDLoc, STI);
-    } else { //isABI_N64()
-      TOut.emitRRX(Fgpu::LD, ATReg, GPReg, MCOperand::createExpr(GotExpr),
-                   IDLoc, STI);
-    }
   } else { //!IsPicEnabled
     const MCExpr *HiSym =
         MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, getContext());
@@ -2316,27 +2029,7 @@ bool FgpuAsmParser::emitPartialAddress(FgpuTargetStreamer &TOut, SMLoc IDLoc,
     // FIXME: With -msym32 option, the address expansion for N64 should probably
     // use the O32 / N32 case. It's safe to use the 64 address expansion as the
     // symbol's value is considered sign extended.
-    if(isABI_O32() || isABI_N32()) {
       TOut.emitRX(Fgpu::LUi, ATReg, MCOperand::createExpr(HiExpr), IDLoc, STI);
-    } else { //isABI_N64()
-      const MCExpr *HighestSym =
-          MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, getContext());
-      const FgpuMCExpr *HighestExpr =
-          FgpuMCExpr::create(FgpuMCExpr::MEK_HIGHEST, HighestSym, getContext());
-      const MCExpr *HigherSym =
-          MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, getContext());
-      const FgpuMCExpr *HigherExpr =
-          FgpuMCExpr::create(FgpuMCExpr::MEK_HIGHER, HigherSym, getContext());
-
-      TOut.emitRX(Fgpu::LUi, ATReg, MCOperand::createExpr(HighestExpr), IDLoc,
-                  STI);
-      TOut.emitRRX(Fgpu::DADDiu, ATReg, ATReg,
-                   MCOperand::createExpr(HigherExpr), IDLoc, STI);
-      TOut.emitRRI(Fgpu::DSLL, ATReg, ATReg, 16, IDLoc, STI);
-      TOut.emitRRX(Fgpu::DADDiu, ATReg, ATReg, MCOperand::createExpr(HiExpr),
-                   IDLoc, STI);
-      TOut.emitRRI(Fgpu::DSLL, ATReg, ATReg, 16, IDLoc, STI);
-    }
   }
   return false;
 }
@@ -2783,8 +2476,7 @@ void FgpuAsmParser::expandMem9Inst(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   int16_t DstRegClass = Desc.OpInfo[StartOp].RegClass;
   unsigned DstRegClassID =
       getContext().getRegisterInfo()->getRegClass(DstRegClass).getID();
-  bool IsGPR = (DstRegClassID == Fgpu::GPROutRegClassID) ||
-               (DstRegClassID == Fgpu::GPR64RegClassID);
+  bool IsGPR = (DstRegClassID == Fgpu::GPROutRegClassID);
 
   if (!IsLoad || !IsGPR || (BaseReg == DstReg)) {
     // At this point we need AT to perform the expansions
@@ -2803,7 +2495,7 @@ void FgpuAsmParser::expandMem9Inst(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   };
 
   if (OffsetOp.isImm()) {
-    loadImmediate(OffsetOp.getImm(), TmpReg, BaseReg, !ABI.ArePtrs64bit(), true,
+    loadImmediate(OffsetOp.getImm(), TmpReg, BaseReg, true, true,
                   IDLoc, Out, STI);
     emitInst();
     return;
@@ -2811,7 +2503,7 @@ void FgpuAsmParser::expandMem9Inst(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
 
   if (OffsetOp.isExpr()) {
     loadAndAddSymbolAddress(OffsetOp.getExpr(), TmpReg, BaseReg,
-                            !ABI.ArePtrs64bit(), IDLoc, Out, STI);
+                            true, IDLoc, Out, STI);
     emitInst();
     return;
   }
@@ -4175,95 +3867,6 @@ bool FgpuAsmParser::expandDMULMacro(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   return false;
 }
 
-// Expand 'ld $<reg> offset($reg2)' to 'lw $<reg>, offset($reg2);
-//                                      lw $<reg+1>>, offset+4($reg2)'
-// or expand 'sd $<reg> offset($reg2)' to 'sw $<reg>, offset($reg2);
-//                                         sw $<reg+1>>, offset+4($reg2)'
-// for O32.
-bool FgpuAsmParser::expandLoadStoreDMacro(MCInst &Inst, SMLoc IDLoc,
-                                          MCStreamer &Out,
-                                          const MCSubtargetInfo *STI,
-                                          bool IsLoad) {
-  if (!isABI_O32())
-    return true;
-
-  warnIfNoMacro(IDLoc);
-
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned Opcode = IsLoad ? Fgpu::LW : Fgpu::SW;
-  unsigned FirstReg = Inst.getOperand(0).getReg();
-  unsigned SecondReg = nextReg(FirstReg);
-  unsigned BaseReg = Inst.getOperand(1).getReg();
-  if (!SecondReg)
-    return true;
-
-  warnIfRegIndexIsAT(FirstReg, IDLoc);
-
-  assert(Inst.getOperand(2).isImm() &&
-         "Offset for load macro is not immediate!");
-
-  MCOperand &FirstOffset = Inst.getOperand(2);
-  signed NextOffset = FirstOffset.getImm() + 4;
-  MCOperand SecondOffset = MCOperand::createImm(NextOffset);
-
-  if (!isInt<16>(FirstOffset.getImm()) || !isInt<16>(NextOffset))
-    return true;
-
-  // For loads, clobber the base register with the second load instead of the
-  // first if the BaseReg == FirstReg.
-  if (FirstReg != BaseReg || !IsLoad) {
-    TOut.emitRRX(Opcode, FirstReg, BaseReg, FirstOffset, IDLoc, STI);
-    TOut.emitRRX(Opcode, SecondReg, BaseReg, SecondOffset, IDLoc, STI);
-  } else {
-    TOut.emitRRX(Opcode, SecondReg, BaseReg, SecondOffset, IDLoc, STI);
-    TOut.emitRRX(Opcode, FirstReg, BaseReg, FirstOffset, IDLoc, STI);
-  }
-
-  return false;
-}
-
-
-// Expand 's.d $<reg> offset($reg2)' to 'swc1 $<reg+1>, offset($reg2);
-//                                       swc1 $<reg>, offset+4($reg2)'
-// or if little endian to 'swc1 $<reg>, offset($reg2);
-//                         swc1 $<reg+1>, offset+4($reg2)'
-// for Fgpu1.
-bool FgpuAsmParser::expandStoreDM1Macro(MCInst &Inst, SMLoc IDLoc,
-                                        MCStreamer &Out,
-                                        const MCSubtargetInfo *STI) {
-  if (!isABI_O32())
-    return true;
-
-  warnIfNoMacro(IDLoc);
-
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned Opcode = Fgpu::SWC1;
-  unsigned FirstReg = Inst.getOperand(0).getReg();
-  unsigned SecondReg = nextReg(FirstReg);
-  unsigned BaseReg = Inst.getOperand(1).getReg();
-  if (!SecondReg)
-    return true;
-
-  warnIfRegIndexIsAT(FirstReg, IDLoc);
-
-  assert(Inst.getOperand(2).isImm() &&
-         "Offset for macro is not immediate!");
-
-  MCOperand &FirstOffset = Inst.getOperand(2);
-  signed NextOffset = FirstOffset.getImm() + 4;
-  MCOperand SecondOffset = MCOperand::createImm(NextOffset);
-
-  if (!isInt<16>(FirstOffset.getImm()) || !isInt<16>(NextOffset))
-    return true;
-
-  if (!IsLittleEndian)
-    std::swap(FirstReg, SecondReg);
-
-  TOut.emitRRX(Opcode, FirstReg, BaseReg, FirstOffset, IDLoc, STI);
-  TOut.emitRRX(Opcode, SecondReg, BaseReg, SecondOffset, IDLoc, STI);
-
-  return false;
-}
 
 bool FgpuAsmParser::expandSeq(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                               const MCSubtargetInfo *STI) {
@@ -4313,7 +3916,7 @@ bool FgpuAsmParser::expandSeqI(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
 
   if (SrcReg == Fgpu::ZERO) {
     Warning(IDLoc, "comparison is always false");
-    TOut.emitRRR(isGP64bit() ? Fgpu::DADDu : Fgpu::ADDu,
+    TOut.emitRRR(Fgpu::ADD,
                  DstReg, SrcReg, SrcReg, IDLoc, STI);
     return false;
   }
@@ -4321,7 +3924,7 @@ bool FgpuAsmParser::expandSeqI(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   unsigned Opc;
   if (Imm > -0x8000 && Imm < 0) {
     Imm = -Imm;
-    Opc = isGP64bit() ? Fgpu::DADDiu : Fgpu::ADDiu;
+    Opc = Fgpu::ADDi;
   } else {
     Opc = Fgpu::XORi;
   }
@@ -4331,7 +3934,7 @@ bool FgpuAsmParser::expandSeqI(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
     if (!ATReg)
       return true;
 
-    if (loadImmediate(Imm, ATReg, Fgpu::NoRegister, true, isGP64bit(), IDLoc,
+    if (loadImmediate(Imm, ATReg, Fgpu::NoRegister, true, false, IDLoc,
                       Out, STI))
       return true;
 
@@ -4427,211 +4030,6 @@ bool FgpuAsmParser::expandSneI(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   return false;
 }
 
-// Map the DSP accumulator and control register to the corresponding gpr
-// operand. Unlike the other alias, the m(f|t)t(lo|hi|acx) instructions
-// do not map the DSP registers contigously to gpr registers.
-static unsigned getRegisterForMxtrDSP(MCInst &Inst, bool IsMFDSP) {
-  switch (Inst.getOpcode()) {
-    case Fgpu::MFTLO:
-    case Fgpu::MTTLO:
-      switch (Inst.getOperand(IsMFDSP ? 1 : 0).getReg()) {
-        case Fgpu::AC0:
-          return Fgpu::ZERO;
-        case Fgpu::AC1:
-          return Fgpu::A0;
-        case Fgpu::AC2:
-          return Fgpu::T0;
-        case Fgpu::AC3:
-          return Fgpu::T4;
-        default:
-          llvm_unreachable("Unknown register for 'mttr' alias!");
-    }
-    case Fgpu::MFTHI:
-    case Fgpu::MTTHI:
-      switch (Inst.getOperand(IsMFDSP ? 1 : 0).getReg()) {
-        case Fgpu::AC0:
-          return Fgpu::AT;
-        case Fgpu::AC1:
-          return Fgpu::A1;
-        case Fgpu::AC2:
-          return Fgpu::T1;
-        case Fgpu::AC3:
-          return Fgpu::T5;
-        default:
-          llvm_unreachable("Unknown register for 'mttr' alias!");
-    }
-    case Fgpu::MFTACX:
-    case Fgpu::MTTACX:
-      switch (Inst.getOperand(IsMFDSP ? 1 : 0).getReg()) {
-        case Fgpu::AC0:
-          return Fgpu::V0;
-        case Fgpu::AC1:
-          return Fgpu::A2;
-        case Fgpu::AC2:
-          return Fgpu::T2;
-        case Fgpu::AC3:
-          return Fgpu::T6;
-        default:
-          llvm_unreachable("Unknown register for 'mttr' alias!");
-    }
-    case Fgpu::MFTDSP:
-    case Fgpu::MTTDSP:
-      return Fgpu::S0;
-    default:
-      llvm_unreachable("Unknown instruction for 'mttr' dsp alias!");
-  }
-}
-
-// Map the floating point register operand to the corresponding register
-// operand.
-static unsigned getRegisterForMxtrFP(MCInst &Inst, bool IsMFTC1) {
-  switch (Inst.getOperand(IsMFTC1 ? 1 : 0).getReg()) {
-    case Fgpu::F0:  return Fgpu::ZERO;
-    case Fgpu::F1:  return Fgpu::AT;
-    case Fgpu::F2:  return Fgpu::V0;
-    case Fgpu::F3:  return Fgpu::V1;
-    case Fgpu::F4:  return Fgpu::A0;
-    case Fgpu::F5:  return Fgpu::A1;
-    case Fgpu::F6:  return Fgpu::A2;
-    case Fgpu::F7:  return Fgpu::A3;
-    case Fgpu::F8:  return Fgpu::T0;
-    case Fgpu::F9:  return Fgpu::T1;
-    case Fgpu::F10: return Fgpu::T2;
-    case Fgpu::F11: return Fgpu::T3;
-    case Fgpu::F12: return Fgpu::T4;
-    case Fgpu::F13: return Fgpu::T5;
-    case Fgpu::F14: return Fgpu::T6;
-    case Fgpu::F15: return Fgpu::T7;
-    case Fgpu::F16: return Fgpu::S0;
-    case Fgpu::F17: return Fgpu::S1;
-    case Fgpu::F18: return Fgpu::S2;
-    case Fgpu::F19: return Fgpu::S3;
-    case Fgpu::F20: return Fgpu::S4;
-    case Fgpu::F21: return Fgpu::S5;
-    case Fgpu::F22: return Fgpu::S6;
-    case Fgpu::F23: return Fgpu::S7;
-    case Fgpu::F24: return Fgpu::T8;
-    case Fgpu::F25: return Fgpu::T9;
-    case Fgpu::F26: return Fgpu::K0;
-    case Fgpu::F27: return Fgpu::K1;
-    case Fgpu::F28: return Fgpu::GP;
-    case Fgpu::F29: return Fgpu::SP;
-    case Fgpu::F30: return Fgpu::FP;
-    case Fgpu::F31: return Fgpu::LR;
-    default: llvm_unreachable("Unknown register for mttc1 alias!");
-  }
-}
-
-// Map the coprocessor operand the corresponding gpr register operand.
-static unsigned getRegisterForMxtrC0(MCInst &Inst, bool IsMFTC0) {
-  switch (Inst.getOperand(IsMFTC0 ? 1 : 0).getReg()) {
-    case Fgpu::COP00:  return Fgpu::ZERO;
-    case Fgpu::COP01:  return Fgpu::AT;
-    case Fgpu::COP02:  return Fgpu::V0;
-    case Fgpu::COP03:  return Fgpu::V1;
-    case Fgpu::COP04:  return Fgpu::A0;
-    case Fgpu::COP05:  return Fgpu::A1;
-    case Fgpu::COP06:  return Fgpu::A2;
-    case Fgpu::COP07:  return Fgpu::A3;
-    case Fgpu::COP08:  return Fgpu::T0;
-    case Fgpu::COP09:  return Fgpu::T1;
-    case Fgpu::COP010: return Fgpu::T2;
-    case Fgpu::COP011: return Fgpu::T3;
-    case Fgpu::COP012: return Fgpu::T4;
-    case Fgpu::COP013: return Fgpu::T5;
-    case Fgpu::COP014: return Fgpu::T6;
-    case Fgpu::COP015: return Fgpu::T7;
-    case Fgpu::COP016: return Fgpu::S0;
-    case Fgpu::COP017: return Fgpu::S1;
-    case Fgpu::COP018: return Fgpu::S2;
-    case Fgpu::COP019: return Fgpu::S3;
-    case Fgpu::COP020: return Fgpu::S4;
-    case Fgpu::COP021: return Fgpu::S5;
-    case Fgpu::COP022: return Fgpu::S6;
-    case Fgpu::COP023: return Fgpu::S7;
-    case Fgpu::COP024: return Fgpu::T8;
-    case Fgpu::COP025: return Fgpu::T9;
-    case Fgpu::COP026: return Fgpu::K0;
-    case Fgpu::COP027: return Fgpu::K1;
-    case Fgpu::COP028: return Fgpu::GP;
-    case Fgpu::COP029: return Fgpu::SP;
-    case Fgpu::COP030: return Fgpu::FP;
-    case Fgpu::COP031: return Fgpu::LR;
-    default: llvm_unreachable("Unknown register for mttc0 alias!");
-  }
-}
-
-/// Expand an alias of 'mftr' or 'mttr' into the full instruction, by producing
-/// an mftr or mttr with the correctly mapped gpr register, u, sel and h bits.
-bool FgpuAsmParser::expandMXTRAlias(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
-                                    const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned rd = 0;
-  unsigned u = 1;
-  unsigned sel = 0;
-  unsigned h = 0;
-  bool IsMFTR = false;
-  switch (Inst.getOpcode()) {
-    case Fgpu::MFTC0:
-      IsMFTR = true;
-      LLVM_FALLTHROUGH;
-    case Fgpu::MTTC0:
-      u = 0;
-      rd = getRegisterForMxtrC0(Inst, IsMFTR);
-      sel = Inst.getOperand(2).getImm();
-      break;
-    case Fgpu::MFTGPR:
-      IsMFTR = true;
-      LLVM_FALLTHROUGH;
-    case Fgpu::MTTGPR:
-      rd = Inst.getOperand(IsMFTR ? 1 : 0).getReg();
-      break;
-    case Fgpu::MFTLO:
-    case Fgpu::MFTHI:
-    case Fgpu::MFTACX:
-    case Fgpu::MFTDSP:
-      IsMFTR = true;
-      LLVM_FALLTHROUGH;
-    case Fgpu::MTTLO:
-    case Fgpu::MTTHI:
-    case Fgpu::MTTACX:
-    case Fgpu::MTTDSP:
-      rd = getRegisterForMxtrDSP(Inst, IsMFTR);
-      sel = 1;
-      break;
-    case Fgpu::MFTHC1:
-      h = 1;
-      LLVM_FALLTHROUGH;
-    case Fgpu::MFTC1:
-      IsMFTR = true;
-      rd = getRegisterForMxtrFP(Inst, IsMFTR);
-      sel = 2;
-      break;
-    case Fgpu::MTTHC1:
-      h = 1;
-      LLVM_FALLTHROUGH;
-    case Fgpu::MTTC1:
-      rd = getRegisterForMxtrFP(Inst, IsMFTR);
-      sel = 2;
-      break;
-    case Fgpu::CFTC1:
-      IsMFTR = true;
-      LLVM_FALLTHROUGH;
-    case Fgpu::CTTC1:
-      rd = getRegisterForMxtrFP(Inst, IsMFTR);
-      sel = 3;
-      break;
-  }
-  unsigned Op0 = IsMFTR ? Inst.getOperand(0).getReg() : rd;
-  unsigned Op1 =
-      IsMFTR ? rd
-             : (Inst.getOpcode() != Fgpu::MTTDSP ? Inst.getOperand(1).getReg()
-                                                 : Inst.getOperand(0).getReg());
-
-  TOut.emitRRIII(IsMFTR ? Fgpu::MFTR : Fgpu::MTTR, Op0, Op1, u, sel, h, IDLoc,
-                 STI);
-  return false;
-}
 
 bool FgpuAsmParser::expandSaaAddr(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                                   const MCSubtargetInfo *STI) {
@@ -4666,150 +4064,13 @@ bool FgpuAsmParser::expandSaaAddr(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   return false;
 }
 
-unsigned
-FgpuAsmParser::checkEarlyTargetMatchPredicate(MCInst &Inst,
-                                              const OperandVector &Operands) {
-  switch (Inst.getOpcode()) {
-  default:
-    return Match_Success;
-  case Fgpu::DATI:
-  case Fgpu::DAHI:
-    if (static_cast<FgpuOperand &>(*Operands[1])
-            .isValidForTie(static_cast<FgpuOperand &>(*Operands[2])))
-      return Match_Success;
-    return Match_RequiresSameSrcAndDst;
-  }
-}
-
 unsigned FgpuAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
   switch (Inst.getOpcode()) {
-  // As described by the FGPUR6 spec, daui must not use the zero operand for
-  // its source operand.
-  case Fgpu::DAUI:
-    if (Inst.getOperand(1).getReg() == Fgpu::ZERO ||
-        Inst.getOperand(1).getReg() == Fgpu::ZERO_64)
-      return Match_RequiresNoZeroRegister;
-    return Match_Success;
-  // As described by the Fgpu32r2 spec, the registers Rd and Rs for
-  // jalr.hb must be different.
-  // It also applies for registers Rt and Rs of microFGPUr6 jalrc.hb instruction
-  // and registers Rd and Base for microFGPU lwp instruction
-  case Fgpu::JALR_HB:
-  case Fgpu::JALR_HB64:
-    if (Inst.getOperand(0).getReg() == Inst.getOperand(1).getReg())
-      return Match_RequiresDifferentSrcAndDst;
-    return Match_Success;
   case Fgpu::SYNC:
-    if (Inst.getOperand(0).getImm() != 0 && !hasFgpu32())
+    if (Inst.getOperand(0).getImm() != 0)
       return Match_NonZeroOperandForSync;
     return Match_Success;
-  case Fgpu::MFC0:
-  case Fgpu::MTC0:
-  case Fgpu::MTC2:
-  case Fgpu::MFC2:
-    if (Inst.getOperand(2).getImm() != 0 && !hasFgpu32())
-      return Match_NonZeroOperandForMTCX;
-    return Match_Success;
-  // As described the FGPUR6 spec, the compact branches that compare registers
-  // must:
-  // a) Not use the zero register.
-  // b) Not use the same register twice.
-  // c) rs < rt for bnec, beqc.
-  //    NB: For this case, the encoding will swap the operands as their
-  //    ordering doesn't matter. GAS performs this transformation  too.
-  //    Hence, that constraint does not have to be enforced.
-  //
-  // The compact branches that branch iff the signed addition of two registers
-  // would overflow must have rs >= rt. That can be handled like beqc/bnec with
-  // operand swapping. They do not have restriction of using the zero register.
-  case Fgpu::BLEZC:
-  case Fgpu::BGEZC:
-  case Fgpu::BGTZC:
-  case Fgpu::BLTZC:
-  case Fgpu::BEQZC:
-  case Fgpu::BNEZC:
-  case Fgpu::BLEZC64:
-  case Fgpu::BGEZC64:
-  case Fgpu::BGTZC64:
-  case Fgpu::BLTZC64:
-  case Fgpu::BEQZC64:
-  case Fgpu::BNEZC64:
-    if (Inst.getOperand(0).getReg() == Fgpu::ZERO ||
-        Inst.getOperand(0).getReg() == Fgpu::ZERO_64)
-      return Match_RequiresNoZeroRegister;
-    return Match_Success;
-  case Fgpu::BGEC:
-  case Fgpu::BLTC:
-  case Fgpu::BGEUC:
-  case Fgpu::BLTUC:
-  case Fgpu::BEQC:
-  case Fgpu::BNEC:
-  case Fgpu::BGEC64:
-  case Fgpu::BLTC64:
-  case Fgpu::BGEUC64:
-  case Fgpu::BLTUC64:
-  case Fgpu::BEQC64:
-  case Fgpu::BNEC64:
-    if (Inst.getOperand(0).getReg() == Fgpu::ZERO ||
-        Inst.getOperand(0).getReg() == Fgpu::ZERO_64)
-      return Match_RequiresNoZeroRegister;
-    if (Inst.getOperand(1).getReg() == Fgpu::ZERO ||
-        Inst.getOperand(1).getReg() == Fgpu::ZERO_64)
-      return Match_RequiresNoZeroRegister;
-    if (Inst.getOperand(0).getReg() == Inst.getOperand(1).getReg())
-      return Match_RequiresDifferentOperands;
-    return Match_Success;
-  case Fgpu::DINS: {
-    assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
-           "Operands must be immediates for dins!");
-    const signed Pos = Inst.getOperand(2).getImm();
-    const signed Size = Inst.getOperand(3).getImm();
-    if ((0 > (Pos + Size)) || ((Pos + Size) > 32))
-      return Match_RequiresPosSizeRange0_32;
-    return Match_Success;
   }
-  case Fgpu::DINSM:
-  case Fgpu::DINSU: {
-    assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
-           "Operands must be immediates for dinsm/dinsu!");
-    const signed Pos = Inst.getOperand(2).getImm();
-    const signed Size = Inst.getOperand(3).getImm();
-    if ((32 >= (Pos + Size)) || ((Pos + Size) > 64))
-      return Match_RequiresPosSizeRange33_64;
-    return Match_Success;
-  }
-  case Fgpu::DEXT: {
-    assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
-           "Operands must be immediates for DEXTM!");
-    const signed Pos = Inst.getOperand(2).getImm();
-    const signed Size = Inst.getOperand(3).getImm();
-    if ((1 > (Pos + Size)) || ((Pos + Size) > 63))
-      return Match_RequiresPosSizeUImm6;
-    return Match_Success;
-  }
-  case Fgpu::DEXTM:
-  case Fgpu::DEXTU: {
-    assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
-           "Operands must be immediates for dextm/dextu!");
-    const signed Pos = Inst.getOperand(2).getImm();
-    const signed Size = Inst.getOperand(3).getImm();
-    if ((32 > (Pos + Size)) || ((Pos + Size) > 64))
-      return Match_RequiresPosSizeRange33_64;
-    return Match_Success;
-  }
-  case Fgpu::CRC32B: case Fgpu::CRC32CB:
-  case Fgpu::CRC32H: case Fgpu::CRC32CH:
-  case Fgpu::CRC32W: case Fgpu::CRC32CW:
-  case Fgpu::CRC32D: case Fgpu::CRC32CD:
-    if (Inst.getOperand(0).getReg() != Inst.getOperand(2).getReg())
-      return Match_RequiresSameSrcAndDst;
-    return Match_Success;
-  }
-
-  uint64_t TSFlags = getInstDesc(Inst.getOpcode()).TSFlags;
-  if ((TSFlags & FgpuII::HasFCCRegOperand) &&
-      (Inst.getOperand(0).getReg() != Fgpu::FCC0) && !hasEightFccRegisters())
-    return Match_NoFCCRegisterForCurrentISA;
 
   return Match_Success;
 
@@ -5083,60 +4344,10 @@ int FgpuAsmParser::matchCPURegisterName(StringRef Name) {
            .Case("t9", 25)
            .Default(-1);
 
-  if (!(isABI_N32() || isABI_N64()))
     return CC;
-
-  if (12 <= CC && CC <= 15) {
-    // Name is one of t4-t7
-    AsmToken RegTok = getLexer().peekTok();
-    SMRange RegRange = RegTok.getLocRange();
-
-    StringRef FixedName = StringSwitch<StringRef>(Name)
-                              .Case("t4", "t0")
-                              .Case("t5", "t1")
-                              .Case("t6", "t2")
-                              .Case("t7", "t3")
-                              .Default("");
-    assert(FixedName != "" &&  "Register name is not one of t4-t7.");
-
-    printWarningWithFixIt("register names $t4-$t7 are only available in O32.",
-                          "Did you mean $" + FixedName + "?", RegRange);
-  }
-
-  // Although SGI documentation just cuts out t0-t3 for n32/n64,
-  // GNU pushes the values of t0-t3 to override the o32/o64 values for t4-t7
-  // We are supporting both cases, so for t0-t3 we'll just push them to t4-t7.
-  if (8 <= CC && CC <= 11)
-    CC += 4;
-
-  if (CC == -1)
-    CC = StringSwitch<unsigned>(Name)
-             .Case("a4", 8)
-             .Case("a5", 9)
-             .Case("a6", 10)
-             .Case("a7", 11)
-             .Case("kt0", 26)
-             .Case("kt1", 27)
-             .Default(-1);
-
-  return CC;
 }
 
-int FgpuAsmParser::matchHWRegsRegisterName(StringRef Name) {
-  int CC;
-
-  CC = StringSwitch<unsigned>(Name)
-            .Case("hwr_cpunum", 0)
-            .Case("hwr_synci_step", 1)
-            .Case("hwr_cc", 2)
-            .Case("hwr_ccres", 3)
-            .Case("hwr_ulr", 29)
-            .Default(-1);
-
-  return CC;
-}
-
-int FgpuAsmParser::matchFPURegisterName(StringRef Name) {
+int FgpuAsmParser::matchVFPRegisterName(StringRef Name) {
   if (Name[0] == 'f') {
     StringRef NumString = Name.substr(1);
     unsigned IntVal;
@@ -5147,61 +4358,6 @@ int FgpuAsmParser::matchFPURegisterName(StringRef Name) {
     return IntVal;
   }
   return -1;
-}
-
-int FgpuAsmParser::matchFCCRegisterName(StringRef Name) {
-  if (Name.startswith("fcc")) {
-    StringRef NumString = Name.substr(3);
-    unsigned IntVal;
-    if (NumString.getAsInteger(10, IntVal))
-      return -1;    // This is not an integer.
-    if (IntVal > 7) // There are only 8 fcc registers.
-      return -1;
-    return IntVal;
-  }
-  return -1;
-}
-
-int FgpuAsmParser::matchACRegisterName(StringRef Name) {
-  if (Name.startswith("ac")) {
-    StringRef NumString = Name.substr(2);
-    unsigned IntVal;
-    if (NumString.getAsInteger(10, IntVal))
-      return -1;    // This is not an integer.
-    if (IntVal > 3) // There are only 3 acc registers.
-      return -1;
-    return IntVal;
-  }
-  return -1;
-}
-
-int FgpuAsmParser::matchMSA128RegisterName(StringRef Name) {
-  unsigned IntVal;
-
-  if (Name.front() != 'w' || Name.drop_front(1).getAsInteger(10, IntVal))
-    return -1;
-
-  if (IntVal > 31)
-    return -1;
-
-  return IntVal;
-}
-
-int FgpuAsmParser::matchMSA128CtrlRegisterName(StringRef Name) {
-  int CC;
-
-  CC = StringSwitch<unsigned>(Name)
-           .Case("msair", 0)
-           .Case("msacsr", 1)
-           .Case("msaaccess", 2)
-           .Case("msasave", 3)
-           .Case("msamodify", 4)
-           .Case("msarequest", 5)
-           .Case("msamap", 6)
-           .Case("msaunmap", 7)
-           .Default(-1);
-
-  return CC;
 }
 
 bool FgpuAsmParser::canUseATReg() {
@@ -5215,8 +4371,7 @@ unsigned FgpuAsmParser::getATReg(SMLoc Loc) {
                      "pseudo-instruction requires $at, which is not available");
     return 0;
   }
-  unsigned AT = getReg(
-      (isGP64bit()) ? Fgpu::GPR64RegClassID : Fgpu::GPROutRegClassID, ATIndex);
+  unsigned AT = getReg(Fgpu::GPROutRegClassID, ATIndex);
   return AT;
 }
 
@@ -5307,7 +4462,7 @@ OperandMatchResultTy FgpuAsmParser::tryParseRegister(unsigned &RegNo,
     // register is a parse error.
     if (Operand.isGPRAsmReg()) {
       // Resolve to GPR32 or GPR64 appropriately.
-      RegNo = isGP64bit() ? Operand.getGPR64Reg() : Operand.getGPRReg();
+      RegNo = Operand.getGPRReg();
     }
 
     return (RegNo == (unsigned)-1) ? MatchOperand_NoMatch
@@ -5515,49 +4670,9 @@ FgpuAsmParser::matchAnyRegisterNameWithoutDollar(OperandVector &Operands,
     return MatchOperand_Success;
   }
 
-  Index = matchHWRegsRegisterName(Identifier);
+  Index = matchVFPRegisterName(Identifier);
   if (Index != -1) {
-    Operands.push_back(FgpuOperand::createHWRegsReg(
-        Index, Identifier, getContext().getRegisterInfo(), S,
-        getLexer().getLoc(), *this));
-    return MatchOperand_Success;
-  }
-
-  Index = matchFPURegisterName(Identifier);
-  if (Index != -1) {
-    Operands.push_back(FgpuOperand::createFGRReg(
-        Index, Identifier, getContext().getRegisterInfo(), S,
-        getLexer().getLoc(), *this));
-    return MatchOperand_Success;
-  }
-
-  Index = matchFCCRegisterName(Identifier);
-  if (Index != -1) {
-    Operands.push_back(FgpuOperand::createFCCReg(
-        Index, Identifier, getContext().getRegisterInfo(), S,
-        getLexer().getLoc(), *this));
-    return MatchOperand_Success;
-  }
-
-  Index = matchACRegisterName(Identifier);
-  if (Index != -1) {
-    Operands.push_back(FgpuOperand::createACCReg(
-        Index, Identifier, getContext().getRegisterInfo(), S,
-        getLexer().getLoc(), *this));
-    return MatchOperand_Success;
-  }
-
-  Index = matchMSA128RegisterName(Identifier);
-  if (Index != -1) {
-    Operands.push_back(FgpuOperand::createMSA128Reg(
-        Index, Identifier, getContext().getRegisterInfo(), S,
-        getLexer().getLoc(), *this));
-    return MatchOperand_Success;
-  }
-
-  Index = matchMSA128CtrlRegisterName(Identifier);
-  if (Index != -1) {
-    Operands.push_back(FgpuOperand::createMSACtrlReg(
+    Operands.push_back(FgpuOperand::createVFPReg(
         Index, Identifier, getContext().getRegisterInfo(), S,
         getLexer().getLoc(), *this));
     return MatchOperand_Success;
@@ -5680,6 +4795,7 @@ FgpuAsmParser::parseInvNum(OperandVector &Operands) {
 
 OperandMatchResultTy
 FgpuAsmParser::parseRegisterList(OperandVector &Operands) {
+  //TODO: I don't think should be called""
   MCAsmParser &Parser = getParser();
   SmallVector<unsigned, 10> Regs;
   unsigned RegNo;
@@ -5698,18 +4814,12 @@ FgpuAsmParser::parseRegisterList(OperandVector &Operands) {
     if (RegRange) {
       // Remove last register operand because registers from register range
       // should be inserted first.
-      if ((isGP64bit() && RegNo == Fgpu::LR_64) ||
-          (!isGP64bit() && RegNo == Fgpu::LR)) {
+      if (
+          (RegNo == Fgpu::LR)) {
         Regs.push_back(RegNo);
       } else {
         unsigned TmpReg = PrevReg + 1;
         while (TmpReg <= RegNo) {
-          if ((((TmpReg < Fgpu::S0) || (TmpReg > Fgpu::S7)) && !isGP64bit()) ||
-              (((TmpReg < Fgpu::S0_64) || (TmpReg > Fgpu::S7_64)) &&
-               isGP64bit())) {
-            Error(E, "invalid register operand");
-            return MatchOperand_ParseFail;
-          }
 
           PrevReg = TmpReg;
           Regs.push_back(TmpReg++);
@@ -5718,26 +4828,6 @@ FgpuAsmParser::parseRegisterList(OperandVector &Operands) {
 
       RegRange = false;
     } else {
-      if ((PrevReg == Fgpu::NoRegister) &&
-          ((isGP64bit() && (RegNo != Fgpu::S0_64) && (RegNo != Fgpu::LR_64)) ||
-          (!isGP64bit() && (RegNo != Fgpu::S0) && (RegNo != Fgpu::LR)))) {
-        Error(E, "$16 or $31 expected");
-        return MatchOperand_ParseFail;
-      } else if (!(((RegNo == Fgpu::FP || RegNo == Fgpu::LR ||
-                    (RegNo >= Fgpu::S0 && RegNo <= Fgpu::S7)) &&
-                    !isGP64bit()) ||
-                   ((RegNo == Fgpu::FP_64 || RegNo == Fgpu::LR_64 ||
-                    (RegNo >= Fgpu::S0_64 && RegNo <= Fgpu::S7_64)) &&
-                    isGP64bit()))) {
-        Error(E, "invalid register operand");
-        return MatchOperand_ParseFail;
-      } else if ((PrevReg != Fgpu::NoRegister) && (RegNo != PrevReg + 1) &&
-                 ((RegNo != Fgpu::FP && RegNo != Fgpu::LR && !isGP64bit()) ||
-                  (RegNo != Fgpu::FP_64 && RegNo != Fgpu::LR_64 &&
-                   isGP64bit()))) {
-        Error(E, "consecutive register numbers expected");
-        return MatchOperand_ParseFail;
-      }
 
       Regs.push_back(RegNo);
     }
@@ -6027,232 +5117,22 @@ bool FgpuAsmParser::parseSetNoMacroDirective() {
   return false;
 }
 
-bool FgpuAsmParser::parseSetMsaDirective() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex();
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement))
-    return reportParseError("unexpected token, expected end of statement");
-
-  setFeatureBits(Fgpu::FeatureMSA, "msa");
-  getTargetStreamer().emitDirectiveSetMsa();
-  return false;
-}
-
-bool FgpuAsmParser::parseSetNoMsaDirective() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex();
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement))
-    return reportParseError("unexpected token, expected end of statement");
-
-  clearFeatureBits(Fgpu::FeatureMSA, "msa");
-  getTargetStreamer().emitDirectiveSetNoMsa();
-  return false;
-}
-
-bool FgpuAsmParser::parseSetNoDspDirective() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex(); // Eat "nodsp".
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  clearFeatureBits(Fgpu::FeatureDSP, "dsp");
-  getTargetStreamer().emitDirectiveSetNoDsp();
-  return false;
-}
-
-bool FgpuAsmParser::parseSetNoFgpu3DDirective() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex(); // Eat "nofgpu3d".
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  clearFeatureBits(Fgpu::FeatureFgpu3D, "fgpu3d");
-  getTargetStreamer().emitDirectiveSetNoFgpu3D();
-  return false;
-}
-
-bool FgpuAsmParser::parseSetFgpu16Directive() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex(); // Eat "fgpu16".
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  setFeatureBits(Fgpu::FeatureFgpu16, "fgpu16");
-  getTargetStreamer().emitDirectiveSetFgpu16();
-  Parser.Lex(); // Consume the EndOfStatement.
-  return false;
-}
-
-bool FgpuAsmParser::parseSetNoFgpu16Directive() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex(); // Eat "nofgpu16".
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  clearFeatureBits(Fgpu::FeatureFgpu16, "fgpu16");
-  getTargetStreamer().emitDirectiveSetNoFgpu16();
-  Parser.Lex(); // Consume the EndOfStatement.
-  return false;
-}
-
-bool FgpuAsmParser::parseSetFpDirective() {
-  MCAsmParser &Parser = getParser();
-  FgpuABIFlagsSection::FpABIKind FpAbiVal;
-  // Line can be: .set fp=32
-  //              .set fp=xx
-  //              .set fp=64
-  Parser.Lex(); // Eat fp token
-  AsmToken Tok = Parser.getTok();
-  if (Tok.isNot(AsmToken::Equal)) {
-    reportParseError("unexpected token, expected equals sign '='");
-    return false;
-  }
-  Parser.Lex(); // Eat '=' token.
-  Tok = Parser.getTok();
-
-  if (!parseFpABIValue(FpAbiVal, ".set"))
-    return false;
-
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-  getTargetStreamer().emitDirectiveSetFp(FpAbiVal);
-  Parser.Lex(); // Consume the EndOfStatement.
-  return false;
-}
-
-bool FgpuAsmParser::parseSetOddSPRegDirective() {
-  MCAsmParser &Parser = getParser();
-
-  Parser.Lex(); // Eat "oddspreg".
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  clearFeatureBits(Fgpu::FeatureNoOddSPReg, "nooddspreg");
-  getTargetStreamer().emitDirectiveSetOddSPReg();
-  return false;
-}
-
-bool FgpuAsmParser::parseSetNoOddSPRegDirective() {
-  MCAsmParser &Parser = getParser();
-
-  Parser.Lex(); // Eat "nooddspreg".
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  setFeatureBits(Fgpu::FeatureNoOddSPReg, "nooddspreg");
-  getTargetStreamer().emitDirectiveSetNoOddSPReg();
-  return false;
-}
-
-bool FgpuAsmParser::parseSetMtDirective() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex(); // Eat "mt".
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  setFeatureBits(Fgpu::FeatureMT, "mt");
-  getTargetStreamer().emitDirectiveSetMt();
-  Parser.Lex(); // Consume the EndOfStatement.
-  return false;
-}
-
-bool FgpuAsmParser::parseSetNoMtDirective() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex(); // Eat "nomt".
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  clearFeatureBits(Fgpu::FeatureMT, "mt");
-
-  getTargetStreamer().emitDirectiveSetNoMt();
-  Parser.Lex(); // Consume the EndOfStatement.
-  return false;
-}
-
-bool FgpuAsmParser::parseSetNoCRCDirective() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex(); // Eat "nocrc".
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  clearFeatureBits(Fgpu::FeatureCRC, "crc");
-
-  getTargetStreamer().emitDirectiveSetNoCRC();
-  Parser.Lex(); // Consume the EndOfStatement.
-  return false;
-}
-
-bool FgpuAsmParser::parseSetNoVirtDirective() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex(); // Eat "novirt".
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  clearFeatureBits(Fgpu::FeatureVirt, "virt");
-
-  getTargetStreamer().emitDirectiveSetNoVirt();
-  Parser.Lex(); // Consume the EndOfStatement.
-  return false;
-}
-
-bool FgpuAsmParser::parseSetNoGINVDirective() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex(); // Eat "noginv".
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  clearFeatureBits(Fgpu::FeatureGINV, "ginv");
-
-  getTargetStreamer().emitDirectiveSetNoGINV();
-  Parser.Lex(); // Consume the EndOfStatement.
-  return false;
-}
+//bool FgpuAsmParser::parseSetNoGINVDirective() {
+//  MCAsmParser &Parser = getParser();
+//  Parser.Lex(); // Eat "noginv".
+//
+//  // If this is not the end of the statement, report an error.
+//  if (getLexer().isNot(AsmToken::EndOfStatement)) {
+//    reportParseError("unexpected token, expected end of statement");
+//    return false;
+//  }
+//
+//  clearFeatureBits(Fgpu::FeatureGINV, "ginv");
+//
+//  getTargetStreamer().emitDirectiveSetNoGINV();
+//  Parser.Lex(); // Consume the EndOfStatement.
+//  return false;
+//}
 
 bool FgpuAsmParser::parseSetPopDirective() {
   MCAsmParser &Parser = getParser();
@@ -6291,28 +5171,6 @@ bool FgpuAsmParser::parseSetPushDirective() {
   return false;
 }
 
-bool FgpuAsmParser::parseSetSoftFloatDirective() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex();
-  if (getLexer().isNot(AsmToken::EndOfStatement))
-    return reportParseError("unexpected token, expected end of statement");
-
-  setFeatureBits(Fgpu::FeatureSoftFloat, "soft-float");
-  getTargetStreamer().emitDirectiveSetSoftFloat();
-  return false;
-}
-
-bool FgpuAsmParser::parseSetHardFloatDirective() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex();
-  if (getLexer().isNot(AsmToken::EndOfStatement))
-    return reportParseError("unexpected token, expected end of statement");
-
-  clearFeatureBits(Fgpu::FeatureSoftFloat, "soft-float");
-  getTargetStreamer().emitDirectiveSetHardFloat();
-  return false;
-}
-
 bool FgpuAsmParser::parseSetAssignment() {
   StringRef Name;
   MCAsmParser &Parser = getParser();
@@ -6342,23 +5200,6 @@ bool FgpuAsmParser::parseSetAssignment() {
     return true;
   Sym->setVariableValue(Value);
 
-  return false;
-}
-
-bool FgpuAsmParser::parseSetFgpu0Directive() {
-  MCAsmParser &Parser = getParser();
-  Parser.Lex();
-  if (getLexer().isNot(AsmToken::EndOfStatement))
-    return reportParseError("unexpected token, expected end of statement");
-
-  // Reset assembler options to their initial values.
-  MCSubtargetInfo &STI = copySTI();
-  setAvailableFeatures(
-      ComputeAvailableFeatures(AssemblerOptions.front()->getFeatures()));
-  STI.setFeatureBits(AssemblerOptions.front()->getFeatures());
-  AssemblerOptions.back()->setFeatures(AssemblerOptions.front()->getFeatures());
-
-  getTargetStreamer().emitDirectiveSetFgpu0();
   return false;
 }
 
@@ -6412,90 +5253,10 @@ bool FgpuAsmParser::parseSetFeature(uint64_t Feature) {
   switch (Feature) {
   default:
     llvm_unreachable("Unimplemented feature");
-  case Fgpu::FeatureFgpu3D:
-    setFeatureBits(Fgpu::FeatureFgpu3D, "fgpu3d");
-    getTargetStreamer().emitDirectiveSetFgpu3D();
-    break;
-  case Fgpu::FeatureDSP:
-    setFeatureBits(Fgpu::FeatureDSP, "dsp");
-    getTargetStreamer().emitDirectiveSetDsp();
-    break;
-  case Fgpu::FeatureDSPR2:
-    setFeatureBits(Fgpu::FeatureDSPR2, "dspr2");
-    getTargetStreamer().emitDirectiveSetDspr2();
-    break;
-  case Fgpu::FeatureFgpu1:
-    selectArch("fgpu1");
-    getTargetStreamer().emitDirectiveSetFgpu1();
-    break;
-  case Fgpu::FeatureFgpu2:
-    selectArch("fgpu2");
-    getTargetStreamer().emitDirectiveSetFgpu2();
-    break;
-  case Fgpu::FeatureFgpu3:
-    selectArch("fgpu3");
-    getTargetStreamer().emitDirectiveSetFgpu3();
-    break;
-  case Fgpu::FeatureFgpu4:
-    selectArch("fgpu4");
-    getTargetStreamer().emitDirectiveSetFgpu4();
-    break;
-  case Fgpu::FeatureFgpu5:
-    selectArch("fgpu5");
-    getTargetStreamer().emitDirectiveSetFgpu5();
-    break;
-  case Fgpu::FeatureFgpu32:
-    selectArch("fgpu32");
-    getTargetStreamer().emitDirectiveSetFgpu32();
-    break;
-  case Fgpu::FeatureFgpu32r2:
-    selectArch("fgpu32r2");
-    getTargetStreamer().emitDirectiveSetFgpu32R2();
-    break;
-  case Fgpu::FeatureFgpu32r3:
-    selectArch("fgpu32r3");
-    getTargetStreamer().emitDirectiveSetFgpu32R3();
-    break;
-  case Fgpu::FeatureFgpu32r5:
-    selectArch("fgpu32r5");
-    getTargetStreamer().emitDirectiveSetFgpu32R5();
-    break;
-  case Fgpu::FeatureFgpu32r6:
-    selectArch("fgpu32r6");
-    getTargetStreamer().emitDirectiveSetFgpu32R6();
-    break;
-  case Fgpu::FeatureFgpu64:
-    selectArch("fgpu64");
-    getTargetStreamer().emitDirectiveSetFgpu64();
-    break;
-  case Fgpu::FeatureFgpu64r2:
-    selectArch("fgpu64r2");
-    getTargetStreamer().emitDirectiveSetFgpu64R2();
-    break;
-  case Fgpu::FeatureFgpu64r3:
-    selectArch("fgpu64r3");
-    getTargetStreamer().emitDirectiveSetFgpu64R3();
-    break;
-  case Fgpu::FeatureFgpu64r5:
-    selectArch("fgpu64r5");
-    getTargetStreamer().emitDirectiveSetFgpu64R5();
-    break;
-  case Fgpu::FeatureFgpu64r6:
-    selectArch("fgpu64r6");
-    getTargetStreamer().emitDirectiveSetFgpu64R6();
-    break;
-  case Fgpu::FeatureCRC:
-    setFeatureBits(Fgpu::FeatureCRC, "crc");
-    getTargetStreamer().emitDirectiveSetCRC();
-    break;
-  case Fgpu::FeatureVirt:
-    setFeatureBits(Fgpu::FeatureVirt, "virt");
-    getTargetStreamer().emitDirectiveSetVirt();
-    break;
-  case Fgpu::FeatureGINV:
-    setFeatureBits(Fgpu::FeatureGINV, "ginv");
-    getTargetStreamer().emitDirectiveSetGINV();
-    break;
+//  case Fgpu::FeatureGINV:
+//    setFeatureBits(Fgpu::FeatureGINV, "ginv");
+//    getTargetStreamer().emitDirectiveSetGINV();
+//    break;
   }
   return false;
 }
@@ -6516,7 +5277,7 @@ bool FgpuAsmParser::eatComma(StringRef ErrorStr) {
 // FIXME: Only keep track of IsPicEnabled in one place, instead of in both
 // FgpuTargetELFStreamer and FgpuAsmParser.
 bool FgpuAsmParser::isPicAndNotNxxAbi() {
-  return inPicMode() && !(isABI_N32() || isABI_N64());
+  return inPicMode();
 }
 
 bool FgpuAsmParser::parseDirectiveCpAdd(SMLoc Loc) {
@@ -6548,11 +5309,6 @@ bool FgpuAsmParser::parseDirectiveCpLoad(SMLoc Loc) {
   if (AssemblerOptions.back()->isReorder())
     Warning(Loc, ".cpload should be inside a noreorder section");
 
-  if (inFgpu16Mode()) {
-    reportParseError(".cpload is not supported in Fgpu16 mode");
-    return false;
-  }
-
   SmallVector<std::unique_ptr<MCParsedAsmOperand>, 1> Reg;
   OperandMatchResultTy ResTy = parseAnyRegister(Reg);
   if (ResTy == MatchOperand_NoMatch || ResTy == MatchOperand_ParseFail) {
@@ -6576,50 +5332,11 @@ bool FgpuAsmParser::parseDirectiveCpLoad(SMLoc Loc) {
   return false;
 }
 
-bool FgpuAsmParser::parseDirectiveCpLocal(SMLoc Loc) {
-  if (!isABI_N32() && !isABI_N64()) {
-    reportParseError(".cplocal is allowed only in N32 or N64 mode");
-    return false;
-  }
-
-  SmallVector<std::unique_ptr<MCParsedAsmOperand>, 1> Reg;
-  OperandMatchResultTy ResTy = parseAnyRegister(Reg);
-  if (ResTy == MatchOperand_NoMatch || ResTy == MatchOperand_ParseFail) {
-    reportParseError("expected register containing global pointer");
-    return false;
-  }
-
-  FgpuOperand &RegOpnd = static_cast<FgpuOperand &>(*Reg[0]);
-  if (!RegOpnd.isGPRAsmReg()) {
-    reportParseError(RegOpnd.getStartLoc(), "invalid register");
-    return false;
-  }
-
-  // If this is not the end of the statement, report an error.
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-  getParser().Lex(); // Consume the EndOfStatement.
-
-  unsigned NewReg = RegOpnd.getGPRReg();
-  if (IsPicEnabled)
-    GPReg = NewReg;
-
-  getTargetStreamer().emitDirectiveCpLocal(NewReg);
-  return false;
-}
-
 bool FgpuAsmParser::parseDirectiveCpRestore(SMLoc Loc) {
   MCAsmParser &Parser = getParser();
 
   // Note that .cprestore is ignored if used with the N32 and N64 ABIs or if it
   // is used in non-PIC mode.
-
-  if (inFgpu16Mode()) {
-    reportParseError(".cprestore is not supported in Fgpu16 mode");
-    return false;
-  }
 
   // Get the stack offset value.
   const MCExpr *StackOffset;
@@ -6732,27 +5449,6 @@ bool FgpuAsmParser::parseDirectiveCPReturn() {
   return false;
 }
 
-bool FgpuAsmParser::parseDirectiveNaN() {
-  MCAsmParser &Parser = getParser();
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    const AsmToken &Tok = Parser.getTok();
-
-    if (Tok.getString() == "2008") {
-      Parser.Lex();
-      getTargetStreamer().emitDirectiveNaN2008();
-      return false;
-    } else if (Tok.getString() == "legacy") {
-      Parser.Lex();
-      getTargetStreamer().emitDirectiveNaNLegacy();
-      return false;
-    }
-  }
-  // If we don't recognize the option passed to the .nan
-  // directive (e.g. no option or unknown option), emit an error.
-  reportParseError("invalid option in .nan directive");
-  return false;
-}
-
 bool FgpuAsmParser::parseDirectiveSet() {
   const AsmToken &Tok = getParser().getTok();
   StringRef IdVal = Tok.getString();
@@ -6774,12 +5470,6 @@ bool FgpuAsmParser::parseDirectiveSet() {
     getParser().Lex();
     return false;
   }
-  if (IdVal == "fp")
-    return parseSetFpDirective();
-  if (IdVal == "oddspreg")
-    return parseSetOddSPRegDirective();
-  if (IdVal == "nooddspreg")
-    return parseSetNoOddSPRegDirective();
   if (IdVal == "pop")
     return parseSetPopDirective();
   if (IdVal == "push")
@@ -6792,73 +5482,12 @@ bool FgpuAsmParser::parseDirectiveSet() {
     return parseSetMacroDirective();
   if (IdVal == "nomacro")
     return parseSetNoMacroDirective();
-  if (IdVal == "fgpu0")
-    return parseSetFgpu0Directive();
-  if (IdVal == "fgpu1")
-    return parseSetFeature(Fgpu::FeatureFgpu1);
-  if (IdVal == "fgpu2")
-    return parseSetFeature(Fgpu::FeatureFgpu2);
-  if (IdVal == "fgpu3")
-    return parseSetFeature(Fgpu::FeatureFgpu3);
-  if (IdVal == "fgpu4")
-    return parseSetFeature(Fgpu::FeatureFgpu4);
-  if (IdVal == "fgpu5")
-    return parseSetFeature(Fgpu::FeatureFgpu5);
-  if (IdVal == "fgpu32")
-    return parseSetFeature(Fgpu::FeatureFgpu32);
-  if (IdVal == "fgpu32r2")
-    return parseSetFeature(Fgpu::FeatureFgpu32r2);
-  if (IdVal == "fgpu32r3")
-    return parseSetFeature(Fgpu::FeatureFgpu32r3);
-  if (IdVal == "fgpu32r5")
-    return parseSetFeature(Fgpu::FeatureFgpu32r5);
-  if (IdVal == "fgpu32r6")
-    return parseSetFeature(Fgpu::FeatureFgpu32r6);
-  if (IdVal == "fgpu64")
-    return parseSetFeature(Fgpu::FeatureFgpu64);
-  if (IdVal == "fgpu64r2")
-    return parseSetFeature(Fgpu::FeatureFgpu64r2);
-  if (IdVal == "fgpu64r3")
-    return parseSetFeature(Fgpu::FeatureFgpu64r3);
-  if (IdVal == "fgpu64r5")
-    return parseSetFeature(Fgpu::FeatureFgpu64r5);
-  if (IdVal == "fgpu64r6") {
-    return parseSetFeature(Fgpu::FeatureFgpu64r6);
-  }
-  if (IdVal == "dsp")
-    return parseSetFeature(Fgpu::FeatureDSP);
-  if (IdVal == "dspr2")
-    return parseSetFeature(Fgpu::FeatureDSPR2);
-  if (IdVal == "nodsp")
-    return parseSetNoDspDirective();
-  if (IdVal == "fgpu3d")
-    return parseSetFeature(Fgpu::FeatureFgpu3D);
-  if (IdVal == "nofgpu3d")
-    return parseSetNoFgpu3DDirective();
-  if (IdVal == "msa")
-    return parseSetMsaDirective();
-  if (IdVal == "nomsa")
-    return parseSetNoMsaDirective();
-  if (IdVal == "mt")
-    return parseSetMtDirective();
-  if (IdVal == "nomt")
-    return parseSetNoMtDirective();
-  if (IdVal == "softfloat")
-    return parseSetSoftFloatDirective();
-  if (IdVal == "hardfloat")
-    return parseSetHardFloatDirective();
-  if (IdVal == "crc")
-    return parseSetFeature(Fgpu::FeatureCRC);
-  if (IdVal == "nocrc")
-    return parseSetNoCRCDirective();
-  if (IdVal == "virt")
-    return parseSetFeature(Fgpu::FeatureVirt);
-  if (IdVal == "novirt")
-    return parseSetNoVirtDirective();
-  if (IdVal == "ginv")
-    return parseSetFeature(Fgpu::FeatureGINV);
-  if (IdVal == "noginv")
-    return parseSetNoGINVDirective();
+//  if (IdVal == "fgpu0")
+//    return parseSetFgpu0Directive();
+//  if (IdVal == "ginv")
+//    return parseSetFeature(Fgpu::FeatureGINV);
+//  if (IdVal == "noginv")
+//    return parseSetNoGINVDirective();
 
   // It is just an identifier, look for an assignment.
   return parseSetAssignment();
@@ -7098,332 +5727,9 @@ bool FgpuAsmParser::parseDirectiveModule() {
     reportParseError("expected .module option identifier");
     return false;
   }
-
-  if (Option == "oddspreg") {
-    clearModuleFeatureBits(Fgpu::FeatureNoOddSPReg, "nooddspreg");
-
-    // Synchronize the abiflags information with the FeatureBits information we
-    // changed above.
-    getTargetStreamer().updateABIInfo(*this);
-
-    // If printing assembly, use the recently updated abiflags information.
-    // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-    // emitted at the end).
-    getTargetStreamer().emitDirectiveModuleOddSPReg();
-
-    // If this is not the end of the statement, report an error.
-    if (getLexer().isNot(AsmToken::EndOfStatement)) {
-      reportParseError("unexpected token, expected end of statement");
-      return false;
-    }
-
-    return false; // parseDirectiveModule has finished successfully.
-  } else if (Option == "nooddspreg") {
-    if (!isABI_O32()) {
-      return Error(L, "'.module nooddspreg' requires the O32 ABI");
-    }
-
-    setModuleFeatureBits(Fgpu::FeatureNoOddSPReg, "nooddspreg");
-
-    // Synchronize the abiflags information with the FeatureBits information we
-    // changed above.
-    getTargetStreamer().updateABIInfo(*this);
-
-    // If printing assembly, use the recently updated abiflags information.
-    // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-    // emitted at the end).
-    getTargetStreamer().emitDirectiveModuleOddSPReg();
-
-    // If this is not the end of the statement, report an error.
-    if (getLexer().isNot(AsmToken::EndOfStatement)) {
-      reportParseError("unexpected token, expected end of statement");
-      return false;
-    }
-
-    return false; // parseDirectiveModule has finished successfully.
-  } else if (Option == "fp") {
-    return parseDirectiveModuleFP();
-  } else if (Option == "softfloat") {
-    setModuleFeatureBits(Fgpu::FeatureSoftFloat, "soft-float");
-
-    // Synchronize the ABI Flags information with the FeatureBits information we
-    // updated above.
-    getTargetStreamer().updateABIInfo(*this);
-
-    // If printing assembly, use the recently updated ABI Flags information.
-    // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-    // emitted later).
-    getTargetStreamer().emitDirectiveModuleSoftFloat();
-
-    // If this is not the end of the statement, report an error.
-    if (getLexer().isNot(AsmToken::EndOfStatement)) {
-      reportParseError("unexpected token, expected end of statement");
-      return false;
-    }
-
-    return false; // parseDirectiveModule has finished successfully.
-  } else if (Option == "hardfloat") {
-    clearModuleFeatureBits(Fgpu::FeatureSoftFloat, "soft-float");
-
-    // Synchronize the ABI Flags information with the FeatureBits information we
-    // updated above.
-    getTargetStreamer().updateABIInfo(*this);
-
-    // If printing assembly, use the recently updated ABI Flags information.
-    // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-    // emitted later).
-    getTargetStreamer().emitDirectiveModuleHardFloat();
-
-    // If this is not the end of the statement, report an error.
-    if (getLexer().isNot(AsmToken::EndOfStatement)) {
-      reportParseError("unexpected token, expected end of statement");
-      return false;
-    }
-
-    return false; // parseDirectiveModule has finished successfully.
-  } else if (Option == "mt") {
-    setModuleFeatureBits(Fgpu::FeatureMT, "mt");
-
-    // Synchronize the ABI Flags information with the FeatureBits information we
-    // updated above.
-    getTargetStreamer().updateABIInfo(*this);
-
-    // If printing assembly, use the recently updated ABI Flags information.
-    // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-    // emitted later).
-    getTargetStreamer().emitDirectiveModuleMT();
-
-    // If this is not the end of the statement, report an error.
-    if (getLexer().isNot(AsmToken::EndOfStatement)) {
-      reportParseError("unexpected token, expected end of statement");
-      return false;
-    }
-
-    return false; // parseDirectiveModule has finished successfully.
-  } else if (Option == "crc") {
-    setModuleFeatureBits(Fgpu::FeatureCRC, "crc");
-
-    // Synchronize the ABI Flags information with the FeatureBits information we
-    // updated above.
-    getTargetStreamer().updateABIInfo(*this);
-
-    // If printing assembly, use the recently updated ABI Flags information.
-    // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-    // emitted later).
-    getTargetStreamer().emitDirectiveModuleCRC();
-
-    // If this is not the end of the statement, report an error.
-    if (getLexer().isNot(AsmToken::EndOfStatement)) {
-      reportParseError("unexpected token, expected end of statement");
-      return false;
-    }
-
-    return false; // parseDirectiveModule has finished successfully.
-  } else if (Option == "nocrc") {
-    clearModuleFeatureBits(Fgpu::FeatureCRC, "crc");
-
-    // Synchronize the ABI Flags information with the FeatureBits information we
-    // updated above.
-    getTargetStreamer().updateABIInfo(*this);
-
-    // If printing assembly, use the recently updated ABI Flags information.
-    // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-    // emitted later).
-    getTargetStreamer().emitDirectiveModuleNoCRC();
-
-    // If this is not the end of the statement, report an error.
-    if (getLexer().isNot(AsmToken::EndOfStatement)) {
-      reportParseError("unexpected token, expected end of statement");
-      return false;
-    }
-
-    return false; // parseDirectiveModule has finished successfully.
-  } else if (Option == "virt") {
-    setModuleFeatureBits(Fgpu::FeatureVirt, "virt");
-
-    // Synchronize the ABI Flags information with the FeatureBits information we
-    // updated above.
-    getTargetStreamer().updateABIInfo(*this);
-
-    // If printing assembly, use the recently updated ABI Flags information.
-    // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-    // emitted later).
-    getTargetStreamer().emitDirectiveModuleVirt();
-
-    // If this is not the end of the statement, report an error.
-    if (getLexer().isNot(AsmToken::EndOfStatement)) {
-      reportParseError("unexpected token, expected end of statement");
-      return false;
-    }
-
-    return false; // parseDirectiveModule has finished successfully.
-  } else if (Option == "novirt") {
-    clearModuleFeatureBits(Fgpu::FeatureVirt, "virt");
-
-    // Synchronize the ABI Flags information with the FeatureBits information we
-    // updated above.
-    getTargetStreamer().updateABIInfo(*this);
-
-    // If printing assembly, use the recently updated ABI Flags information.
-    // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-    // emitted later).
-    getTargetStreamer().emitDirectiveModuleNoVirt();
-
-    // If this is not the end of the statement, report an error.
-    if (getLexer().isNot(AsmToken::EndOfStatement)) {
-      reportParseError("unexpected token, expected end of statement");
-      return false;
-    }
-
-    return false; // parseDirectiveModule has finished successfully.
-  } else if (Option == "ginv") {
-    setModuleFeatureBits(Fgpu::FeatureGINV, "ginv");
-
-    // Synchronize the ABI Flags information with the FeatureBits information we
-    // updated above.
-    getTargetStreamer().updateABIInfo(*this);
-
-    // If printing assembly, use the recently updated ABI Flags information.
-    // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-    // emitted later).
-    getTargetStreamer().emitDirectiveModuleGINV();
-
-    // If this is not the end of the statement, report an error.
-    if (getLexer().isNot(AsmToken::EndOfStatement)) {
-      reportParseError("unexpected token, expected end of statement");
-      return false;
-    }
-
-    return false; // parseDirectiveModule has finished successfully.
-  } else if (Option == "noginv") {
-    clearModuleFeatureBits(Fgpu::FeatureGINV, "ginv");
-
-    // Synchronize the ABI Flags information with the FeatureBits information we
-    // updated above.
-    getTargetStreamer().updateABIInfo(*this);
-
-    // If printing assembly, use the recently updated ABI Flags information.
-    // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-    // emitted later).
-    getTargetStreamer().emitDirectiveModuleNoGINV();
-
-    // If this is not the end of the statement, report an error.
-    if (getLexer().isNot(AsmToken::EndOfStatement)) {
-      reportParseError("unexpected token, expected end of statement");
-      return false;
-    }
-
-    return false; // parseDirectiveModule has finished successfully.
-  } else {
+  {
     return Error(L, "'" + Twine(Option) + "' is not a valid .module option.");
   }
-}
-
-/// parseDirectiveModuleFP
-///  ::= =32
-///  ::= =xx
-///  ::= =64
-bool FgpuAsmParser::parseDirectiveModuleFP() {
-  MCAsmParser &Parser = getParser();
-  MCAsmLexer &Lexer = getLexer();
-
-  if (Lexer.isNot(AsmToken::Equal)) {
-    reportParseError("unexpected token, expected equals sign '='");
-    return false;
-  }
-  Parser.Lex(); // Eat '=' token.
-
-  FgpuABIFlagsSection::FpABIKind FpABI;
-  if (!parseFpABIValue(FpABI, ".module"))
-    return false;
-
-  if (getLexer().isNot(AsmToken::EndOfStatement)) {
-    reportParseError("unexpected token, expected end of statement");
-    return false;
-  }
-
-  // Synchronize the abiflags information with the FeatureBits information we
-  // changed above.
-  getTargetStreamer().updateABIInfo(*this);
-
-  // If printing assembly, use the recently updated abiflags information.
-  // If generating ELF, don't do anything (the .FGPU.abiflags section gets
-  // emitted at the end).
-  getTargetStreamer().emitDirectiveModuleFP();
-
-  Parser.Lex(); // Consume the EndOfStatement.
-  return false;
-}
-
-bool FgpuAsmParser::parseFpABIValue(FgpuABIFlagsSection::FpABIKind &FpABI,
-                                    StringRef Directive) {
-  MCAsmParser &Parser = getParser();
-  MCAsmLexer &Lexer = getLexer();
-  bool ModuleLevelOptions = Directive == ".module";
-
-  if (Lexer.is(AsmToken::Identifier)) {
-    StringRef Value = Parser.getTok().getString();
-    Parser.Lex();
-
-    if (Value != "xx") {
-      reportParseError("unsupported value, expected 'xx', '32' or '64'");
-      return false;
-    }
-
-    if (!isABI_O32()) {
-      reportParseError("'" + Directive + " fp=xx' requires the O32 ABI");
-      return false;
-    }
-
-    FpABI = FgpuABIFlagsSection::FpABIKind::XX;
-    if (ModuleLevelOptions) {
-      setModuleFeatureBits(Fgpu::FeatureFPXX, "fpxx");
-      clearModuleFeatureBits(Fgpu::FeatureFP64Bit, "fp64");
-    } else {
-      setFeatureBits(Fgpu::FeatureFPXX, "fpxx");
-      clearFeatureBits(Fgpu::FeatureFP64Bit, "fp64");
-    }
-    return true;
-  }
-
-  if (Lexer.is(AsmToken::Integer)) {
-    unsigned Value = Parser.getTok().getIntVal();
-    Parser.Lex();
-
-    if (Value != 32 && Value != 64) {
-      reportParseError("unsupported value, expected 'xx', '32' or '64'");
-      return false;
-    }
-
-    if (Value == 32) {
-      if (!isABI_O32()) {
-        reportParseError("'" + Directive + " fp=32' requires the O32 ABI");
-        return false;
-      }
-
-      FpABI = FgpuABIFlagsSection::FpABIKind::S32;
-      if (ModuleLevelOptions) {
-        clearModuleFeatureBits(Fgpu::FeatureFPXX, "fpxx");
-        clearModuleFeatureBits(Fgpu::FeatureFP64Bit, "fp64");
-      } else {
-        clearFeatureBits(Fgpu::FeatureFPXX, "fpxx");
-        clearFeatureBits(Fgpu::FeatureFP64Bit, "fp64");
-      }
-    } else {
-      FpABI = FgpuABIFlagsSection::FpABIKind::S64;
-      if (ModuleLevelOptions) {
-        clearModuleFeatureBits(Fgpu::FeatureFPXX, "fpxx");
-        setModuleFeatureBits(Fgpu::FeatureFP64Bit, "fp64");
-      } else {
-        clearFeatureBits(Fgpu::FeatureFPXX, "fpxx");
-        setFeatureBits(Fgpu::FeatureFP64Bit, "fp64");
-      }
-    }
-
-    return true;
-  }
-
-  return false;
 }
 
 bool FgpuAsmParser::ParseDirective(AsmToken DirectiveID) {
@@ -7665,9 +5971,6 @@ bool FgpuAsmParser::ParseDirective(AsmToken DirectiveID) {
     return false;
   }
 
-  if (IDVal == ".nan")
-    return parseDirectiveNaN();
-
   if (IDVal == ".gpword") {
     parseDirectiveGpWord();
     return false;
@@ -7704,7 +6007,8 @@ bool FgpuAsmParser::ParseDirective(AsmToken DirectiveID) {
   }
 
   if (IDVal == ".abicalls") {
-    getTargetStreamer().emitDirectiveAbiCalls();
+    assert(false && "non workg");
+    //getTargetStreamer().emitDirectiveAbiCalls();
     if (Parser.getTok().isNot(AsmToken::EndOfStatement)) {
       Error(Parser.getTok().getLoc(),
             "unexpected token, expected end of statement");
@@ -7763,9 +6067,6 @@ bool FgpuAsmParser::parseInternalDirectiveReallowModule() {
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeFgpuAsmParser() {
   RegisterMCAsmParser<FgpuAsmParser> X(getTheFgpuTarget());
-  RegisterMCAsmParser<FgpuAsmParser> Y(getTheFgpuelTarget());
-  RegisterMCAsmParser<FgpuAsmParser> A(getTheFgpu64Target());
-  RegisterMCAsmParser<FgpuAsmParser> B(getTheFgpu64elTarget());
 }
 
 #define GET_REGISTER_MATCHER

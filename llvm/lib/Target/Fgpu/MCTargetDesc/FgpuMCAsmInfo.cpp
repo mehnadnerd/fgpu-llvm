@@ -24,13 +24,7 @@ FgpuMCAsmInfo::FgpuMCAsmInfo(const Triple &TheTriple,
 
   FgpuABIInfo ABI = FgpuABIInfo::computeTargetABI(TheTriple, "", Options);
 
-  if (TheTriple.isFGPU64() && !ABI.IsN32())
-    CodePointerSize = CalleeSaveStackSlotSize = 8;
-
-  if (ABI.IsO32())
     PrivateGlobalPrefix = "$";
-  else if (ABI.IsN32() || ABI.IsN64())
-    PrivateGlobalPrefix = ".L";
   PrivateLabelPrefix = PrivateGlobalPrefix;
 
   AlignmentIsInBytes          = false;

@@ -359,14 +359,6 @@ void FgpuBranchExpansion::replaceBranch(MachineBasicBlock &MBB, Iter Br,
       llvm_unreachable("Unexpected operand type in branch instruction");
     }
   }
-
-  if (Br->hasDelaySlot()) {
-    // Bundle the instruction in the delay slot to the newly created branch
-    // and erase the original branch.
-    assert(Br->isBundledWithSucc());
-    MachineBasicBlock::instr_iterator II = Br.getInstrIterator();
-    MIBundleBuilder(&*MIB).append((++II)->removeFromBundle());
-  }
   Br->eraseFromParent();
 }
 

@@ -176,14 +176,18 @@ unsigned FgpuInstrInfo::removeBranch(MachineBasicBlock &MBB,
   return removed;
 }
 
-/// reverseBranchCondition - Return the inverse opcode of the
-/// specified Branch instruction.
-bool FgpuInstrInfo::reverseBranchCondition(
-    SmallVectorImpl<MachineOperand> &Cond) const {
-  assert( (Cond.size() && Cond.size() <= 3) &&
-          "Invalid Fgpu branch condition!");
-  Cond[0].setImm(getOppositeBranchOpc(Cond[0].getImm()));
-  return false;
+unsigned FgpuInstrInfo::getAnalyzableBrOpc(unsigned Opc) const {
+  return (Opc == Fgpu::BEQ || Opc == Fgpu::BNE) ? Opc : 0;
+}
+
+/// GetOppositeBranchOpc - Return the inverse of the specified
+/// opcode, e.g. turning BEQ to BNE.
+unsigned FgpuInstrInfo::getOppositeBranchOpc(unsigned Opc) const {
+  switch (Opc) {
+  case Fgpu::BEQ: return Fgpu::BNE;
+  case Fgpu::BNE: return Fgpu::BEQ;
+  }
+  llvm_unreachable("Illegal opcode!");
 }
 
 FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(

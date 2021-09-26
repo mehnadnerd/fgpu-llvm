@@ -31,15 +31,6 @@ class TargetRegisterClass;
     explicit FgpuSETargetLowering(const FgpuTargetMachine &TM,
                                   const FgpuSubtarget &STI);
 
-    /// Enable MSA support for the given integer type and Register
-    /// class.
-    void addMSAIntType(MVT::SimpleValueType Ty, const TargetRegisterClass *RC);
-
-    /// Enable MSA support for the given floating-point type and
-    /// Register class.
-    void addMSAFloatType(MVT::SimpleValueType Ty,
-                         const TargetRegisterClass *RC);
-
     bool allowsMisalignedMemoryAccesses(
         EVT VT, unsigned AS = 0, Align Alignment = Align(1),
         MachineMemOperand::Flags Flags = MachineMemOperand::MONone,
@@ -90,52 +81,6 @@ class TargetRegisterClass;
 
     MachineBasicBlock *emitBPOSGE32(MachineInstr &MI,
                                     MachineBasicBlock *BB) const;
-    MachineBasicBlock *emitMSACBranchPseudo(MachineInstr &MI,
-                                            MachineBasicBlock *BB,
-                                            unsigned BranchOp) const;
-    /// Emit the COPY_FW pseudo instruction
-    MachineBasicBlock *emitCOPY_FW(MachineInstr &MI,
-                                   MachineBasicBlock *BB) const;
-    /// Emit the COPY_FD pseudo instruction
-    MachineBasicBlock *emitCOPY_FD(MachineInstr &MI,
-                                   MachineBasicBlock *BB) const;
-    /// Emit the INSERT_FW pseudo instruction
-    MachineBasicBlock *emitINSERT_FW(MachineInstr &MI,
-                                     MachineBasicBlock *BB) const;
-    /// Emit the INSERT_FD pseudo instruction
-    MachineBasicBlock *emitINSERT_FD(MachineInstr &MI,
-                                     MachineBasicBlock *BB) const;
-    /// Emit the INSERT_([BHWD]|F[WD])_VIDX pseudo instruction
-    MachineBasicBlock *emitINSERT_DF_VIDX(MachineInstr &MI,
-                                          MachineBasicBlock *BB,
-                                          unsigned EltSizeInBytes,
-                                          bool IsFP) const;
-    /// Emit the FILL_FW pseudo instruction
-    MachineBasicBlock *emitFILL_FW(MachineInstr &MI,
-                                   MachineBasicBlock *BB) const;
-    /// Emit the FILL_FD pseudo instruction
-    MachineBasicBlock *emitFILL_FD(MachineInstr &MI,
-                                   MachineBasicBlock *BB) const;
-    /// Emit the FEXP2_W_1 pseudo instructions.
-    MachineBasicBlock *emitFEXP2_W_1(MachineInstr &MI,
-                                     MachineBasicBlock *BB) const;
-    /// Emit the FEXP2_D_1 pseudo instructions.
-    MachineBasicBlock *emitFEXP2_D_1(MachineInstr &MI,
-                                     MachineBasicBlock *BB) const;
-    /// Emit the FILL_FW pseudo instruction
-    MachineBasicBlock *emitLD_F16_PSEUDO(MachineInstr &MI,
-                                   MachineBasicBlock *BB) const;
-    /// Emit the FILL_FD pseudo instruction
-    MachineBasicBlock *emitST_F16_PSEUDO(MachineInstr &MI,
-                                   MachineBasicBlock *BB) const;
-    /// Emit the FEXP2_W_1 pseudo instructions.
-    MachineBasicBlock *emitFPEXTEND_PSEUDO(MachineInstr &MI,
-                                           MachineBasicBlock *BB,
-                                           bool IsFGR64) const;
-    /// Emit the FEXP2_D_1 pseudo instructions.
-    MachineBasicBlock *emitFPROUND_PSEUDO(MachineInstr &MI,
-                                          MachineBasicBlock *BBi,
-                                          bool IsFGR64) const;
   };
 
 } // end namespace llvm

@@ -693,7 +693,7 @@ void FgpuTargetELFStreamer::emitDirectiveCpLoad(unsigned RegNo) {
   // addui $gp, $gp, %lo(_gp_disp)
   // addu  $gp, $gp, $reg
   // when support for position independent code is enabled.
-  if (!Pic || (getABI().IsN32() || getABI().IsN64()))
+  if (!Pic)
     return;
 
   // There's a GNU extension controlled by -mno-shared that allows

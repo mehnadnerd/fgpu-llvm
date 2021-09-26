@@ -61,12 +61,6 @@ public:
                                 SmallVectorImpl<MCFixup> &Fixups,
                                 const MCSubtargetInfo &STI) const;
 
-  // getBranchJumpOpValueMM - Return binary encoding of the microFGPU jump
-  // target operand. If the machine operand requires relocation,
-  // record the relocation and return zero.
-  unsigned getJumpTargetOpValueMM(const MCInst &MI, unsigned OpNo,
-                                  SmallVectorImpl<MCFixup> &Fixups,
-                                  const MCSubtargetInfo &STI) const;
 
   // getUImm5Lsl2Encoding - Return binary encoding of the microFGPU jump
   // target operand.
@@ -109,34 +103,6 @@ public:
                                       SmallVectorImpl<MCFixup> &Fixups,
                                       const MCSubtargetInfo &STI) const;
 
-  // getBranchTargetOpValueLsl2MMR6 - Return binary encoding of the branch
-  // target operand. If the machine operand requires relocation,
-  // record the relocation and return zero.
-  unsigned getBranchTargetOpValueLsl2MMR6(const MCInst &MI, unsigned OpNo,
-                                          SmallVectorImpl<MCFixup> &Fixups,
-                                          const MCSubtargetInfo &STI) const;
-
-  // getBranchTarget7OpValue - Return binary encoding of the microFGPU branch
-  // target operand. If the machine operand requires relocation,
-  // record the relocation and return zero.
-  unsigned getBranchTarget7OpValueMM(const MCInst &MI, unsigned OpNo,
-                                     SmallVectorImpl<MCFixup> &Fixups,
-                                     const MCSubtargetInfo &STI) const;
-
-  // getBranchTargetOpValueMMPC10 - Return binary encoding of the microFGPU
-  // 10-bit branch target operand. If the machine operand requires relocation,
-  // record the relocation and return zero.
-  unsigned getBranchTargetOpValueMMPC10(const MCInst &MI, unsigned OpNo,
-                                        SmallVectorImpl<MCFixup> &Fixups,
-                                        const MCSubtargetInfo &STI) const;
-
-  // getBranchTargetOpValue - Return binary encoding of the microFGPU branch
-  // target operand. If the machine operand requires relocation,
-  // record the relocation and return zero.
-  unsigned getBranchTargetOpValueMM(const MCInst &MI, unsigned OpNo,
-                                    SmallVectorImpl<MCFixup> &Fixups,
-                                    const MCSubtargetInfo &STI) const;
-
   // getBranchTarget21OpValue - Return binary encoding of the branch
   // offset operand. If the machine operand requires relocation,
   // record the relocation and return zero.
@@ -178,44 +144,11 @@ public:
                              SmallVectorImpl<MCFixup> &Fixups,
                              const MCSubtargetInfo &STI) const;
 
-  unsigned getMSAMemEncoding(const MCInst &MI, unsigned OpNo,
-                             SmallVectorImpl<MCFixup> &Fixups,
-                             const MCSubtargetInfo &STI) const;
 
   template <unsigned ShiftAmount = 0>
   unsigned getMemEncoding(const MCInst &MI, unsigned OpNo,
                           SmallVectorImpl<MCFixup> &Fixups,
                           const MCSubtargetInfo &STI) const;
-  unsigned getMemEncodingMMImm4(const MCInst &MI, unsigned OpNo,
-                                SmallVectorImpl<MCFixup> &Fixups,
-                                const MCSubtargetInfo &STI) const;
-  unsigned getMemEncodingMMImm4Lsl1(const MCInst &MI, unsigned OpNo,
-                                    SmallVectorImpl<MCFixup> &Fixups,
-                                    const MCSubtargetInfo &STI) const;
-  unsigned getMemEncodingMMImm4Lsl2(const MCInst &MI, unsigned OpNo,
-                                    SmallVectorImpl<MCFixup> &Fixups,
-                                    const MCSubtargetInfo &STI) const;
-  unsigned getMemEncodingMMSPImm5Lsl2(const MCInst &MI, unsigned OpNo,
-                                      SmallVectorImpl<MCFixup> &Fixups,
-                                      const MCSubtargetInfo &STI) const;
-  unsigned getMemEncodingMMGPImm7Lsl2(const MCInst &MI, unsigned OpNo,
-                                      SmallVectorImpl<MCFixup> &Fixups,
-                                      const MCSubtargetInfo &STI) const;
-  unsigned getMemEncodingMMImm9(const MCInst &MI, unsigned OpNo,
-                                SmallVectorImpl<MCFixup> &Fixups,
-                                const MCSubtargetInfo &STI) const;
-  unsigned getMemEncodingMMImm11(const MCInst &MI, unsigned OpNo,
-                                 SmallVectorImpl<MCFixup> &Fixups,
-                                 const MCSubtargetInfo &STI) const;
-  unsigned getMemEncodingMMImm12(const MCInst &MI, unsigned OpNo,
-                                 SmallVectorImpl<MCFixup> &Fixups,
-                                 const MCSubtargetInfo &STI) const;
-  unsigned getMemEncodingMMImm16(const MCInst &MI, unsigned OpNo,
-                                 SmallVectorImpl<MCFixup> &Fixups,
-                                 const MCSubtargetInfo &STI) const;
-  unsigned getMemEncodingMMImm4sp(const MCInst &MI, unsigned OpNo,
-                                  SmallVectorImpl<MCFixup> &Fixups,
-                                  const MCSubtargetInfo &STI) const;
   unsigned getSizeInsEncoding(const MCInst &MI, unsigned OpNo,
                               SmallVectorImpl<MCFixup> &Fixups,
                               const MCSubtargetInfo &STI) const;
@@ -262,6 +195,22 @@ public:
   unsigned getRegisterListOpValue16(const MCInst &MI, unsigned OpNo,
                                     SmallVectorImpl<MCFixup> &Fixups,
                                     const MCSubtargetInfo &STI) const;
+
+  // getBranch14TargetOpValue - Return binary encoding of the branch
+  // target operand, such as BEQ, BNE. If the machine operand
+  // requires relocation, record the relocation and return zero.
+  unsigned getBranch14TargetOpValue(const MCInst &MI, unsigned OpNo,
+                                    SmallVectorImpl<MCFixup> &Fixups,
+                                    const MCSubtargetInfo &STI) const;
+
+  /* 7 bit version of previous code */
+  unsigned getBranch7TargetOpValue(const MCInst &MI, unsigned OpNo,
+                                   SmallVectorImpl<MCFixup> &Fixups,
+                                   const MCSubtargetInfo &STI) const;
+
+  unsigned getMemEncoding(const MCInst &MI, unsigned OpNo,
+                          SmallVectorImpl<MCFixup> &Fixups,
+                          const MCSubtargetInfo &STI) const;
 
 private:
   void LowerCompactBranch(MCInst& Inst) const;
