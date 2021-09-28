@@ -83,6 +83,23 @@ static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
       return 0;
     }
     break;
+  case Fgpu::fixup_Fgpu_JSUB:
+  case Fgpu::fixup_Fgpu_PC14:
+    Value = (int64_t)Value / 4;
+    // We now check if Value can be encoded as a 14-bit signed immediate.
+    if (!isInt<14>(Value)) {
+      Ctx.reportError(Fixup.getLoc(), "out of range PC14 fixup");
+      return 0;
+    }
+    break;
+  case Fgpu::fixup_Fgpu_PC7:
+    Value = (int64_t)Value / 4;
+    // We now check if Value can be encoded as a 7-bit signed immediate.
+    if (!isInt<7>(Value)) {
+      Ctx.reportError(Fixup.getLoc(), "out of range PC7 fixup");
+      return 0;
+    }
+    break;
   case Fgpu::fixup_FGPU_PC19_S2:
   case Fgpu::fixup_MICROFGPU_PC19_S2:
     // Forcing a signed division because Value can be negative.
@@ -350,6 +367,9 @@ getFixupKindInfo(MCFixupKind Kind) const {
     //
     // name                    offset  bits  flags
     { "fixup_Fgpu_16",           0,     16,   0 },
+    { "fixup_Fgpu_PC14",         0,     14,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_Fgpu_PC7",          0,     7,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_Fgpu_JSUB",         0,     14,   MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_Fgpu_32",           0,     32,   0 },
     { "fixup_Fgpu_REL32",        0,     32,   0 },
     { "fixup_Fgpu_26",           0,     26,   0 },
@@ -429,6 +449,9 @@ getFixupKindInfo(MCFixupKind Kind) const {
     //
     // name                    offset  bits  flags
     { "fixup_Fgpu_16",          16,     16,   0 },
+    { "fixup_Fgpu_PC14",         0,     14,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_Fgpu_PC7",          0,     7,   MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_Fgpu_JSUB",         0,     14,   MCFixupKindInfo::FKF_IsPCRel },
     { "fixup_Fgpu_32",           0,     32,   0 },
     { "fixup_Fgpu_REL32",        0,     32,   0 },
     { "fixup_Fgpu_26",           6,     26,   0 },

@@ -172,7 +172,7 @@ SDValue FgpuSETargetLowering::LowerOperation(SDValue Op,
   case ISD::INTRINSIC_VOID:     return lowerINTRINSIC_VOID(Op, DAG);
   case ISD::EXTRACT_VECTOR_ELT: return lowerEXTRACT_VECTOR_ELT(Op, DAG);
   case ISD::BUILD_VECTOR:       return lowerBUILD_VECTOR(Op, DAG);
-  case ISD::VECTOR_SHUFFLE:     return lowerVECTOR_SHUFFLE(Op, DAG);
+//  case ISD::VECTOR_SHUFFLE:     return lowerVECTOR_SHUFFLE(Op, DAG);
   case ISD::SELECT:             return lowerSELECT(Op, DAG);
   case ISD::BITCAST:            return lowerBITCAST(Op, DAG);
   }

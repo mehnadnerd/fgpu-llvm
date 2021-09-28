@@ -62,7 +62,7 @@ public:
 
   bool expandPostRAPseudo(MachineInstr &MI) const override;
 
-  bool isBranchWithImm(unsigned Opc) const override;
+//  bool isBranchWithImm(unsigned Opc) const override;
 
   /// Adjust SP by Amount bytes.
   void adjustStackPtr(unsigned SP, int64_t Amount, MachineBasicBlock &MBB,
@@ -83,7 +83,7 @@ protected:
   isCopyInstrImpl(const MachineInstr &MI) const override;
 
 private:
-  void expandRetLR(MachineBasicBlock &MBB, MachineInstr I, unsigned Opc) const;
+  void expandRetLR(MachineBasicBlock &MBB, MachineInstr &I, unsigned Opc) const;
 
   std::pair<bool, bool> compareOpndSize(unsigned Opc,
                                         const MachineFunction &MF) const;

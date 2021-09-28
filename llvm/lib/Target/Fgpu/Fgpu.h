@@ -30,7 +30,6 @@ namespace llvm {
 
   FunctionPass *createFgpuModuleISelDagPass();
   FunctionPass *createFgpuOptimizePICCallPass();
-  FunctionPass *createFgpuDelaySlotFillerPass();
   FunctionPass *createFgpuBranchExpansion();
   FunctionPass *createFgpuExpandPseudoPass();
   FunctionPass *createFgpuPreLegalizeCombiner();
@@ -39,7 +38,6 @@ namespace llvm {
                                                      FgpuSubtarget &,
                                                      FgpuRegisterBankInfo &);
 
-  void initializeFgpuDelaySlotFillerPass(PassRegistry &);
   void initializeFgpuBranchExpansionPass(PassRegistry &);
   void initializeFgpuPreLegalizerCombinerPass(PassRegistry&);
 } // end namespace llvm;

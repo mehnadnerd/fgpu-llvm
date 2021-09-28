@@ -25,6 +25,10 @@ namespace Fgpu {
     // Branch fixups resulting in R_FGPU_16.
     fixup_Fgpu_16 = FirstTargetFixupKind,
 
+    fixup_Fgpu_PC14,
+    fixup_Fgpu_PC7,
+    fixup_Fgpu_JSUB,
+
     // Pure 32 bit data fixup resulting in - R_FGPU_32.
     fixup_Fgpu_32,
 

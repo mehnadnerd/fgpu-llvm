@@ -77,8 +77,7 @@ bool FgpuSubtarget::enablePostRAScheduler() const { return true; }
 
 void FgpuSubtarget::getCriticalPathRCs(RegClassVector &CriticalPathRCs) const {
   CriticalPathRCs.clear();
-  CriticalPathRCs.push_back(isGP64bit() ? &Fgpu::GPR64RegClass
-                                        : &Fgpu::GPR32RegClass);
+  CriticalPathRCs.push_back(&Fgpu::GPROutRegClass);
 }
 
 CodeGenOpt::Level FgpuSubtarget::getOptLevelToEnablePostRAScheduler() const {

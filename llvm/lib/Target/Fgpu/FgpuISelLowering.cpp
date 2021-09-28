@@ -1460,52 +1460,29 @@ SDValue FgpuTargetLowering::lowerFP_TO_SINT(SDValue Op,
 // TODO: Implement a generic logic using tblgen that can support this.
 // Fgpu O32 ABI rules:
 // ---
-// i32 - Passed in A0, A1, A2, A3 and stack
+// i32/f32 - Passed in A0, A1, A2, A3 and stack
 // f32 - Only passed in f32 registers if no int reg has been used yet to hold
 //       an argument. Otherwise, passed in A1, A2, A3 and stack.
-// f64 - Only passed in two aliased f32 registers if no int reg has been used
-//       yet to hold an argument. Otherwise, use A2, A3 and stack. If A1 is
-//       not used, it must be shadowed. If only A3 is available, shadow it and
-//       go to stack.
-// vXiX - Received as scalarized i32s, passed in A0 - A3 and the stack.
-// vXf32 - Passed in either a pair of registers {A0, A1}, {A2, A3} or {A0 - A3}
-//         with the remainder spilled to the stack.
-// vXf64 - Passed in either {A0, A1, A2, A3} or {A2, A3} and in both cases
-//         spilling the remainder to the stack.
+// f64 - not supported
+// vXiX - dunno
+// vXf32 - no args i think
 //
 //  For vararg functions, all arguments are passed in A0, A1, A2, A3 and stack.
 //===----------------------------------------------------------------------===//
 
 static bool CC_Fgpu(unsigned ValNo, MVT ValVT, MVT LocVT,
                        CCValAssign::LocInfo LocInfo, ISD::ArgFlagsTy ArgFlags,
-                       CCState &State, ArrayRef<MCPhysReg> F64Regs) {
+                       CCState &State) {
   const FgpuSubtarget &Subtarget = static_cast<const FgpuSubtarget &>(
       State.getMachineFunction().getSubtarget());
 
-  static const MCPhysReg IntRegs[] = { Fgpu::A0, Fgpu::A1, Fgpu::A2, Fgpu::A3 };
+  static const MCPhysReg IntRegs[] = { Fgpu::R2, Fgpu::R3, Fgpu::R4, Fgpu::R5 };
 
   const FgpuCCState * FgpuState = static_cast<FgpuCCState *>(&State);
-
-  static const MCPhysReg F32Regs[] = { Fgpu::F12, Fgpu::F14 };
-
-  static const MCPhysReg FloatVectorIntRegs[] = { Fgpu::A0, Fgpu::A2 };
 
   // Do not process byval args here.
   if (ArgFlags.isByVal())
     return true;
-
-  // Promote i8 and i16
-  if (ArgFlags.isInReg() && !Subtarget.isLittle()) {
-    if (LocVT == MVT::i8 || LocVT == MVT::i16 || LocVT == MVT::i32) {
-      LocVT = MVT::i32;
-      if (ArgFlags.isSExt())
-        LocInfo = CCValAssign::SExtUpper;
-      else if (ArgFlags.isZExt())
-        LocInfo = CCValAssign::ZExtUpper;
-      else
-        LocInfo = CCValAssign::AExtUpper;
-    }
-  }
 
   // Promote i8 and i16
   if (LocVT == MVT::i8 || LocVT == MVT::i16) {
@@ -1520,72 +1497,20 @@ static bool CC_Fgpu(unsigned ValNo, MVT ValVT, MVT LocVT,
 
   unsigned Reg;
 
-  // f32 and f64 are allocated in A0, A1, A2, A3 when either of the following
-  // is true: function is vararg, argument is 3rd or higher, there is previous
-  // argument which is not f32 or f64.
-  bool AllocateFloatsInIntReg = State.isVarArg() || ValNo > 1 ||
-                                State.getFirstUnallocated(F32Regs) != ValNo;
   Align OrigAlign = ArgFlags.getNonZeroOrigAlign();
   bool isI64 = (ValVT == MVT::i32 && OrigAlign == Align(8));
   bool isVectorFloat = FgpuState->WasOriginalArgVectorFloat(ValNo);
 
-  // The FGPU vector ABI for floats passes them in a pair of registers
-  if (ValVT == MVT::i32 && isVectorFloat) {
-    // This is the start of an vector that was scalarized into an unknown number
-    // of components. It doesn't matter how many there are. Allocate one of the
-    // notional 8 byte aligned registers which map onto the argument stack, and
-    // shadow the register lost to alignment requirements.
-    if (ArgFlags.isSplit()) {
-      Reg = State.AllocateReg(FloatVectorIntRegs);
-      if (Reg == Fgpu::A2)
-        State.AllocateReg(Fgpu::A1);
-      else if (Reg == 0)
-        State.AllocateReg(Fgpu::A3);
-    } else {
-      // If we're an intermediate component of the split, we can just attempt to
-      // allocate a register directly.
-      Reg = State.AllocateReg(IntRegs);
-    }
-  } else if (ValVT == MVT::i32 ||
-             (ValVT == MVT::f32 && AllocateFloatsInIntReg)) {
+  if (ValVT == MVT::i32 || ValVT == MVT::f32) {
     Reg = State.AllocateReg(IntRegs);
     // If this is the first part of an i64 arg,
     // the allocated register must be either A0 or A2.
-    if (isI64 && (Reg == Fgpu::A1 || Reg == Fgpu::A3))
+    if (isI64 && (Reg == Fgpu::R2 || Reg == Fgpu::R4))
       Reg = State.AllocateReg(IntRegs);
     LocVT = MVT::i32;
-  } else if (ValVT == MVT::f64 && AllocateFloatsInIntReg) {
+  } else if (ValVT == MVT::f64) {
     LocVT = MVT::i32;
-
-    // Allocate int register and shadow next int register. If first
-    // available register is Fgpu::A1 or Fgpu::A3, shadow it too.
-    Reg = State.AllocateReg(IntRegs);
-    if (Reg == Fgpu::A1 || Reg == Fgpu::A3)
-      Reg = State.AllocateReg(IntRegs);
-
-    if (Reg) {
-      State.addLoc(
-          CCValAssign::getCustomReg(ValNo, ValVT, Reg, LocVT, LocInfo));
-      MCRegister HiReg = State.AllocateReg(IntRegs);
-      assert(HiReg);
-      State.addLoc(
-          CCValAssign::getCustomReg(ValNo, ValVT, HiReg, LocVT, LocInfo));
-      return false;
-    }
-  } else if (ValVT.isFloatingPoint() && !AllocateFloatsInIntReg) {
-    // we are guaranteed to find an available float register
-    if (ValVT == MVT::f32) {
-      Reg = State.AllocateReg(F32Regs);
-      // Shadow int register
-      State.AllocateReg(IntRegs);
-    } else {
-      Reg = State.AllocateReg(F64Regs);
-      // Shadow int registers
-      unsigned Reg2 = State.AllocateReg(IntRegs);
-      if (Reg2 == Fgpu::A1 || Reg2 == Fgpu::A3)
-        State.AllocateReg(IntRegs);
-      State.AllocateReg(IntRegs);
-    }
+    assert(false && "dbl not supported");
   } else
     llvm_unreachable("Cannot handle this ValVT.");
 
@@ -1598,22 +1523,14 @@ static bool CC_Fgpu(unsigned ValNo, MVT ValVT, MVT LocVT,
   return false;
 }
 
-static bool CC_Fgpu_FP32(unsigned ValNo, MVT ValVT,
-                            MVT LocVT, CCValAssign::LocInfo LocInfo,
-                            ISD::ArgFlagsTy ArgFlags, CCState &State) {
-  static const MCPhysReg F64Regs[] = { Fgpu::D6, Fgpu::D7 };
-
-  return CC_Fgpu(ValNo, ValVT, LocVT, LocInfo, ArgFlags, State, F64Regs);
-}
-
-static bool CC_Fgpu(unsigned ValNo, MVT ValVT, MVT LocVT,
-                       CCValAssign::LocInfo LocInfo, ISD::ArgFlagsTy ArgFlags,
-                       CCState &State) LLVM_ATTRIBUTE_UNUSED;
+//static bool CC_Fgpu(unsigned ValNo, MVT ValVT, MVT LocVT,
+//                       CCValAssign::LocInfo LocInfo, ISD::ArgFlagsTy ArgFlags,
+//                       CCState &State) LLVM_ATTRIBUTE_UNUSED;
 
 #include "FgpuGenCallingConv.inc"
 
  CCAssignFn *FgpuTargetLowering::CCAssignFnForCall() const{
-   return CC_Fgpu_FixedArg;
+   return CC_Fgpu; // TODO is this right
  }
 
  CCAssignFn *FgpuTargetLowering::CCAssignFnForReturn() const{
@@ -1697,50 +1614,44 @@ void FgpuTargetLowering::AdjustInstrPostInstrSelection(MachineInstr &MI,
   switch (MI.getOpcode()) {
     default:
       return;
-    case Fgpu::JALR:
-    case Fgpu::JALRPseudo:
-    case Fgpu::JALR64:
-    case Fgpu::JALR64Pseudo:
-    case Fgpu::TAILCALLREG:
-    case Fgpu::TAILCALLREG64:
-    case Fgpu::TAILCALLR6REG:
-    case Fgpu::TAILCALL64R6REG: {
-      if (!EmitJalrReloc ||
-          !isPositionIndependent() ||
-          Node->getNumOperands() < 1 ||
-          Node->getOperand(0).getNumOperands() < 2) {
-        return;
-      }
-      // We are after the callee address, set by LowerCall().
-      // If added to MI, asm printer will emit .reloc R_FGPU_JALR for the
-      // symbol.
-      const SDValue TargetAddr = Node->getOperand(0).getOperand(1);
-      StringRef Sym;
-      if (const GlobalAddressSDNode *G =
-              dyn_cast_or_null<const GlobalAddressSDNode>(TargetAddr)) {
-        // We must not emit the R_FGPU_JALR relocation against data symbols
-        // since this will cause run-time crashes if the linker replaces the
-        // call instruction with a relative branch to the data symbol.
-        if (!isa<Function>(G->getGlobal())) {
-          LLVM_DEBUG(dbgs() << "Not adding R_FGPU_JALR against data symbol "
-                            << G->getGlobal()->getName() << "\n");
-          return;
-        }
-        Sym = G->getGlobal()->getName();
-      }
-      else if (const ExternalSymbolSDNode *ES =
-                   dyn_cast_or_null<const ExternalSymbolSDNode>(TargetAddr)) {
-        Sym = ES->getSymbol();
-      }
-
-      if (Sym.empty())
-        return;
-
-      MachineFunction *MF = MI.getParent()->getParent();
-      MCSymbol *S = MF->getContext().getOrCreateSymbol(Sym);
-      LLVM_DEBUG(dbgs() << "Adding R_FGPU_JALR against " << Sym << "\n");
-      MI.addOperand(MachineOperand::CreateMCSymbol(S, FgpuII::MO_JALR));
-    }
+//    case Fgpu::JALR:
+//    case Fgpu::JALRPseudo:{
+//      if (!EmitJalrReloc ||
+//          !isPositionIndependent() ||
+//          Node->getNumOperands() < 1 ||
+//          Node->getOperand(0).getNumOperands() < 2) {
+//        return;
+//      }
+//      // We are after the callee address, set by LowerCall().
+//      // If added to MI, asm printer will emit .reloc R_FGPU_JALR for the
+//      // symbol.
+//      const SDValue TargetAddr = Node->getOperand(0).getOperand(1);
+//      StringRef Sym;
+//      if (const GlobalAddressSDNode *G =
+//              dyn_cast_or_null<const GlobalAddressSDNode>(TargetAddr)) {
+//        // We must not emit the R_FGPU_JALR relocation against data symbols
+//        // since this will cause run-time crashes if the linker replaces the
+//        // call instruction with a relative branch to the data symbol.
+//        if (!isa<Function>(G->getGlobal())) {
+//          LLVM_DEBUG(dbgs() << "Not adding R_FGPU_JALR against data symbol "
+//                            << G->getGlobal()->getName() << "\n");
+//          return;
+//        }
+//        Sym = G->getGlobal()->getName();
+//      }
+//      else if (const ExternalSymbolSDNode *ES =
+//                   dyn_cast_or_null<const ExternalSymbolSDNode>(TargetAddr)) {
+//        Sym = ES->getSymbol();
+//      }
+//
+//      if (Sym.empty())
+//        return;
+//
+//      MachineFunction *MF = MI.getParent()->getParent();
+//      MCSymbol *S = MF->getContext().getOrCreateSymbol(Sym);
+//      LLVM_DEBUG(dbgs() << "Adding R_FGPU_JALR against " << Sym << "\n");
+//      MI.addOperand(MachineOperand::CreateMCSymbol(S, FgpuII::MO_JALR));
+//    }
   }
 }
 
@@ -1851,7 +1762,7 @@ FgpuTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     Chain = DAG.getCALLSEQ_START(Chain, NextStackOffset, 0, DL);
 
   SDValue StackPtr =
-      DAG.getCopyFromReg(Chain, DL, ABI.IsN64() ? Fgpu::SP_64 : Fgpu::SP,
+      DAG.getCopyFromReg(Chain, DL, Fgpu::SP,
                          getPointerTy(DAG.getDataLayout()));
 
   std::deque<std::pair<unsigned, SDValue>> RegsToPass;
@@ -1879,7 +1790,7 @@ FgpuTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       assert(!IsTailCall &&
              "Do not tail-call optimize if there is a byval argument.");
       passByValArg(Chain, DL, RegsToPass, MemOpChains, StackPtr, MFI, DAG, Arg,
-                   FirstByValReg, LastByValReg, Flags, Subtarget.isLittle(),
+                   FirstByValReg, LastByValReg, Flags, true,
                    VA);
       CCInfo.nextInRegsParam();
       continue;
@@ -1896,20 +1807,21 @@ FgpuTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
             (ValVT == MVT::i64 && LocVT == MVT::f64))
           Arg = DAG.getNode(ISD::BITCAST, DL, LocVT, Arg);
         else if (ValVT == MVT::f64 && LocVT == MVT::i32) {
-          SDValue Lo = DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32,
-                                   Arg, DAG.getConstant(0, DL, MVT::i32));
-          SDValue Hi = DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32,
-                                   Arg, DAG.getConstant(1, DL, MVT::i32));
-          if (!Subtarget.isLittle())
-            std::swap(Lo, Hi);
-
-          assert(VA.needsCustom());
-
-          Register LocRegLo = VA.getLocReg();
-          Register LocRegHigh = ArgLocs[++i].getLocReg();
-          RegsToPass.push_back(std::make_pair(LocRegLo, Lo));
-          RegsToPass.push_back(std::make_pair(LocRegHigh, Hi));
-          continue;
+          assert(false && "dbl nnot supported");
+//          SDValue Lo = DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32,
+//                                   Arg, DAG.getConstant(0, DL, MVT::i32));
+//          SDValue Hi = DAG.getNode(FgpuISD::ExtractElementF64, DL, MVT::i32,
+//                                   Arg, DAG.getConstant(1, DL, MVT::i32));
+//          if (!Subtarget.isLittle())
+//            std::swap(Lo, Hi);
+//
+//          assert(VA.needsCustom());
+//
+//          Register LocRegLo = VA.getLocReg();
+//          Register LocRegHigh = ArgLocs[++i].getLocReg();
+//          RegsToPass.push_back(std::make_pair(LocRegLo, Lo));
+//          RegsToPass.push_back(std::make_pair(LocRegHigh, Hi));
+//          continue;
         }
       }
       break;
@@ -1949,11 +1861,6 @@ FgpuTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     if (VA.isRegLoc()) {
       RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
 
-      // If the parameter is passed through reg $D, which splits into
-      // two physical registers, avoid creating call site info.
-      if (Fgpu::AFGR64RegClass.contains(VA.getLocReg()))
-        continue;
-
       // Collect CSInfo about which register passes which parameter.
       const TargetOptions &Options = DAG.getTarget().Options;
       if (Options.SupportsDebugEntryValues)
@@ -1986,15 +1893,13 @@ FgpuTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // The long-calls feature is ignored in case of PIC.
   // While we do not support -mshared / -mno-shared properly,
   // ignore long-calls in case of -mabicalls too.
-  if (!Subtarget.isABICalls() && !IsPIC) {
+  if (!IsPIC) {
     // If the function should be called using "long call",
     // get its address into a register to prevent using
     // of the `jal` instruction for the direct call.
     if (auto *N = dyn_cast<ExternalSymbolSDNode>(Callee)) {
       if (Subtarget.useLongCalls())
-        Callee = Subtarget.hasSym32()
-                     ? getAddrNonPIC(N, SDLoc(N), Ty, DAG)
-                     : getAddrNonPICSym64(N, SDLoc(N), Ty, DAG);
+        Callee = getAddrNonPIC(N, SDLoc(N), Ty, DAG);
     } else if (auto *N = dyn_cast<GlobalAddressSDNode>(Callee)) {
       bool UseLongCalls = Subtarget.useLongCalls();
       // If the function has long-call/far/near attribute
@@ -2006,9 +1911,7 @@ FgpuTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
           UseLongCalls = false;
       }
       if (UseLongCalls)
-        Callee = Subtarget.hasSym32()
-                     ? getAddrNonPIC(N, SDLoc(N), Ty, DAG)
-                     : getAddrNonPICSym64(N, SDLoc(N), Ty, DAG);
+        Callee = getAddrNonPIC(N, SDLoc(N), Ty, DAG);
     }
   }
 
@@ -2018,7 +1921,7 @@ FgpuTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       InternalLinkage = Val->hasInternalLinkage();
 
       if (InternalLinkage)
-        Callee = getAddrLocal(G, DL, Ty, DAG, ABI.IsN32() || ABI.IsN64());
+        Callee = getAddrLocal(G, DL, Ty, DAG, false);
       else if (Subtarget.useXGOT()) {
         Callee = getAddrGlobalLargeGOT(G, DL, Ty, DAG, FgpuII::MO_CALL_HI16,
                                        FgpuII::MO_CALL_LO16, Chain,
@@ -2241,7 +2144,7 @@ SDValue FgpuTargetLowering::LowerFormalArguments(
     report_fatal_error(
         "Functions with the interrupt attribute cannot have arguments!");
 
-  CCInfo.AnalyzeFormalArguments(Ins, CC_Fgpu_FixedArg);
+  CCInfo.AnalyzeFormalArguments(Ins, CC_Fgpu);
   FgpuFI->setFormalArgInfo(CCInfo.getNextStackOffset(),
                            CCInfo.getInRegsParamsCount() > 0);
 
@@ -2293,15 +2196,16 @@ SDValue FgpuTargetLowering::LowerFormalArguments(
           (RegVT == MVT::i64 && ValVT == MVT::f64) ||
           (RegVT == MVT::f64 && ValVT == MVT::i64))
         ArgValue = DAG.getNode(ISD::BITCAST, DL, ValVT, ArgValue);
-      else if (ABI.IsO32() && RegVT == MVT::i32 &&
+      else if (RegVT == MVT::i32 &&
                ValVT == MVT::f64) {
+        assert(false && "dbl not supported");
         assert(VA.needsCustom() && "Expected custom argument for f64 split");
-        CCValAssign &NextVA = ArgLocs[++i];
-        unsigned Reg2 =
-            addLiveIn(DAG.getMachineFunction(), NextVA.getLocReg(), RC);
-        SDValue ArgValue2 = DAG.getCopyFromReg(Chain, DL, Reg2, RegVT);
-        ArgValue = DAG.getNode(FgpuISD::BuildPairF64, DL, MVT::f64,
-                               ArgValue, ArgValue2);
+//        CCValAssign &NextVA = ArgLocs[++i];
+//        unsigned Reg2 =
+//            addLiveIn(DAG.getMachineFunction(), NextVA.getLocReg(), RC);
+//        SDValue ArgValue2 = DAG.getCopyFromReg(Chain, DL, Reg2, RegVT);
+//        ArgValue = DAG.getNode(FgpuISD::BuildPairF64, DL, MVT::f64,
+//                               ArgValue, ArgValue2);
       }
 
       InVals.push_back(ArgValue);
@@ -2310,14 +2214,12 @@ SDValue FgpuTargetLowering::LowerFormalArguments(
 
       assert(!VA.needsCustom() && "unexpected custom memory argument");
 
-      if (ABI.IsO32()) {
-        // We ought to be able to use LocVT directly but O32 sets it to i32
-        // when allocating floating point values to integer registers.
-        // This shouldn't influence how we load the value into registers unless
-        // we are targeting softfloat.
-        if (VA.getValVT().isFloatingPoint() && !Subtarget.useSoftFloat())
-          LocVT = VA.getValVT();
-      }
+      // We ought to be able to use LocVT directly but O32 sets it to i32
+      // when allocating floating point values to integer registers.
+      // This shouldn't influence how we load the value into registers unless
+      // we are targeting softfloat.
+      if (VA.getValVT().isFloatingPoint())
+        LocVT = VA.getValVT();
 
       // sanity check
       assert(VA.isMemLoc());
@@ -2354,7 +2256,7 @@ SDValue FgpuTargetLowering::LowerFormalArguments(
       unsigned Reg = FgpuFI->getSRetReturnReg();
       if (!Reg) {
         Reg = MF.getRegInfo().createVirtualRegister(
-            getRegClassFor(ABI.IsN64() ? MVT::i64 : MVT::i32));
+            getRegClassFor(MVT::i32));
         FgpuFI->setSRetReturnReg(Reg);
       }
       SDValue Copy = DAG.getCopyToReg(DAG.getEntryNode(), DL, Reg, InVals[i]);
@@ -2392,9 +2294,6 @@ FgpuTargetLowering::CanLowerReturn(CallingConv::ID CallConv,
 
 bool FgpuTargetLowering::shouldSignExtendTypeInLibCall(EVT Type,
                                                        bool IsSigned) const {
-  if ((ABI.IsN32() || ABI.IsN64()) && Type == MVT::i32)
-      return true;
-
   return IsSigned;
 }
 
@@ -2402,12 +2301,13 @@ SDValue
 FgpuTargetLowering::LowerInterruptReturn(SmallVectorImpl<SDValue> &RetOps,
                                          const SDLoc &DL,
                                          SelectionDAG &DAG) const {
+  assert(false && "I don't knnow why thsi is a thing");
   MachineFunction &MF = DAG.getMachineFunction();
   FgpuFunctionInfo *FgpuFI = MF.getInfo<FgpuFunctionInfo>();
 
   FgpuFI->setISR();
 
-  return DAG.getNode(FgpuISD::ERet, DL, MVT::Other, RetOps);
+  return DAG.getNode(FgpuISD::RET, DL, MVT::Other, RetOps);
 }
 
 SDValue
@@ -2492,7 +2392,7 @@ FgpuTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
       llvm_unreachable("sret virtual register not created in the entry block");
     SDValue Val =
         DAG.getCopyFromReg(Chain, DL, Reg, getPointerTy(DAG.getDataLayout()));
-    unsigned V0 = ABI.IsN64() ? Fgpu::V0_64 : Fgpu::V0;
+    unsigned V0 = Fgpu::R6;
 
     Chain = DAG.getCopyToReg(Chain, DL, V0, Val, Flag);
     Flag = Chain.getValue(1);
@@ -2577,10 +2477,7 @@ FgpuTargetLowering::getSingleConstraintMatchWeight(
       weight = CW_Register;
     break;
   case 'f': // FPU or MSA register
-    if (Subtarget.hasMSA() && type->isVectorTy() &&
-        type->getPrimitiveSizeInBits().getFixedSize() == 128)
-      weight = CW_Register;
-    else if (type->isFloatTy())
+    if (type->isFloatTy() || type->isVectorTy())
       weight = CW_Register;
     break;
   case 'c': // $25 for indirect jumps
@@ -2632,8 +2529,7 @@ static std::pair<bool, bool> parsePhysicalReg(StringRef C, StringRef &Prefix,
 
 EVT FgpuTargetLowering::getTypeForExtReturn(LLVMContext &Context, EVT VT,
                                             ISD::NodeType) const {
-  bool Cond = !Subtarget.isABI_O32() && VT.getSizeInBits() == 32;
-  EVT MinVT = getRegisterType(Context, Cond ? MVT::i64 : MVT::i32);
+  EVT MinVT = getRegisterType(Context, MVT::i32);
   return VT.bitsLT(MinVT) ? MinVT : VT;
 }
 
@@ -2650,58 +2546,15 @@ parseRegForInlineAsmConstraint(StringRef C, MVT VT) const {
   if (!R.first)
     return std::make_pair(0U, nullptr);
 
-  if ((Prefix == "hi" || Prefix == "lo")) { // Parse hi/lo.
-    // No numeric characters follow "hi" or "lo".
-    if (R.second)
-      return std::make_pair(0U, nullptr);
-
-    RC = TRI->getRegClass(Prefix == "hi" ?
-                          Fgpu::HI32RegClassID : Fgpu::LO32RegClassID);
-    return std::make_pair(*(RC->begin()), RC);
-  } else if (Prefix.startswith("$msa")) {
-    // Parse $msa(ir|csr|access|save|modify|request|map|unmap)
-
-    // No numeric characters follow the name.
-    if (R.second)
-      return std::make_pair(0U, nullptr);
-
-    Reg = StringSwitch<unsigned long long>(Prefix)
-              .Case("$msair", Fgpu::MSAIR)
-              .Case("$msacsr", Fgpu::MSACSR)
-              .Case("$msaaccess", Fgpu::MSAAccess)
-              .Case("$msasave", Fgpu::MSASave)
-              .Case("$msamodify", Fgpu::MSAModify)
-              .Case("$msarequest", Fgpu::MSARequest)
-              .Case("$msamap", Fgpu::MSAMap)
-              .Case("$msaunmap", Fgpu::MSAUnmap)
-              .Default(0);
-
-    if (!Reg)
-      return std::make_pair(0U, nullptr);
-
-    RC = TRI->getRegClass(Fgpu::MSACtrlRegClassID);
-    return std::make_pair(Reg, RC);
-  }
-
   if (!R.second)
     return std::make_pair(0U, nullptr);
 
   if (Prefix == "$f") { // Parse $f0-$f31.
     // If the size of FP registers is 64-bit or Reg is an even number, select
     // the 64-bit register class. Otherwise, select the 32-bit register class.
-    if (VT == MVT::Other)
-      VT = (Subtarget.isFP64bit() || !(Reg % 2)) ? MVT::f64 : MVT::f32;
+    VT = MVT::v32f32;
 
     RC = getRegClassFor(VT);
-
-    if (RC == &Fgpu::AFGR64RegClass) {
-      assert(Reg % 2 == 0);
-      Reg >>= 1;
-    }
-  } else if (Prefix == "$fcc") // Parse $fcc0-$fcc7.
-    RC = TRI->getRegClass(Fgpu::FCCRegClassID);
-  else if (Prefix == "$w") { // Parse $w0-$w31.
-    RC = getRegClassFor((VT == MVT::Other) ? MVT::v16i8 : VT);
   } else { // Parse $0-$31.
     assert(Prefix == "$");
     RC = getRegClassFor((VT == MVT::Other) ? MVT::i32 : VT);
@@ -2724,46 +2577,17 @@ FgpuTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
     case 'y': // Same as 'r'. Exists for compatibility.
     case 'r':
       if (VT == MVT::i32 || VT == MVT::i16 || VT == MVT::i8) {
-        return std::make_pair(0U, &Fgpu::GPR32RegClass);
+        return std::make_pair(0U, &Fgpu::GPROutRegClass);
       }
-      if (VT == MVT::i64 && !Subtarget.isGP64bit())
-        return std::make_pair(0U, &Fgpu::GPR32RegClass);
-      if (VT == MVT::i64 && Subtarget.isGP64bit())
-        return std::make_pair(0U, &Fgpu::GPR64RegClass);
       // This will generate an error message
       return std::make_pair(0U, nullptr);
     case 'f': // FPU or MSA register
-      if (VT == MVT::v16i8)
-        return std::make_pair(0U, &Fgpu::MSA128BRegClass);
-      else if (VT == MVT::v8i16 || VT == MVT::v8f16)
-        return std::make_pair(0U, &Fgpu::MSA128HRegClass);
-      else if (VT == MVT::v4i32 || VT == MVT::v4f32)
-        return std::make_pair(0U, &Fgpu::MSA128WRegClass);
-      else if (VT == MVT::v2i64 || VT == MVT::v2f64)
-        return std::make_pair(0U, &Fgpu::MSA128DRegClass);
-      else if (VT == MVT::f32)
-        return std::make_pair(0U, &Fgpu::FGR32RegClass);
-      else if ((VT == MVT::f64) && (!Subtarget.isSingleFloat())) {
-        if (Subtarget.isFP64bit())
-          return std::make_pair(0U, &Fgpu::FGR64RegClass);
-        return std::make_pair(0U, &Fgpu::AFGR64RegClass);
-      }
+      if (VT == MVT::v32f32)
+        return std::make_pair(0U, &Fgpu::VecRegsRegClass);
       break;
     case 'c': // register suitable for indirect jump
       if (VT == MVT::i32)
-        return std::make_pair((unsigned)Fgpu::T9, &Fgpu::GPR32RegClass);
-      if (VT == MVT::i64)
-        return std::make_pair((unsigned)Fgpu::T9_64, &Fgpu::GPR64RegClass);
-      // This will generate an error message
-      return std::make_pair(0U, nullptr);
-    case 'l': // use the `lo` register to store values
-              // that are no bigger than a word
-      if (VT == MVT::i32 || VT == MVT::i16 || VT == MVT::i8)
-        return std::make_pair((unsigned)Fgpu::LO0, &Fgpu::LO32RegClass);
-      return std::make_pair((unsigned)Fgpu::LO0_64, &Fgpu::LO64RegClass);
-    case 'x': // use the concatenated `hi` and `lo` registers
-              // to store doubleword values
-      // Fixme: Not triggering the use of both hi and low
+        return std::make_pair((unsigned)Fgpu::R25, &Fgpu::GPROutRegClass);
       // This will generate an error message
       return std::make_pair(0U, nullptr);
     }
@@ -2906,8 +2730,6 @@ FgpuTargetLowering::isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const {
 
 EVT FgpuTargetLowering::getOptimalMemOpType(
     const MemOp &Op, const AttributeList &FuncAttributes) const {
-  if (Subtarget.hasFgpu64())
-    return MVT::i64;
 
   return MVT::i32;
 }
@@ -2923,15 +2745,11 @@ bool FgpuTargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
 
 unsigned FgpuTargetLowering::getJumpTableEncoding() const {
 
-  // FIXME: For space reasons this should be: EK_GPRel32BlockAddress.
-  if (ABI.IsN64() && isPositionIndependent())
-    return MachineJumpTableInfo::EK_GPRel64BlockAddress;
-
   return TargetLowering::getJumpTableEncoding();
 }
 
 bool FgpuTargetLowering::useSoftFloat() const {
-  return Subtarget.useSoftFloat();
+  return false;
 }
 
 void FgpuTargetLowering::copyByValRegs(
@@ -2942,7 +2760,7 @@ void FgpuTargetLowering::copyByValRegs(
     FgpuCCState &State) const {
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo &MFI = MF.getFrameInfo();
-  unsigned GPRSizeInBytes = Subtarget.getGPRSizeInBytes();
+  unsigned GPRSizeInBytes = 4;
   unsigned NumRegs = LastReg - FirstReg;
   unsigned RegAreaSize = NumRegs * GPRSizeInBytes;
   unsigned FrameObjSize = std::max(Flags.getByValSize(), RegAreaSize);
@@ -2996,7 +2814,7 @@ void FgpuTargetLowering::passByValArg(
     const CCValAssign &VA) const {
   unsigned ByValSizeInBytes = Flags.getByValSize();
   unsigned OffsetInBytes = 0; // From beginning of struct
-  unsigned RegSizeInBytes = Subtarget.getGPRSizeInBytes();
+  unsigned RegSizeInBytes = 4;
   Align Alignment =
       std::min(Flags.getNonZeroByValAlign(), Align(RegSizeInBytes));
   EVT PtrTy = getPointerTy(DAG.getDataLayout()),
@@ -3089,7 +2907,7 @@ void FgpuTargetLowering::writeVarArgRegs(std::vector<SDValue> &OutChains,
                                          CCState &State) const {
   ArrayRef<MCPhysReg> ArgRegs = ABI.GetVarArgRegs();
   unsigned Idx = State.getFirstUnallocated(ArgRegs);
-  unsigned RegSizeInBytes = Subtarget.getGPRSizeInBytes();
+  unsigned RegSizeInBytes = 4;
   MVT RegTy = MVT::getIntegerVT(RegSizeInBytes * 8);
   const TargetRegisterClass *RC = getRegClassFor(RegTy);
   MachineFunction &MF = DAG.getMachineFunction();
@@ -3142,11 +2960,10 @@ void FgpuTargetLowering::HandleByVal(CCState *State, unsigned &Size,
   unsigned NumRegs = 0;
 
   if (State->getCallingConv() != CallingConv::Fast) {
-    unsigned RegSizeInBytes = Subtarget.getGPRSizeInBytes();
+    unsigned RegSizeInBytes = 4;
     ArrayRef<MCPhysReg> IntArgRegs = ABI.GetByValArgRegs();
     // FIXME: The O32 case actually describes no shadow registers.
-    const MCPhysReg *ShadowRegs =
-        ABI.IsO32() ? IntArgRegs.data() : Fgpu64DPRegs;
+    const MCPhysReg *ShadowRegs =  IntArgRegs.data();
 
     // We used to check the size as well but we can't do that anymore since
     // CCState::HandleByVal() rounds up the size after calling this function.
@@ -3179,9 +2996,10 @@ MachineBasicBlock *FgpuTargetLowering::emitPseudoSELECT(MachineInstr &MI,
                                                         MachineBasicBlock *BB,
                                                         bool isFPCmp,
                                                         unsigned Opc) const {
-  assert(!(Subtarget.hasFgpu4() || Subtarget.hasFgpu32()) &&
-         "Subtarget already supports SELECT nodes with the use of"
-         "conditional-move instructions.");
+//  assert(!(Subtarget.hasFgpu4() || Subtarget.hasFgpu32()) &&
+//         "Subtarget already supports SELECT nodes with the use of"
+//         "conditional-move instructions.");
+// TODO: can we use the movz/movn things??
 
   const TargetInstrInfo *TII =
       Subtarget.getInstrInfo();
@@ -3256,9 +3074,9 @@ MachineBasicBlock *FgpuTargetLowering::emitPseudoSELECT(MachineInstr &MI,
 MachineBasicBlock *
 FgpuTargetLowering::emitPseudoD_SELECT(MachineInstr &MI,
                                        MachineBasicBlock *BB) const {
-  assert(!(Subtarget.hasFgpu4() || Subtarget.hasFgpu32()) &&
-         "Subtarget already supports SELECT nodes with the use of"
-         "conditional-move instructions.");
+//  assert(!(Subtarget.hasFgpu4() || Subtarget.hasFgpu32()) &&
+//         "Subtarget already supports SELECT nodes with the use of"
+//         "conditional-move instructions.");
 
   const TargetInstrInfo *TII = Subtarget.getInstrInfo();
   DebugLoc DL = MI.getDebugLoc();
@@ -3336,15 +3154,9 @@ FgpuTargetLowering::getRegisterByName(const char *RegName, LLT VT,
                                       const MachineFunction &MF) const {
   // Named registers is expected to be fairly rare. For now, just support $28
   // since the linux kernel uses it.
-  if (Subtarget.isGP64bit()) {
+  {
     Register Reg = StringSwitch<Register>(RegName)
-                         .Case("$28", Fgpu::GP_64)
-                         .Default(Register());
-    if (Reg)
-      return Reg;
-  } else {
-    Register Reg = StringSwitch<Register>(RegName)
-                         .Case("$28", Fgpu::GP)
+                         .Case("$28", Fgpu::R28)
                          .Default(Register());
     if (Reg)
       return Reg;
@@ -3357,7 +3169,7 @@ MachineBasicBlock *FgpuTargetLowering::emitLDR_W(MachineInstr &MI,
   MachineFunction *MF = BB->getParent();
   MachineRegisterInfo &MRI = MF->getRegInfo();
   const TargetInstrInfo *TII = Subtarget.getInstrInfo();
-  const bool IsLittle = Subtarget.isLittle();
+  const bool IsLittle = true;
   DebugLoc DL = MI.getDebugLoc();
 
   Register Dest = MI.getOperand(0).getReg();
@@ -3366,33 +3178,14 @@ MachineBasicBlock *FgpuTargetLowering::emitLDR_W(MachineInstr &MI,
 
   MachineBasicBlock::iterator I(MI);
 
-  if (Subtarget.hasFgpu32r6() || Subtarget.hasFgpu64r6()) {
-    // Fgpu release 6 can load from adress that is not naturally-aligned.
-    Register Temp = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::LW))
-        .addDef(Temp)
-        .addUse(Address)
-        .addImm(Imm);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::FILL_W)).addDef(Dest).addUse(Temp);
-  } else {
-    // Fgpu release 5 needs to use instructions that can load from an unaligned
-    // memory address.
-    Register LoadHalf = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    Register LoadFull = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    Register Undef = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::IMPLICIT_DEF)).addDef(Undef);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::LWR))
-        .addDef(LoadHalf)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 0 : 3))
-        .addUse(Undef);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::LWL))
-        .addDef(LoadFull)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 3 : 0))
-        .addUse(LoadHalf);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::FILL_W)).addDef(Dest).addUse(LoadFull);
-  }
+  // Fgpu release 6 can load from adress that is not naturally-aligned.
+  //Register Temp = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+  BuildMI(*BB, I, DL, TII->get(Fgpu::LW))
+      .addDef(Dest)
+      .addUse(Address)
+      .addImm(Imm);
+  //BuildMI(*BB, I, DL, TII->get(Fgpu::FILL_W)).addDef(Dest).addUse(Temp);
+  //TODO: uhh is this correct
 
   MI.eraseFromParent();
   return BB;
@@ -3403,7 +3196,7 @@ MachineBasicBlock *FgpuTargetLowering::emitLDR_D(MachineInstr &MI,
   MachineFunction *MF = BB->getParent();
   MachineRegisterInfo &MRI = MF->getRegInfo();
   const TargetInstrInfo *TII = Subtarget.getInstrInfo();
-  const bool IsLittle = Subtarget.isLittle();
+  const bool IsLittle = true;
   DebugLoc DL = MI.getDebugLoc();
 
   Register Dest = MI.getOperand(0).getReg();
@@ -3411,72 +3204,73 @@ MachineBasicBlock *FgpuTargetLowering::emitLDR_D(MachineInstr &MI,
   unsigned Imm = MI.getOperand(2).getImm();
 
   MachineBasicBlock::iterator I(MI);
+  assert(false && "Wide load not supported");
 
-  if (Subtarget.hasFgpu32r6() || Subtarget.hasFgpu64r6()) {
-    // Fgpu release 6 can load from adress that is not naturally-aligned.
-    if (Subtarget.isGP64bit()) {
-      Register Temp = MRI.createVirtualRegister(&Fgpu::GPR64RegClass);
-      BuildMI(*BB, I, DL, TII->get(Fgpu::LD))
-          .addDef(Temp)
-          .addUse(Address)
-          .addImm(Imm);
-      BuildMI(*BB, I, DL, TII->get(Fgpu::FILL_D)).addDef(Dest).addUse(Temp);
-    } else {
-      Register Wtemp = MRI.createVirtualRegister(&Fgpu::MSA128WRegClass);
-      Register Lo = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-      Register Hi = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-      BuildMI(*BB, I, DL, TII->get(Fgpu::LW))
-          .addDef(Lo)
-          .addUse(Address)
-          .addImm(Imm + (IsLittle ? 0 : 4));
-      BuildMI(*BB, I, DL, TII->get(Fgpu::LW))
-          .addDef(Hi)
-          .addUse(Address)
-          .addImm(Imm + (IsLittle ? 4 : 0));
-      BuildMI(*BB, I, DL, TII->get(Fgpu::FILL_W)).addDef(Wtemp).addUse(Lo);
-      BuildMI(*BB, I, DL, TII->get(Fgpu::INSERT_W), Dest)
-          .addUse(Wtemp)
-          .addUse(Hi)
-          .addImm(1);
-    }
-  } else {
-    // Fgpu release 5 needs to use instructions that can load from an unaligned
-    // memory address.
-    Register LoHalf = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    Register LoFull = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    Register LoUndef = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    Register HiHalf = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    Register HiFull = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    Register HiUndef = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    Register Wtemp = MRI.createVirtualRegister(&Fgpu::MSA128WRegClass);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::IMPLICIT_DEF)).addDef(LoUndef);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::LWR))
-        .addDef(LoHalf)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 0 : 7))
-        .addUse(LoUndef);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::LWL))
-        .addDef(LoFull)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 3 : 4))
-        .addUse(LoHalf);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::IMPLICIT_DEF)).addDef(HiUndef);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::LWR))
-        .addDef(HiHalf)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 4 : 3))
-        .addUse(HiUndef);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::LWL))
-        .addDef(HiFull)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 7 : 0))
-        .addUse(HiHalf);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::FILL_W)).addDef(Wtemp).addUse(LoFull);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::INSERT_W), Dest)
-        .addUse(Wtemp)
-        .addUse(HiFull)
-        .addImm(1);
-  }
+//  if (Subtarget.hasFgpu32r6() || Subtarget.hasFgpu64r6()) {
+//    // Fgpu release 6 can load from adress that is not naturally-aligned.
+//    if (Subtarget.isGP64bit()) {
+//      Register Temp = MRI.createVirtualRegister(&Fgpu::GPR64RegClass);
+//      BuildMI(*BB, I, DL, TII->get(Fgpu::LD))
+//          .addDef(Temp)
+//          .addUse(Address)
+//          .addImm(Imm);
+//      BuildMI(*BB, I, DL, TII->get(Fgpu::FILL_D)).addDef(Dest).addUse(Temp);
+//    } else {
+//      Register Wtemp = MRI.createVirtualRegister(&Fgpu::MSA128WRegClass);
+//      Register Lo = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//      Register Hi = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//      BuildMI(*BB, I, DL, TII->get(Fgpu::LW))
+//          .addDef(Lo)
+//          .addUse(Address)
+//          .addImm(Imm + (IsLittle ? 0 : 4));
+//      BuildMI(*BB, I, DL, TII->get(Fgpu::LW))
+//          .addDef(Hi)
+//          .addUse(Address)
+//          .addImm(Imm + (IsLittle ? 4 : 0));
+//      BuildMI(*BB, I, DL, TII->get(Fgpu::FILL_W)).addDef(Wtemp).addUse(Lo);
+//      BuildMI(*BB, I, DL, TII->get(Fgpu::INSERT_W), Dest)
+//          .addUse(Wtemp)
+//          .addUse(Hi)
+//          .addImm(1);
+//    }
+//  } else {
+//    // Fgpu release 5 needs to use instructions that can load from an unaligned
+//    // memory address.
+//    Register LoHalf = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    Register LoFull = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    Register LoUndef = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    Register HiHalf = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    Register HiFull = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    Register HiUndef = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    Register Wtemp = MRI.createVirtualRegister(&Fgpu::MSA128WRegClass);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::IMPLICIT_DEF)).addDef(LoUndef);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::LWR))
+//        .addDef(LoHalf)
+//        .addUse(Address)
+//        .addImm(Imm + (IsLittle ? 0 : 7))
+//        .addUse(LoUndef);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::LWL))
+//        .addDef(LoFull)
+//        .addUse(Address)
+//        .addImm(Imm + (IsLittle ? 3 : 4))
+//        .addUse(LoHalf);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::IMPLICIT_DEF)).addDef(HiUndef);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::LWR))
+//        .addDef(HiHalf)
+//        .addUse(Address)
+//        .addImm(Imm + (IsLittle ? 4 : 3))
+//        .addUse(HiUndef);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::LWL))
+//        .addDef(HiFull)
+//        .addUse(Address)
+//        .addImm(Imm + (IsLittle ? 7 : 0))
+//        .addUse(HiHalf);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::FILL_W)).addDef(Wtemp).addUse(LoFull);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::INSERT_W), Dest)
+//        .addUse(Wtemp)
+//        .addUse(HiFull)
+//        .addImm(1);
+//  }
 
   MI.eraseFromParent();
   return BB;
@@ -3487,7 +3281,7 @@ MachineBasicBlock *FgpuTargetLowering::emitSTR_W(MachineInstr &MI,
   MachineFunction *MF = BB->getParent();
   MachineRegisterInfo &MRI = MF->getRegInfo();
   const TargetInstrInfo *TII = Subtarget.getInstrInfo();
-  const bool IsLittle = Subtarget.isLittle();
+  const bool IsLittle = true;
   DebugLoc DL = MI.getDebugLoc();
 
   Register StoreVal = MI.getOperand(0).getReg();
@@ -3495,37 +3289,11 @@ MachineBasicBlock *FgpuTargetLowering::emitSTR_W(MachineInstr &MI,
   unsigned Imm = MI.getOperand(2).getImm();
 
   MachineBasicBlock::iterator I(MI);
+  BuildMI(*BB, I, DL, TII->get(Fgpu::SW))
+      .addUse(StoreVal)
+      .addUse(Address)
+      .addImm(Imm);
 
-  if (Subtarget.hasFgpu32r6() || Subtarget.hasFgpu64r6()) {
-    // Fgpu release 6 can store to adress that is not naturally-aligned.
-    Register BitcastW = MRI.createVirtualRegister(&Fgpu::MSA128WRegClass);
-    Register Tmp = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::COPY)).addDef(BitcastW).addUse(StoreVal);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::COPY_S_W))
-        .addDef(Tmp)
-        .addUse(BitcastW)
-        .addImm(0);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::SW))
-        .addUse(Tmp)
-        .addUse(Address)
-        .addImm(Imm);
-  } else {
-    // Fgpu release 5 needs to use instructions that can store to an unaligned
-    // memory address.
-    Register Tmp = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::COPY_S_W))
-        .addDef(Tmp)
-        .addUse(StoreVal)
-        .addImm(0);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::SWR))
-        .addUse(Tmp)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 0 : 3));
-    BuildMI(*BB, I, DL, TII->get(Fgpu::SWL))
-        .addUse(Tmp)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 3 : 0));
-  }
 
   MI.eraseFromParent();
 
@@ -3537,7 +3305,7 @@ MachineBasicBlock *FgpuTargetLowering::emitSTR_D(MachineInstr &MI,
   MachineFunction *MF = BB->getParent();
   MachineRegisterInfo &MRI = MF->getRegInfo();
   const TargetInstrInfo *TII = Subtarget.getInstrInfo();
-  const bool IsLittle = Subtarget.isLittle();
+  const bool IsLittle = true;
   DebugLoc DL = MI.getDebugLoc();
 
   Register StoreVal = MI.getOperand(0).getReg();
@@ -3545,79 +3313,48 @@ MachineBasicBlock *FgpuTargetLowering::emitSTR_D(MachineInstr &MI,
   unsigned Imm = MI.getOperand(2).getImm();
 
   MachineBasicBlock::iterator I(MI);
+  assert(false && "Wide load not supported");
 
-  if (Subtarget.hasFgpu32r6() || Subtarget.hasFgpu64r6()) {
-    // Fgpu release 6 can store to adress that is not naturally-aligned.
-    if (Subtarget.isGP64bit()) {
-      Register BitcastD = MRI.createVirtualRegister(&Fgpu::MSA128DRegClass);
-      Register Lo = MRI.createVirtualRegister(&Fgpu::GPR64RegClass);
-      BuildMI(*BB, I, DL, TII->get(Fgpu::COPY))
-          .addDef(BitcastD)
-          .addUse(StoreVal);
-      BuildMI(*BB, I, DL, TII->get(Fgpu::COPY_S_D))
-          .addDef(Lo)
-          .addUse(BitcastD)
-          .addImm(0);
-      BuildMI(*BB, I, DL, TII->get(Fgpu::SD))
-          .addUse(Lo)
-          .addUse(Address)
-          .addImm(Imm);
-    } else {
-      Register BitcastW = MRI.createVirtualRegister(&Fgpu::MSA128WRegClass);
-      Register Lo = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-      Register Hi = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-      BuildMI(*BB, I, DL, TII->get(Fgpu::COPY))
-          .addDef(BitcastW)
-          .addUse(StoreVal);
-      BuildMI(*BB, I, DL, TII->get(Fgpu::COPY_S_W))
-          .addDef(Lo)
-          .addUse(BitcastW)
-          .addImm(0);
-      BuildMI(*BB, I, DL, TII->get(Fgpu::COPY_S_W))
-          .addDef(Hi)
-          .addUse(BitcastW)
-          .addImm(1);
-      BuildMI(*BB, I, DL, TII->get(Fgpu::SW))
-          .addUse(Lo)
-          .addUse(Address)
-          .addImm(Imm + (IsLittle ? 0 : 4));
-      BuildMI(*BB, I, DL, TII->get(Fgpu::SW))
-          .addUse(Hi)
-          .addUse(Address)
-          .addImm(Imm + (IsLittle ? 4 : 0));
-    }
-  } else {
-    // Fgpu release 5 needs to use instructions that can store to an unaligned
-    // memory address.
-    Register Bitcast = MRI.createVirtualRegister(&Fgpu::MSA128WRegClass);
-    Register Lo = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    Register Hi = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::COPY)).addDef(Bitcast).addUse(StoreVal);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::COPY_S_W))
-        .addDef(Lo)
-        .addUse(Bitcast)
-        .addImm(0);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::COPY_S_W))
-        .addDef(Hi)
-        .addUse(Bitcast)
-        .addImm(1);
-    BuildMI(*BB, I, DL, TII->get(Fgpu::SWR))
-        .addUse(Lo)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 0 : 3));
-    BuildMI(*BB, I, DL, TII->get(Fgpu::SWL))
-        .addUse(Lo)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 3 : 0));
-    BuildMI(*BB, I, DL, TII->get(Fgpu::SWR))
-        .addUse(Hi)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 4 : 7));
-    BuildMI(*BB, I, DL, TII->get(Fgpu::SWL))
-        .addUse(Hi)
-        .addUse(Address)
-        .addImm(Imm + (IsLittle ? 7 : 4));
-  }
+
+//  // Fgpu release 6 can store to adress that is not naturally-aligned.
+//  if (Subtarget.isGP64bit()) {
+//    Register BitcastD = MRI.createVirtualRegister(&Fgpu::MSA128DRegClass);
+//    Register Lo = MRI.createVirtualRegister(&Fgpu::GPR64RegClass);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::COPY))
+//        .addDef(BitcastD)
+//        .addUse(StoreVal);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::COPY_S_D))
+//        .addDef(Lo)
+//        .addUse(BitcastD)
+//        .addImm(0);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::SD))
+//        .addUse(Lo)
+//        .addUse(Address)
+//        .addImm(Imm);
+//  } else {
+//    Register BitcastW = MRI.createVirtualRegister(&Fgpu::MSA128WRegClass);
+//    Register Lo = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    Register Hi = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::COPY))
+//        .addDef(BitcastW)
+//        .addUse(StoreVal);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::COPY_S_W))
+//        .addDef(Lo)
+//        .addUse(BitcastW)
+//        .addImm(0);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::COPY_S_W))
+//        .addDef(Hi)
+//        .addUse(BitcastW)
+//        .addImm(1);
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::SW))
+//        .addUse(Lo)
+//        .addUse(Address)
+//        .addImm(Imm + (IsLittle ? 0 : 4));
+//    BuildMI(*BB, I, DL, TII->get(Fgpu::SW))
+//        .addUse(Hi)
+//        .addUse(Address)
+//        .addImm(Imm + (IsLittle ? 4 : 0));
+//  }
 
   MI.eraseFromParent();
   return BB;

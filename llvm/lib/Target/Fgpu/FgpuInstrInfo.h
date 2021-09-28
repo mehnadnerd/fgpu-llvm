@@ -73,9 +73,6 @@ public:
                         const DebugLoc &DL,
                         int *BytesAdded = nullptr) const override;
 
-  bool
-  reverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
-
   BranchType analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                            MachineBasicBlock *&FBB,
                            SmallVectorImpl<MachineOperand> &Cond,
@@ -98,7 +95,7 @@ public:
   /// always be able to get register info as well (through this method).
   virtual const FgpuRegisterInfo &getRegisterInfo() const = 0;
 
-  virtual unsigned getOppositeBranchOpc(unsigned Opc) const = 0;
+  unsigned getOppositeBranchOpc(unsigned Opc) const;
 
   virtual bool isBranchWithImm(unsigned Opc) const {
     return false;
@@ -172,7 +169,7 @@ protected:
                                    MachineMemOperand::Flags Flags) const;
 
 private:
-  virtual unsigned getAnalyzableBrOpc(unsigned Opc) const = 0;
+  unsigned getAnalyzableBrOpc(unsigned Opc) const;
 
   void AnalyzeCondBr(const MachineInstr *Inst, unsigned Opc,
                      MachineBasicBlock *&BB,

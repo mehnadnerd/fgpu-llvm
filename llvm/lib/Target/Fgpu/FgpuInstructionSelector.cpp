@@ -125,17 +125,11 @@ const TargetRegisterClass *FgpuInstructionSelector::getRegClassForTypeOnBank(
   if (isRegInGprb(Reg, MRI)) {
     assert((Ty.isScalar() || Ty.isPointer()) && TySize == 32 &&
            "Register class not available for LLT, register bank combination");
-    return &Fgpu::GPR32RegClass;
+    return &Fgpu::GPROutRegClass;
   }
 
   if (isRegInFprb(Reg, MRI)) {
-    if (Ty.isScalar()) {
-      assert((TySize == 32 || TySize == 64) &&
-             "Register class not available for LLT, register bank combination");
-      if (TySize == 32)
-        return &Fgpu::FGR32RegClass;
-      return STI.isFP64bit() ? &Fgpu::FGR64RegClass : &Fgpu::AFGR64RegClass;
-    }
+    return &Fgpu::VecRegsRegClass;
   }
 
   llvm_unreachable("Unsupported register bank.");
@@ -185,7 +179,7 @@ FgpuInstructionSelector::selectLoadStoreOpCode(MachineInstr &I,
     assert(((Ty.isScalar() && TySize == 32) ||
             (Ty.isPointer() && TySize == 32 && MemSizeInBytes == 4)) &&
            "Unsupported register bank, LLT, MemSizeInBytes combination");
-    assert(!G_SEXTLOAD && "SEXT loads not supported");
+    //assert(!G_SEXTLOAD && "SEXT loads not supported");
     (void)TySize;
     if (isStore)
       switch (MemSizeInBytes) {
@@ -213,35 +207,10 @@ FgpuInstructionSelector::selectLoadStoreOpCode(MachineInstr &I,
   }
 
   if (isRegInFprb(ValueReg, MRI)) {
-    if (Ty.isScalar()) {
-      assert(((TySize == 32 && MemSizeInBytes == 4) ||
-              (TySize == 64 && MemSizeInBytes == 8)) &&
-             "Unsupported register bank, LLT, MemSizeInBytes combination");
-
-      if (MemSizeInBytes == 4)
-        return isStore ? Fgpu::SWC1 : Fgpu::LWC1;
-
-      if (STI.isFP64bit())
-        return isStore ? Fgpu::SDC164 : Fgpu::LDC164;
-      return isStore ? Fgpu::SDC1 : Fgpu::LDC1;
-    }
-
-    if (Ty.isVector()) {
-      assert(STI.hasMSA() && "Vector instructions require target with MSA.");
-      assert((TySize == 128 && MemSizeInBytes == 16) &&
-             "Unsupported register bank, LLT, MemSizeInBytes combination");
-      switch (Ty.getElementType().getSizeInBits()) {
-      case 8:
-        return isStore ? Fgpu::ST_B : Fgpu::LD_B;
-      case 16:
-        return isStore ? Fgpu::ST_H : Fgpu::LD_H;
-      case 32:
-        return isStore ? Fgpu::ST_W : Fgpu::LD_W;
-      case 64:
-        return isStore ? Fgpu::ST_D : Fgpu::LD_D;
-      default:
-        return Opc;
-      }
+    if (isStore) {
+      return Fgpu::SWC;
+    } else {
+      return Fgpu::LWC;
     }
   }
 
@@ -290,21 +259,6 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
     return true;
   }
 
-  if (I.getOpcode() == Fgpu::G_MUL &&
-      isRegInGprb(I.getOperand(0).getReg(), MRI)) {
-    MachineInstr *Mul = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::MUL))
-                            .add(I.getOperand(0))
-                            .add(I.getOperand(1))
-                            .add(I.getOperand(2));
-    if (!constrainSelectedInstRegOperands(*Mul, TII, TRI, RBI))
-      return false;
-    Mul->getOperand(3).setIsDead(true);
-    Mul->getOperand(4).setIsDead(true);
-
-    I.eraseFromParent();
-    return true;
-  }
-
   if (selectImpl(I, *CoverageInfo))
     return true;
 
@@ -312,28 +266,8 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
   using namespace TargetOpcode;
 
   switch (I.getOpcode()) {
-  case G_UMULH: {
-    Register PseudoMULTuReg = MRI.createVirtualRegister(&Fgpu::ACC64RegClass);
-    MachineInstr *PseudoMULTu, *PseudoMove;
-
-    PseudoMULTu = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::PseudoMULTu))
-                      .addDef(PseudoMULTuReg)
-                      .add(I.getOperand(1))
-                      .add(I.getOperand(2));
-    if (!constrainSelectedInstRegOperands(*PseudoMULTu, TII, TRI, RBI))
-      return false;
-
-    PseudoMove = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::PseudoMFHI))
-                     .addDef(I.getOperand(0).getReg())
-                     .addUse(PseudoMULTuReg);
-    if (!constrainSelectedInstRegOperands(*PseudoMove, TII, TRI, RBI))
-      return false;
-
-    I.eraseFromParent();
-    return true;
-  }
   case G_PTR_ADD: {
-    MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADDu))
+    MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADD))
              .add(I.getOperand(0))
              .add(I.getOperand(1))
              .add(I.getOperand(2));
@@ -345,7 +279,7 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
     return selectCopy(I, MRI);
   }
   case G_FRAME_INDEX: {
-    MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADDiu))
+    MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADDi))
              .add(I.getOperand(0))
              .add(I.getOperand(1))
              .addImm(0);
@@ -363,59 +297,61 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
         MF.getJumpTableInfo()->getEntrySize(MF.getDataLayout());
     assert(isPowerOf2_32(EntrySize) &&
            "Non-power-of-two jump-table entry size not supported.");
-
-    Register JTIndex = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    MachineInstr *SLL = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::SLL))
-                            .addDef(JTIndex)
-                            .addUse(I.getOperand(2).getReg())
-                            .addImm(Log2_32(EntrySize));
-    if (!constrainSelectedInstRegOperands(*SLL, TII, TRI, RBI))
-      return false;
-
-    Register DestAddress = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    MachineInstr *ADDu = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADDu))
-                             .addDef(DestAddress)
-                             .addUse(I.getOperand(0).getReg())
-                             .addUse(JTIndex);
-    if (!constrainSelectedInstRegOperands(*ADDu, TII, TRI, RBI))
-      return false;
-
-    Register Dest = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    MachineInstr *LW =
-        BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::LW))
-            .addDef(Dest)
-            .addUse(DestAddress)
-            .addJumpTableIndex(I.getOperand(1).getIndex(), FgpuII::MO_ABS_LO)
-            .addMemOperand(MF.getMachineMemOperand(
-                MachinePointerInfo(), MachineMemOperand::MOLoad, 4, Align(4)));
-    if (!constrainSelectedInstRegOperands(*LW, TII, TRI, RBI))
-      return false;
-
-    if (MF.getTarget().isPositionIndependent()) {
-      Register DestTmp = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-      LW->getOperand(0).setReg(DestTmp);
-      MachineInstr *ADDu = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADDu))
-                               .addDef(Dest)
-                               .addUse(DestTmp)
-                               .addUse(MF.getInfo<FgpuFunctionInfo>()
-                                           ->getGlobalBaseRegForGlobalISel(MF));
-      if (!constrainSelectedInstRegOperands(*ADDu, TII, TRI, RBI))
-        return false;
-    }
-
-    MachineInstr *Branch =
-        BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::PseudoIndirectBranch))
-            .addUse(Dest);
-    if (!constrainSelectedInstRegOperands(*Branch, TII, TRI, RBI))
-      return false;
-
-    I.eraseFromParent();
-    return true;
+    return false; // TODO: support
+//
+//    Register JTIndex = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    MachineInstr *SLL = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::SLL))
+//                            .addDef(JTIndex)
+//                            .addUse(I.getOperand(2).getReg())
+//                            .addImm(Log2_32(EntrySize));
+//    if (!constrainSelectedInstRegOperands(*SLL, TII, TRI, RBI))
+//      return false;
+//
+//    Register DestAddress = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    MachineInstr *ADDu = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADD))
+//                             .addDef(DestAddress)
+//                             .addUse(I.getOperand(0).getReg())
+//                             .addUse(JTIndex);
+//    if (!constrainSelectedInstRegOperands(*ADDu, TII, TRI, RBI))
+//      return false;
+//
+//    Register Dest = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    MachineInstr *LW =
+//        BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::LW))
+//            .addDef(Dest)
+//            .addUse(DestAddress)
+//            .addJumpTableIndex(I.getOperand(1).getIndex(), FgpuII::MO_ABS_LO)
+//            .addMemOperand(MF.getMachineMemOperand(
+//                MachinePointerInfo(), MachineMemOperand::MOLoad, 4, Align(4)));
+//    if (!constrainSelectedInstRegOperands(*LW, TII, TRI, RBI))
+//      return false;
+//
+//    if (MF.getTarget().isPositionIndependent()) {
+//      Register DestTmp = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//      LW->getOperand(0).setReg(DestTmp);
+//      MachineInstr *ADDu = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADD))
+//                               .addDef(Dest)
+//                               .addUse(DestTmp)
+//                               .addUse(MF.getInfo<FgpuFunctionInfo>()
+//                                           ->getGlobalBaseRegForGlobalISel(MF));
+//      if (!constrainSelectedInstRegOperands(*ADDu, TII, TRI, RBI))
+//        return false;
+//    }
+//
+//    MachineInstr *Branch =
+//        BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::PseudoIndirectBranch))
+//            .addUse(Dest);
+//    if (!constrainSelectedInstRegOperands(*Branch, TII, TRI, RBI))
+//      return false;
+//
+//    I.eraseFromParent();
+//    return true;
   }
   case G_BRINDIRECT: {
-    MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::PseudoIndirectBranch))
-             .add(I.getOperand(0));
-    break;
+    return false; // TODO: support
+//    MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::PseudoIndirectBranch))
+//             .add(I.getOperand(0));
+//    break;
   }
   case G_PHI: {
     const Register DestReg = I.getOperand(0).getReg();
@@ -461,29 +397,32 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
       if (MMO->getSize() != 4 || !isRegInGprb(I.getOperand(0).getReg(), MRI))
         return false;
 
-      if (I.getOpcode() == G_STORE) {
-        if (!buildUnalignedStore(I, Fgpu::SWL, BaseAddr, SignedOffset + 3, MMO))
-          return false;
-        if (!buildUnalignedStore(I, Fgpu::SWR, BaseAddr, SignedOffset, MMO))
-          return false;
-        I.eraseFromParent();
-        return true;
-      }
+      // TODO: build unaligned access
+      return false;
 
-      if (I.getOpcode() == G_LOAD) {
-        Register ImplDef = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-        BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::IMPLICIT_DEF))
-            .addDef(ImplDef);
-        Register Tmp = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-        if (!buildUnalignedLoad(I, Fgpu::LWL, Tmp, BaseAddr, SignedOffset + 3,
-                                ImplDef, MMO))
-          return false;
-        if (!buildUnalignedLoad(I, Fgpu::LWR, I.getOperand(0).getReg(),
-                                BaseAddr, SignedOffset, Tmp, MMO))
-          return false;
-        I.eraseFromParent();
-        return true;
-      }
+//      if (I.getOpcode() == G_STORE) {
+//        if (!buildUnalignedStore(I, Fgpu::SWL, BaseAddr, SignedOffset + 3, MMO))
+//          return false;
+//        if (!buildUnalignedStore(I, Fgpu::SWR, BaseAddr, SignedOffset, MMO))
+//          return false;
+//        I.eraseFromParent();
+//        return true;
+//      }
+//
+//      if (I.getOpcode() == G_LOAD) {
+//        Register ImplDef = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//        BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::IMPLICIT_DEF))
+//            .addDef(ImplDef);
+//        Register Tmp = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//        if (!buildUnalignedLoad(I, Fgpu::LWL, Tmp, BaseAddr, SignedOffset + 3,
+//                                ImplDef, MMO))
+//          return false;
+//        if (!buildUnalignedLoad(I, Fgpu::LWR, I.getOperand(0).getReg(),
+//                                BaseAddr, SignedOffset, Tmp, MMO))
+//          return false;
+//        I.eraseFromParent();
+//        return true;
+//      }
 
       return false;
     }
@@ -499,72 +438,15 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
              .addMemOperand(MMO);
     break;
   }
-  case G_UDIV:
-  case G_UREM:
-  case G_SDIV:
-  case G_SREM: {
-    Register HILOReg = MRI.createVirtualRegister(&Fgpu::ACC64RegClass);
-    bool IsSigned = I.getOpcode() == G_SREM || I.getOpcode() == G_SDIV;
-    bool IsDiv = I.getOpcode() == G_UDIV || I.getOpcode() == G_SDIV;
-
-    MachineInstr *PseudoDIV, *PseudoMove;
-    PseudoDIV = BuildMI(MBB, I, I.getDebugLoc(),
-                        TII.get(IsSigned ? Fgpu::PseudoSDIV : Fgpu::PseudoUDIV))
-                    .addDef(HILOReg)
-                    .add(I.getOperand(1))
-                    .add(I.getOperand(2));
-    if (!constrainSelectedInstRegOperands(*PseudoDIV, TII, TRI, RBI))
-      return false;
-
-    PseudoMove = BuildMI(MBB, I, I.getDebugLoc(),
-                         TII.get(IsDiv ? Fgpu::PseudoMFLO : Fgpu::PseudoMFHI))
-                     .addDef(I.getOperand(0).getReg())
-                     .addUse(HILOReg);
-    if (!constrainSelectedInstRegOperands(*PseudoMove, TII, TRI, RBI))
-      return false;
-
-    I.eraseFromParent();
-    return true;
-  }
-  case G_SELECT: {
-    // Handle operands with pointer type.
-    MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::MOVN_I_I))
-             .add(I.getOperand(0))
-             .add(I.getOperand(2))
-             .add(I.getOperand(1))
-             .add(I.getOperand(3));
-    break;
-  }
-  case G_UNMERGE_VALUES: {
-    if (I.getNumOperands() != 3)
-      return false;
-    Register Src = I.getOperand(2).getReg();
-    Register Lo = I.getOperand(0).getReg();
-    Register Hi = I.getOperand(1).getReg();
-    if (!isRegInFprb(Src, MRI) ||
-        !(isRegInGprb(Lo, MRI) && isRegInGprb(Hi, MRI)))
-      return false;
-
-    unsigned Opcode =
-        STI.isFP64bit() ? Fgpu::ExtractElementF64_64 : Fgpu::ExtractElementF64;
-
-    MachineInstr *ExtractLo = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Opcode))
-                                  .addDef(Lo)
-                                  .addUse(Src)
-                                  .addImm(0);
-    if (!constrainSelectedInstRegOperands(*ExtractLo, TII, TRI, RBI))
-      return false;
-
-    MachineInstr *ExtractHi = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Opcode))
-                                  .addDef(Hi)
-                                  .addUse(Src)
-                                  .addImm(1);
-    if (!constrainSelectedInstRegOperands(*ExtractHi, TII, TRI, RBI))
-      return false;
-
-    I.eraseFromParent();
-    return true;
-  }
+//  case G_SELECT: { //TODO: wtf is this
+//    // Handle operands with pointer type.
+//    MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::MOVN_I_I))
+//             .add(I.getOperand(0))
+//             .add(I.getOperand(2))
+//             .add(I.getOperand(1))
+//             .add(I.getOperand(3));
+//    break;
+//  }
   case G_IMPLICIT_DEF: {
     Register Dst = I.getOperand(0).getReg();
     MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::IMPLICIT_DEF))
@@ -578,80 +460,6 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
     MachineIRBuilder B(I);
     if (!materialize32BitImm(I.getOperand(0).getReg(),
                              I.getOperand(1).getCImm()->getValue(), B))
-      return false;
-
-    I.eraseFromParent();
-    return true;
-  }
-  case G_FCONSTANT: {
-    const APFloat &FPimm = I.getOperand(1).getFPImm()->getValueAPF();
-    APInt APImm = FPimm.bitcastToAPInt();
-    unsigned Size = MRI.getType(I.getOperand(0).getReg()).getSizeInBits();
-
-    if (Size == 32) {
-      Register GPRReg = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-      MachineIRBuilder B(I);
-      if (!materialize32BitImm(GPRReg, APImm, B))
-        return false;
-
-      MachineInstrBuilder MTC1 =
-          B.buildInstr(Fgpu::MTC1, {I.getOperand(0).getReg()}, {GPRReg});
-      if (!MTC1.constrainAllUses(TII, TRI, RBI))
-        return false;
-    }
-    if (Size == 64) {
-      Register GPRRegHigh = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-      Register GPRRegLow = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-      MachineIRBuilder B(I);
-      if (!materialize32BitImm(GPRRegHigh, APImm.getHiBits(32).trunc(32), B))
-        return false;
-      if (!materialize32BitImm(GPRRegLow, APImm.getLoBits(32).trunc(32), B))
-        return false;
-
-      MachineInstrBuilder PairF64 = B.buildInstr(
-          STI.isFP64bit() ? Fgpu::BuildPairF64_64 : Fgpu::BuildPairF64,
-          {I.getOperand(0).getReg()}, {GPRRegLow, GPRRegHigh});
-      if (!PairF64.constrainAllUses(TII, TRI, RBI))
-        return false;
-    }
-
-    I.eraseFromParent();
-    return true;
-  }
-  case G_FABS: {
-    unsigned Size = MRI.getType(I.getOperand(0).getReg()).getSizeInBits();
-    unsigned FABSOpcode =
-        Size == 32 ? Fgpu::FABS_S
-                   : STI.isFP64bit() ? Fgpu::FABS_D64 : Fgpu::FABS_D32;
-    MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(FABSOpcode))
-             .add(I.getOperand(0))
-             .add(I.getOperand(1));
-    break;
-  }
-  case G_FPTOSI: {
-    unsigned FromSize = MRI.getType(I.getOperand(1).getReg()).getSizeInBits();
-    unsigned ToSize = MRI.getType(I.getOperand(0).getReg()).getSizeInBits();
-    (void)ToSize;
-    assert((ToSize == 32) && "Unsupported integer size for G_FPTOSI");
-    assert((FromSize == 32 || FromSize == 64) &&
-           "Unsupported floating point size for G_FPTOSI");
-
-    unsigned Opcode;
-    if (FromSize == 32)
-      Opcode = Fgpu::TRUNC_W_S;
-    else
-      Opcode = STI.isFP64bit() ? Fgpu::TRUNC_W_D64 : Fgpu::TRUNC_W_D32;
-    Register ResultInFPR = MRI.createVirtualRegister(&Fgpu::FGR32RegClass);
-    MachineInstr *Trunc = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Opcode))
-                .addDef(ResultInFPR)
-                .addUse(I.getOperand(1).getReg());
-    if (!constrainSelectedInstRegOperands(*Trunc, TII, TRI, RBI))
-      return false;
-
-    MachineInstr *Move = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::MFC1))
-                             .addDef(I.getOperand(0).getReg())
-                             .addUse(ResultInFPR);
-    if (!constrainSelectedInstRegOperands(*Move, TII, TRI, RBI))
       return false;
 
     I.eraseFromParent();
@@ -680,11 +488,11 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
         return false;
 
       if (GVal->hasLocalLinkage()) {
-        Register LWGOTDef = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
+        Register LWGOTDef = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
         LWGOT->getOperand(0).setReg(LWGOTDef);
 
         MachineInstr *ADDiu =
-            BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADDiu))
+            BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADDi))
                 .addDef(I.getOperand(0).getReg())
                 .addReg(LWGOTDef)
                 .addGlobalAddress(GVal);
@@ -693,7 +501,7 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
           return false;
       }
     } else {
-      Register LUiReg = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
+      Register LUiReg = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
 
       MachineInstr *LUi = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::LUi))
                               .addDef(LUiReg)
@@ -702,8 +510,8 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
       if (!constrainSelectedInstRegOperands(*LUi, TII, TRI, RBI))
         return false;
 
-      MachineInstr *ADDiu =
-          BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADDiu))
+      MachineInstr *ADDiu = // TODO: shoudl this be LI??
+          BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADDi))
               .addDef(I.getOperand(0).getReg())
               .addUse(LUiReg)
               .addGlobalAddress(GVal);
@@ -748,7 +556,7 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
 
     SmallVector<struct Instr, 2> Instructions;
     Register ICMPReg = I.getOperand(0).getReg();
-    Register Temp = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
+    Register Temp = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
     Register LHS = I.getOperand(2).getReg();
     Register RHS = I.getOperand(3).getReg();
     CmpInst::Predicate Cond =
@@ -812,93 +620,93 @@ bool FgpuInstructionSelector::select(MachineInstr &I) {
     I.eraseFromParent();
     return true;
   }
-  case G_FCMP: {
-    unsigned FgpuFCMPCondCode;
-    bool isLogicallyNegated;
-    switch (CmpInst::Predicate Cond = static_cast<CmpInst::Predicate>(
-                I.getOperand(1).getPredicate())) {
-    case CmpInst::FCMP_UNO: // Unordered
-    case CmpInst::FCMP_ORD: // Ordered (OR)
-      FgpuFCMPCondCode = Fgpu::FCOND_UN;
-      isLogicallyNegated = Cond != CmpInst::FCMP_UNO;
-      break;
-    case CmpInst::FCMP_OEQ: // Equal
-    case CmpInst::FCMP_UNE: // Not Equal (NEQ)
-      FgpuFCMPCondCode = Fgpu::FCOND_OEQ;
-      isLogicallyNegated = Cond != CmpInst::FCMP_OEQ;
-      break;
-    case CmpInst::FCMP_UEQ: // Unordered or Equal
-    case CmpInst::FCMP_ONE: // Ordered or Greater Than or Less Than (OGL)
-      FgpuFCMPCondCode = Fgpu::FCOND_UEQ;
-      isLogicallyNegated = Cond != CmpInst::FCMP_UEQ;
-      break;
-    case CmpInst::FCMP_OLT: // Ordered or Less Than
-    case CmpInst::FCMP_UGE: // Unordered or Greater Than or Equal (UGE)
-      FgpuFCMPCondCode = Fgpu::FCOND_OLT;
-      isLogicallyNegated = Cond != CmpInst::FCMP_OLT;
-      break;
-    case CmpInst::FCMP_ULT: // Unordered or Less Than
-    case CmpInst::FCMP_OGE: // Ordered or Greater Than or Equal (OGE)
-      FgpuFCMPCondCode = Fgpu::FCOND_ULT;
-      isLogicallyNegated = Cond != CmpInst::FCMP_ULT;
-      break;
-    case CmpInst::FCMP_OLE: // Ordered or Less Than or Equal
-    case CmpInst::FCMP_UGT: // Unordered or Greater Than (UGT)
-      FgpuFCMPCondCode = Fgpu::FCOND_OLE;
-      isLogicallyNegated = Cond != CmpInst::FCMP_OLE;
-      break;
-    case CmpInst::FCMP_ULE: // Unordered or Less Than or Equal
-    case CmpInst::FCMP_OGT: // Ordered or Greater Than (OGT)
-      FgpuFCMPCondCode = Fgpu::FCOND_ULE;
-      isLogicallyNegated = Cond != CmpInst::FCMP_ULE;
-      break;
-    default:
-      return false;
-    }
-
-    // Default compare result in gpr register will be `true`.
-    // We will move `false` (FGPU::Zero) to gpr result when fcmp gives false
-    // using MOVF_I. When orignal predicate (Cond) is logically negated
-    // FgpuFCMPCondCode, result is inverted i.e. MOVT_I is used.
-    unsigned MoveOpcode = isLogicallyNegated ? Fgpu::MOVT_I : Fgpu::MOVF_I;
-
-    Register TrueInReg = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
-    BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADDiu))
-        .addDef(TrueInReg)
-        .addUse(Fgpu::ZERO)
-        .addImm(1);
-
-    unsigned Size = MRI.getType(I.getOperand(2).getReg()).getSizeInBits();
-    unsigned FCMPOpcode =
-        Size == 32 ? Fgpu::FCMP_S32
-                   : STI.isFP64bit() ? Fgpu::FCMP_D64 : Fgpu::FCMP_D32;
-    MachineInstr *FCMP = BuildMI(MBB, I, I.getDebugLoc(), TII.get(FCMPOpcode))
-                             .addUse(I.getOperand(2).getReg())
-                             .addUse(I.getOperand(3).getReg())
-                             .addImm(FgpuFCMPCondCode);
-    if (!constrainSelectedInstRegOperands(*FCMP, TII, TRI, RBI))
-      return false;
-
-    MachineInstr *Move = BuildMI(MBB, I, I.getDebugLoc(), TII.get(MoveOpcode))
-                             .addDef(I.getOperand(0).getReg())
-                             .addUse(Fgpu::ZERO)
-                             .addUse(Fgpu::FCC0)
-                             .addUse(TrueInReg);
-    if (!constrainSelectedInstRegOperands(*Move, TII, TRI, RBI))
-      return false;
-
-    I.eraseFromParent();
-    return true;
-  }
-  case G_FENCE: {
-    MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::SYNC)).addImm(0);
-    break;
-  }
+//  case G_FCMP: {
+//    unsigned FgpuFCMPCondCode;
+//    bool isLogicallyNegated;
+//    switch (CmpInst::Predicate Cond = static_cast<CmpInst::Predicate>(
+//                I.getOperand(1).getPredicate())) {
+//    case CmpInst::FCMP_UNO: // Unordered
+//    case CmpInst::FCMP_ORD: // Ordered (OR)
+//      FgpuFCMPCondCode = Fgpu::FCOND_UN;
+//      isLogicallyNegated = Cond != CmpInst::FCMP_UNO;
+//      break;
+//    case CmpInst::FCMP_OEQ: // Equal
+//    case CmpInst::FCMP_UNE: // Not Equal (NEQ)
+//      FgpuFCMPCondCode = Fgpu::FCOND_OEQ;
+//      isLogicallyNegated = Cond != CmpInst::FCMP_OEQ;
+//      break;
+//    case CmpInst::FCMP_UEQ: // Unordered or Equal
+//    case CmpInst::FCMP_ONE: // Ordered or Greater Than or Less Than (OGL)
+//      FgpuFCMPCondCode = Fgpu::FCOND_UEQ;
+//      isLogicallyNegated = Cond != CmpInst::FCMP_UEQ;
+//      break;
+//    case CmpInst::FCMP_OLT: // Ordered or Less Than
+//    case CmpInst::FCMP_UGE: // Unordered or Greater Than or Equal (UGE)
+//      FgpuFCMPCondCode = Fgpu::FCOND_OLT;
+//      isLogicallyNegated = Cond != CmpInst::FCMP_OLT;
+//      break;
+//    case CmpInst::FCMP_ULT: // Unordered or Less Than
+//    case CmpInst::FCMP_OGE: // Ordered or Greater Than or Equal (OGE)
+//      FgpuFCMPCondCode = Fgpu::FCOND_ULT;
+//      isLogicallyNegated = Cond != CmpInst::FCMP_ULT;
+//      break;
+//    case CmpInst::FCMP_OLE: // Ordered or Less Than or Equal
+//    case CmpInst::FCMP_UGT: // Unordered or Greater Than (UGT)
+//      FgpuFCMPCondCode = Fgpu::FCOND_OLE;
+//      isLogicallyNegated = Cond != CmpInst::FCMP_OLE;
+//      break;
+//    case CmpInst::FCMP_ULE: // Unordered or Less Than or Equal
+//    case CmpInst::FCMP_OGT: // Ordered or Greater Than (OGT)
+//      FgpuFCMPCondCode = Fgpu::FCOND_ULE;
+//      isLogicallyNegated = Cond != CmpInst::FCMP_ULE;
+//      break;
+//    default:
+//      return false;
+//    }
+//
+//    // Default compare result in gpr register will be `true`.
+//    // We will move `false` (FGPU::Zero) to gpr result when fcmp gives false
+//    // using MOVF_I. When orignal predicate (Cond) is logically negated
+//    // FgpuFCMPCondCode, result is inverted i.e. MOVT_I is used.
+//    unsigned MoveOpcode = isLogicallyNegated ? Fgpu::MOVT_I : Fgpu::MOVF_I;
+//
+//    Register TrueInReg = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
+//    BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::ADDi))
+//        .addDef(TrueInReg)
+//        .addUse(Fgpu::ZERO)
+//        .addImm(1);
+//
+//    unsigned Size = MRI.getType(I.getOperand(2).getReg()).getSizeInBits();
+//    unsigned FCMPOpcode =
+//        Size == 32 ? Fgpu::FCMP_S32
+//                   : STI.isFP64bit() ? Fgpu::FCMP_D64 : Fgpu::FCMP_D32;
+//    MachineInstr *FCMP = BuildMI(MBB, I, I.getDebugLoc(), TII.get(FCMPOpcode))
+//                             .addUse(I.getOperand(2).getReg())
+//                             .addUse(I.getOperand(3).getReg())
+//                             .addImm(FgpuFCMPCondCode);
+//    if (!constrainSelectedInstRegOperands(*FCMP, TII, TRI, RBI))
+//      return false;
+//
+//    MachineInstr *Move = BuildMI(MBB, I, I.getDebugLoc(), TII.get(MoveOpcode))
+//                             .addDef(I.getOperand(0).getReg())
+//                             .addUse(Fgpu::ZERO)
+//                             .addUse(Fgpu::FCC0)
+//                             .addUse(TrueInReg);
+//    if (!constrainSelectedInstRegOperands(*Move, TII, TRI, RBI))
+//      return false;
+//
+//    I.eraseFromParent();
+//    return true;
+//  }
+//  case G_FENCE: {
+//    MI = BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::SYNC)).addImm(0);
+//    break;
+//  }
   case G_VASTART: {
     FgpuFunctionInfo *FuncInfo = MF.getInfo<FgpuFunctionInfo>();
     int FI = FuncInfo->getVarArgsFrameIndex();
 
-    Register LeaReg = MRI.createVirtualRegister(&Fgpu::GPR32RegClass);
+    Register LeaReg = MRI.createVirtualRegister(&Fgpu::GPROutRegClass);
     MachineInstr *LEA_ADDiu =
         BuildMI(MBB, I, I.getDebugLoc(), TII.get(Fgpu::LEA_ADDiu))
             .addDef(LeaReg)

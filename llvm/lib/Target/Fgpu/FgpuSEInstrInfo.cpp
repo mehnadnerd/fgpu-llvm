@@ -263,7 +263,7 @@ unsigned FgpuSEInstrInfo::loadImmediate(int64_t Imm, MachineBasicBlock &MBB,
 }
 
 void FgpuSEInstrInfo::expandRetLR(MachineBasicBlock &MBB,
-                                  MachineInstr I,
+                                  MachineInstr &I,
                                   unsigned Opc) const {
   BuildMI(MBB, I, I.getDebugLoc(), get(Opc));
 }

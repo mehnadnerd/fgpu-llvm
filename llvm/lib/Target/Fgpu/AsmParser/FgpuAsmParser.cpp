@@ -154,14 +154,14 @@ class FgpuAsmParser : public MCTargetAsmParser {
   void printWarningWithFixIt(const Twine &Msg, const Twine &FixMsg,
                              SMRange Range, bool ShowColors = true);
 
-  void ConvertXWPOperands(MCInst &Inst, const OperandVector &Operands);
+//  void ConvertXWPOperands(MCInst &Inst, const OperandVector &Operands);
 
 #define GET_ASSEMBLER_HEADER
 #include "FgpuGenAsmMatcher.inc"
 
-  unsigned
-  checkEarlyTargetMatchPredicate(MCInst &Inst,
-                                 const OperandVector &Operands) override;
+//  unsigned
+//  checkEarlyTargetMatchPredicate(MCInst &Inst,
+//                                 const OperandVector &Operands) override;
   unsigned checkTargetMatchPredicate(MCInst &Inst) override;
 
   bool MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
@@ -215,8 +215,8 @@ class FgpuAsmParser : public MCTargetAsmParser {
                                              MCStreamer &Out,
                                              const MCSubtargetInfo *STI);
 
-  bool expandJalWithRegs(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
-                         const MCSubtargetInfo *STI);
+//  bool expandJalWithRegs(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
+//                         const MCSubtargetInfo *STI);
 
   bool loadImmediate(int64_t ImmValue, unsigned DstReg, unsigned SrcReg,
                      bool Is32BitImm, bool IsAddress, SMLoc IDLoc,
@@ -349,17 +349,16 @@ class FgpuAsmParser : public MCTargetAsmParser {
 
   bool parseMemOffset(const MCExpr *&Res, bool isParenExpr);
 
-  bool parseSetFgpu0Directive();
+  //bool parseSetFgpu0Directive();
   bool parseSetArchDirective();
   bool parseSetFeature(uint64_t Feature);
   bool isPicAndNotNxxAbi(); // Used by .cpload, .cprestore, and .cpsetup.
   bool parseDirectiveCpAdd(SMLoc Loc);
   bool parseDirectiveCpLoad(SMLoc Loc);
-  bool parseDirectiveCpLocal(SMLoc Loc);
+//  bool parseDirectiveCpLocal(SMLoc Loc);
   bool parseDirectiveCpRestore(SMLoc Loc);
   bool parseDirectiveCPSetup();
   bool parseDirectiveCPReturn();
-  bool parseDirectiveNaN();
   bool parseDirectiveSet();
   bool parseDirectiveOption();
   bool parseInsnDirective();
@@ -384,7 +383,6 @@ class FgpuAsmParser : public MCTargetAsmParser {
   bool parseDirectiveTpRelWord();
   bool parseDirectiveTpRelDWord();
   bool parseDirectiveModule();
-  bool parseDirectiveModuleFP();
   bool parseFpABIValue(FgpuABIFlagsSection::FpABIKind &FpABI,
                        StringRef Directive);
 
@@ -1396,173 +1394,123 @@ FgpuAsmParser::tryExpandInstruction(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   switch (Inst.getOpcode()) {
   default:
     return MER_NotAMacro;
-  case Fgpu::LoadImm32:
+  case Fgpu::Li32:
     return expandLoadImm(Inst, true, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::LoadImm64:
-    return expandLoadImm(Inst, false, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::LoadAddrImm32:
-  case Fgpu::LoadAddrImm64:
-    assert(Inst.getOperand(0).isReg() && "expected register operand kind");
-    assert((Inst.getOperand(1).isImm() || Inst.getOperand(1).isExpr()) &&
-           "expected immediate operand kind");
-
-    return expandLoadAddress(Inst.getOperand(0).getReg(), Fgpu::NoRegister,
-                             Inst.getOperand(1),
-                             Inst.getOpcode() == Fgpu::LoadAddrImm32, IDLoc,
-                             Out, STI)
-               ? MER_Fail
-               : MER_Success;
-  case Fgpu::LoadAddrReg32:
-  case Fgpu::LoadAddrReg64:
-    assert(Inst.getOperand(0).isReg() && "expected register operand kind");
-    assert(Inst.getOperand(1).isReg() && "expected register operand kind");
-    assert((Inst.getOperand(2).isImm() || Inst.getOperand(2).isExpr()) &&
-           "expected immediate operand kind");
-
-    return expandLoadAddress(Inst.getOperand(0).getReg(),
-                             Inst.getOperand(1).getReg(), Inst.getOperand(2),
-                             Inst.getOpcode() == Fgpu::LoadAddrReg32, IDLoc,
-                             Out, STI)
-               ? MER_Fail
-               : MER_Success;
-  case Fgpu::JalOneReg:
-  case Fgpu::JalTwoReg:
-    return expandJalWithRegs(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::BneImm:
-  case Fgpu::BeqImm:
-  case Fgpu::BEQLImmMacro:
-  case Fgpu::BNELImmMacro:
-    return expandBranchImm(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::BLT:
-  case Fgpu::BLE:
-  case Fgpu::BGE:
-  case Fgpu::BGT:
-  case Fgpu::BLTU:
-  case Fgpu::BLEU:
-  case Fgpu::BGEU:
-  case Fgpu::BGTU:
-  case Fgpu::BLTL:
-  case Fgpu::BLEL:
-  case Fgpu::BGEL:
-  case Fgpu::BGTL:
-  case Fgpu::BLTUL:
-  case Fgpu::BLEUL:
-  case Fgpu::BGEUL:
-  case Fgpu::BGTUL:
-  case Fgpu::BLTImmMacro:
-  case Fgpu::BLEImmMacro:
-  case Fgpu::BGEImmMacro:
-  case Fgpu::BGTImmMacro:
-  case Fgpu::BLTUImmMacro:
-  case Fgpu::BLEUImmMacro:
-  case Fgpu::BGEUImmMacro:
-  case Fgpu::BGTUImmMacro:
-  case Fgpu::BLTLImmMacro:
-  case Fgpu::BLELImmMacro:
-  case Fgpu::BGELImmMacro:
-  case Fgpu::BGTLImmMacro:
-  case Fgpu::BLTULImmMacro:
-  case Fgpu::BLEULImmMacro:
-  case Fgpu::BGEULImmMacro:
-  case Fgpu::BGTULImmMacro:
-    return expandCondBranches(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SDivMacro:
-  case Fgpu::SDivIMacro:
-  case Fgpu::SRemMacro:
-  case Fgpu::SRemIMacro:
-    return expandDivRem(Inst, IDLoc, Out, STI, false, true) ? MER_Fail
-                                                            : MER_Success;
-  case Fgpu::DSDivMacro:
-  case Fgpu::DSDivIMacro:
-  case Fgpu::DSRemMacro:
-  case Fgpu::DSRemIMacro:
-    return expandDivRem(Inst, IDLoc, Out, STI, true, true) ? MER_Fail
-                                                           : MER_Success;
-  case Fgpu::UDivMacro:
-  case Fgpu::UDivIMacro:
-  case Fgpu::URemMacro:
-  case Fgpu::URemIMacro:
-    return expandDivRem(Inst, IDLoc, Out, STI, false, false) ? MER_Fail
-                                                             : MER_Success;
-  case Fgpu::DUDivMacro:
-  case Fgpu::DUDivIMacro:
-  case Fgpu::DURemMacro:
-  case Fgpu::DURemIMacro:
-    return expandDivRem(Inst, IDLoc, Out, STI, true, false) ? MER_Fail
-                                                            : MER_Success;
-  case Fgpu::PseudoTRUNC_W_S:
-    return expandTrunc(Inst, false, false, IDLoc, Out, STI) ? MER_Fail
-                                                            : MER_Success;
-  case Fgpu::PseudoTRUNC_W_D32:
-    return expandTrunc(Inst, true, false, IDLoc, Out, STI) ? MER_Fail
-                                                           : MER_Success;
-  case Fgpu::PseudoTRUNC_W_D:
-    return expandTrunc(Inst, true, true, IDLoc, Out, STI) ? MER_Fail
-                                                          : MER_Success;
-
-  case Fgpu::LoadImmSingleGPR:
-    return expandLoadSingleImmToGPR(Inst, IDLoc, Out, STI) ? MER_Fail
-                                                           : MER_Success;
-  case Fgpu::LoadImmSingleFGR:
-    return expandLoadSingleImmToFPR(Inst, IDLoc, Out, STI) ? MER_Fail
-                                                           : MER_Success;
-  case Fgpu::LoadImmDoubleGPR:
-    return expandLoadDoubleImmToGPR(Inst, IDLoc, Out, STI) ? MER_Fail
-                                                           : MER_Success;
-  case Fgpu::LoadImmDoubleFGR:
-    return expandLoadDoubleImmToFPR(Inst, true, IDLoc, Out, STI) ? MER_Fail
-                                                                 : MER_Success;
-  case Fgpu::LoadImmDoubleFGR_32:
-    return expandLoadDoubleImmToFPR(Inst, false, IDLoc, Out, STI) ? MER_Fail
-                                                                  : MER_Success;
-
-  case Fgpu::Ulh:
-    return expandUlh(Inst, true, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::Ulhu:
-    return expandUlh(Inst, false, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::Ush:
-    return expandUsh(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::Ulw:
-  case Fgpu::Usw:
-    return expandUxw(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::NORImm:
-  case Fgpu::NORImm64:
-    return expandAliasImmediate(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SGE:
-  case Fgpu::SGEU:
-    return expandSge(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SGEImm:
-  case Fgpu::SGEUImm:
-  case Fgpu::SGEImm64:
-  case Fgpu::SGEUImm64:
-    return expandSgeImm(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SGTImm:
-  case Fgpu::SGTUImm:
-  case Fgpu::SGTImm64:
-  case Fgpu::SGTUImm64:
-    return expandSgtImm(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SLE:
-  case Fgpu::SLEU:
-    return expandSle(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SLEImm:
-  case Fgpu::SLEUImm:
-  case Fgpu::SLEImm64:
-  case Fgpu::SLEUImm64:
-    return expandSleImm(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SLTImm64:
-    if (isInt<16>(Inst.getOperand(2).getImm())) {
-      Inst.setOpcode(Fgpu::SLTi64);
-      return MER_NotAMacro;
-    }
-    return expandAliasImmediate(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SLTUImm64:
-    if (isInt<16>(Inst.getOperand(2).getImm())) {
-      Inst.setOpcode(Fgpu::SLTiu64);
-      return MER_NotAMacro;
-    }
-    return expandAliasImmediate(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::LoadImm64:
+//    return expandLoadImm(Inst, false, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::LoadAddrImm32:
+//  case Fgpu::LoadAddrImm64:
+//    assert(Inst.getOperand(0).isReg() && "expected register operand kind");
+//    assert((Inst.getOperand(1).isImm() || Inst.getOperand(1).isExpr()) &&
+//           "expected immediate operand kind");
+//
+//    return expandLoadAddress(Inst.getOperand(0).getReg(), Fgpu::NoRegister,
+//                             Inst.getOperand(1),
+//                             Inst.getOpcode() == Fgpu::LoadAddrImm32, IDLoc,
+//                             Out, STI)
+//               ? MER_Fail
+//               : MER_Success;
+//  case Fgpu::LoadAddrReg32:
+//  case Fgpu::LoadAddrReg64:
+//    assert(Inst.getOperand(0).isReg() && "expected register operand kind");
+//    assert(Inst.getOperand(1).isReg() && "expected register operand kind");
+//    assert((Inst.getOperand(2).isImm() || Inst.getOperand(2).isExpr()) &&
+//           "expected immediate operand kind");
+//
+//    return expandLoadAddress(Inst.getOperand(0).getReg(),
+//                             Inst.getOperand(1).getReg(), Inst.getOperand(2),
+//                             Inst.getOpcode() == Fgpu::LoadAddrReg32, IDLoc,
+//                             Out, STI)
+//               ? MER_Fail
+//               : MER_Success;
+//  case Fgpu::JalOneReg:
+//  case Fgpu::JalTwoReg:
+//    return expandJalWithRegs(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::BLT:
+//  case Fgpu::BLE:
+//  case Fgpu::BGE:
+//  case Fgpu::BGT:
+//  case Fgpu::BLTU:
+//  case Fgpu::BLEU:
+//  case Fgpu::BGEU:
+//  case Fgpu::BGTU:
+//  case Fgpu::BLTL:
+//  case Fgpu::BLEL:
+//  case Fgpu::BGEL:
+//  case Fgpu::BGTL:
+//  case Fgpu::BLTUL:
+//  case Fgpu::BLEUL:
+//  case Fgpu::BGEUL:
+//  case Fgpu::BGTUL:
+//  case Fgpu::BLTImmMacro:
+//  case Fgpu::BLEImmMacro:
+//  case Fgpu::BGEImmMacro:
+//  case Fgpu::BGTImmMacro:
+//  case Fgpu::BLTUImmMacro:
+//  case Fgpu::BLEUImmMacro:
+//  case Fgpu::BGEUImmMacro:
+//  case Fgpu::BGTUImmMacro:
+//  case Fgpu::BLTLImmMacro:
+//  case Fgpu::BLELImmMacro:
+//  case Fgpu::BGELImmMacro:
+//  case Fgpu::BGTLImmMacro:
+//  case Fgpu::BLTULImmMacro:
+//  case Fgpu::BLEULImmMacro:
+//  case Fgpu::BGEULImmMacro:
+//  case Fgpu::BGTULImmMacro:
+//    return expandCondBranches(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::LoadImmSingleGPR:
+//    return expandLoadSingleImmToGPR(Inst, IDLoc, Out, STI) ? MER_Fail
+//                                                           : MER_Success;
+//  case Fgpu::LoadImmSingleFGR:
+//    return expandLoadSingleImmToFPR(Inst, IDLoc, Out, STI) ? MER_Fail
+//                                                           : MER_Success;
+//  case Fgpu::LoadImmDoubleGPR:
+//    return expandLoadDoubleImmToGPR(Inst, IDLoc, Out, STI) ? MER_Fail
+//                                                           : MER_Success;
+//  case Fgpu::LoadImmDoubleFGR:
+//    return expandLoadDoubleImmToFPR(Inst, true, IDLoc, Out, STI) ? MER_Fail
+//                                                                 : MER_Success;
+//  case Fgpu::LoadImmDoubleFGR_32:
+//    return expandLoadDoubleImmToFPR(Inst, false, IDLoc, Out, STI) ? MER_Fail
+//                                                                  : MER_Success;
+//  case Fgpu::NORImm:
+//  case Fgpu::NORImm64:
+//    return expandAliasImmediate(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::SGE:
+//  case Fgpu::SGEU:
+//    return expandSge(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::SGEImm:
+//  case Fgpu::SGEUImm:
+//  case Fgpu::SGEImm64:
+//  case Fgpu::SGEUImm64:
+//    return expandSgeImm(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::SGTImm:
+//  case Fgpu::SGTUImm:
+//  case Fgpu::SGTImm64:
+//  case Fgpu::SGTUImm64:
+//    return expandSgtImm(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::SLE:
+//  case Fgpu::SLEU:
+//    return expandSle(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::SLEImm:
+//  case Fgpu::SLEUImm:
+//  case Fgpu::SLEImm64:
+//  case Fgpu::SLEUImm64:
+//    return expandSleImm(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::SLTImm64:
+//    if (isInt<16>(Inst.getOperand(2).getImm())) {
+//      Inst.setOpcode(Fgpu::SLTi64);
+//      return MER_NotAMacro;
+//    }
+//    return expandAliasImmediate(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::SLTUImm64:
+//    if (isInt<16>(Inst.getOperand(2).getImm())) {
+//      Inst.setOpcode(Fgpu::SLTiu64);
+//      return MER_NotAMacro;
+//    }
+//    return expandAliasImmediate(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
   case Fgpu::ADDi:
-  case Fgpu::ADDiu:
   case Fgpu::SLTi:
   case Fgpu::SLTiu:
     if ((Inst.getNumOperands() == 3) && Inst.getOperand(0).isReg() &&
@@ -1574,9 +1522,9 @@ FgpuAsmParser::tryExpandInstruction(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                                                          : MER_Success;
     }
     return MER_NotAMacro;
-  case Fgpu::ANDi: case Fgpu::ANDi64:
-  case Fgpu::ORi:  case Fgpu::ORi64:
-  case Fgpu::XORi: case Fgpu::XORi64:
+  case Fgpu::ANDi:
+  case Fgpu::ORi:
+  case Fgpu::XORi:
     if ((Inst.getNumOperands() == 3) && Inst.getOperand(0).isReg() &&
         Inst.getOperand(1).isReg() && Inst.getOperand(2).isImm()) {
       int64_t ImmValue = Inst.getOperand(2).getImm();
@@ -1586,99 +1534,45 @@ FgpuAsmParser::tryExpandInstruction(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                                                          : MER_Success;
     }
     return MER_NotAMacro;
-  case Fgpu::ROL:
-  case Fgpu::ROR:
-    return expandRotation(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::ROLImm:
-  case Fgpu::RORImm:
-    return expandRotationImm(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::DROL:
-  case Fgpu::DROR:
-    return expandDRotation(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::DROLImm:
-  case Fgpu::DRORImm:
-    return expandDRotationImm(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::ABSMacro:
-    return expandAbs(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::MULImmMacro:
-  case Fgpu::DMULImmMacro:
-    return expandMulImm(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::MULOMacro:
-  case Fgpu::DMULOMacro:
-    return expandMulO(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::MULOUMacro:
-  case Fgpu::DMULOUMacro:
-    return expandMulOU(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::DMULMacro:
-    return expandDMULMacro(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::LDMacro:
-  case Fgpu::SDMacro:
-    return expandLoadStoreDMacro(Inst, IDLoc, Out, STI,
-                                 Inst.getOpcode() == Fgpu::LDMacro)
-               ? MER_Fail
-               : MER_Success;
-  case Fgpu::SDC1_M1:
-    return expandStoreDM1Macro(Inst, IDLoc, Out, STI)
-               ? MER_Fail
-               : MER_Success;
-  case Fgpu::SEQMacro:
-    return expandSeq(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SEQIMacro:
-    return expandSeqI(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SNEMacro:
-    return expandSne(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SNEIMacro:
-    return expandSneI(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::MFTC0:   case Fgpu::MTTC0:
-  case Fgpu::MFTGPR:  case Fgpu::MTTGPR:
-  case Fgpu::MFTLO:   case Fgpu::MTTLO:
-  case Fgpu::MFTHI:   case Fgpu::MTTHI:
-  case Fgpu::MFTACX:  case Fgpu::MTTACX:
-  case Fgpu::MFTDSP:  case Fgpu::MTTDSP:
-  case Fgpu::MFTC1:   case Fgpu::MTTC1:
-  case Fgpu::MFTHC1:  case Fgpu::MTTHC1:
-  case Fgpu::CFTC1:   case Fgpu::CTTC1:
-    return expandMXTRAlias(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
-  case Fgpu::SaaAddr:
-  case Fgpu::SaadAddr:
-    return expandSaaAddr(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::ABSMacro:
+//    return expandAbs(Inst, IDLoc, Out, STI) ? MER_Fail : MER_Success;
   }
 }
-
-bool FgpuAsmParser::expandJalWithRegs(MCInst &Inst, SMLoc IDLoc,
-                                      MCStreamer &Out,
-                                      const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-
-  // Create a JALR instruction which is going to replace the pseudo-JAL.
-  MCInst JalrInst;
-  JalrInst.setLoc(IDLoc);
-  const MCOperand FirstRegOp = Inst.getOperand(0);
-  const unsigned Opcode = Inst.getOpcode();
-
-  if (Opcode == Fgpu::JalOneReg) {
-    // jal $rs => jalr $rs
-    JalrInst.setOpcode(Fgpu::JALR);
-    JalrInst.addOperand(MCOperand::createReg(Fgpu::LR));
-    JalrInst.addOperand(FirstRegOp);
-  } else if (Opcode == Fgpu::JalTwoReg) {
-    // jal $rd, $rs => jalr $rd, $rs
-    JalrInst.setOpcode(Fgpu::JALR);
-    JalrInst.addOperand(FirstRegOp);
-    const MCOperand SecondRegOp = Inst.getOperand(1);
-    JalrInst.addOperand(SecondRegOp);
-  }
-  Out.emitInstruction(JalrInst, *STI);
-
-  // If .set reorder is active and branch instruction has a delay slot,
-  // emit a NOP after it.
-  const MCInstrDesc &MCID = getInstDesc(JalrInst.getOpcode());
-  if (MCID.hasDelaySlot() && AssemblerOptions.back()->isReorder())
-    TOut.emitEmptyDelaySlot(false, IDLoc,
-                            STI);
-
-  return false;
-}
+//
+//bool FgpuAsmParser::expandJalWithRegs(MCInst &Inst, SMLoc IDLoc,
+//                                      MCStreamer &Out,
+//                                      const MCSubtargetInfo *STI) {
+//  FgpuTargetStreamer &TOut = getTargetStreamer();
+//
+//  // Create a JALR instruction which is going to replace the pseudo-JAL.
+//  MCInst JalrInst;
+//  JalrInst.setLoc(IDLoc);
+//  const MCOperand FirstRegOp = Inst.getOperand(0);
+//  const unsigned Opcode = Inst.getOpcode();
+//
+//  if (Opcode == Fgpu::JalOneReg) {
+//    // jal $rs => jalr $rs
+//    JalrInst.setOpcode(Fgpu::JALR);
+//    JalrInst.addOperand(MCOperand::createReg(Fgpu::LR));
+//    JalrInst.addOperand(FirstRegOp);
+//  } else if (Opcode == Fgpu::JalTwoReg) {
+//    // jal $rd, $rs => jalr $rd, $rs
+//    JalrInst.setOpcode(Fgpu::JALR);
+//    JalrInst.addOperand(FirstRegOp);
+//    const MCOperand SecondRegOp = Inst.getOperand(1);
+//    JalrInst.addOperand(SecondRegOp);
+//  }
+//  Out.emitInstruction(JalrInst, *STI);
+//
+//  // If .set reorder is active and branch instruction has a delay slot,
+//  // emit a NOP after it.
+//  const MCInstrDesc &MCID = getInstDesc(JalrInst.getOpcode());
+//  if (MCID.hasDelaySlot() && AssemblerOptions.back()->isReorder())
+//    TOut.emitEmptyDelaySlot(false, IDLoc,
+//                            STI);
+//
+//  return false;
+//}
 
 /// Can the value be represented by a unsigned N-bit value and a shift left?
 template <unsigned N> static bool isShiftedUIntAtAnyPosition(uint64_t x) {
@@ -1741,8 +1635,8 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
   if (isInt<16>(ImmValue)) {
     if (!UseSrcReg)
       SrcReg = ZeroReg;
-
-    TOut.emitRRI(Fgpu::ADDi, DstReg, SrcReg, ImmValue, IDLoc, STI);
+    //TODO: this won't work because Li doesn't sign-extennd i think
+    TOut.emitRRI(Fgpu::Li, DstReg, SrcReg, ImmValue, IDLoc, STI);
     return false;
   }
 
@@ -1754,7 +1648,7 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
         return true;
     }
 
-    TOut.emitRRI(Fgpu::ORi, TmpReg, ZeroReg, ImmValue, IDLoc, STI); // TODO: should be Li??
+    TOut.emitRI(Fgpu::Li, TmpReg, ImmValue, IDLoc, STI); // TODO: should be Li??
     if (UseSrcReg)
       TOut.emitRRR(ABI.GetPtrAdduOp(), DstReg, TmpReg, SrcReg, IDLoc, STI);
     return false;
@@ -1787,7 +1681,7 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
     unsigned ShiftAmount = FirstSet - (15 - (LastSet - FirstSet));
     uint16_t Bits = (ImmValue >> ShiftAmount) & 0xffff;
     TOut.emitRRI(Fgpu::ORi, TmpReg, ZeroReg, Bits, IDLoc, STI);
-    TOut.emitRRI(Fgpu::DSLL, TmpReg, TmpReg, ShiftAmount, IDLoc, STI);
+    TOut.emitRRI(Fgpu::SLLi, TmpReg, TmpReg, ShiftAmount, IDLoc, STI);
 
     if (UseSrcReg)
       TOut.emitRRR(AdduOp, DstReg, TmpReg, SrcReg, IDLoc, STI);
@@ -1813,7 +1707,7 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
     uint16_t ImmChunk = (ImmValue >> BitNum) & 0xffff;
 
     if (ImmChunk != 0) {
-      TOut.emitDSLL(TmpReg, TmpReg, ShiftCarriedForwards, IDLoc, STI);
+      TOut.emitRRI(Fgpu::SLLi,TmpReg, TmpReg, ShiftCarriedForwards, IDLoc, STI);
       TOut.emitRRI(Fgpu::ORi, TmpReg, TmpReg, ImmChunk, IDLoc, STI);
       ShiftCarriedForwards = 0;
     }
@@ -1824,7 +1718,7 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
 
   // Finish any remaining shifts left by trailing zeros.
   if (ShiftCarriedForwards)
-    TOut.emitDSLL(TmpReg, TmpReg, ShiftCarriedForwards, IDLoc, STI);
+    TOut.emitRRI(Fgpu::SLLi, TmpReg, TmpReg, ShiftCarriedForwards, IDLoc, STI);
 
   if (UseSrcReg)
     TOut.emitRRR(AdduOp, DstReg, TmpReg, SrcReg, IDLoc, STI);
@@ -1898,7 +1792,7 @@ bool FgpuAsmParser::loadAndAddSymbolAddress(const MCExpr *SymExpr,
       {
         const MCExpr *CallExpr =
             FgpuMCExpr::create(FgpuMCExpr::MEK_GOT_CALL, SymExpr, getContext());
-        TOut.emitRRX(IsPtr64 ? Fgpu::LD : Fgpu::LW, DstReg, GPReg,
+        TOut.emitRRX(Fgpu::LW, DstReg, GPReg,
                      MCOperand::createExpr(CallExpr), IDLoc, STI);
       }
       return false;
@@ -2068,199 +1962,6 @@ bool FgpuAsmParser::expandLoadSingleImmToGPR(MCInst &Inst, SMLoc IDLoc,
                        Out, STI);
 }
 
-bool FgpuAsmParser::expandLoadSingleImmToFPR(MCInst &Inst, SMLoc IDLoc,
-                                             MCStreamer &Out,
-                                             const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  assert(Inst.getNumOperands() == 2 && "Invalid operand count");
-  assert(Inst.getOperand(0).isReg() && Inst.getOperand(1).isImm() &&
-         "Invalid instruction operand.");
-
-  unsigned FirstReg = Inst.getOperand(0).getReg();
-  uint64_t ImmOp64 = Inst.getOperand(1).getImm();
-
-  ImmOp64 = convertIntToDoubleImm(ImmOp64);
-
-  uint32_t ImmOp32 = covertDoubleImmToSingleImm(ImmOp64);
-
-  unsigned TmpReg = Fgpu::ZERO;
-  if (ImmOp32 != 0) {
-    TmpReg = getATReg(IDLoc);
-    if (!TmpReg)
-      return true;
-  }
-
-  if (Lo_32(ImmOp64) == 0) {
-    if (TmpReg != Fgpu::ZERO && loadImmediate(ImmOp32, TmpReg, Fgpu::NoRegister,
-                                              true, false, IDLoc, Out, STI))
-      return true;
-    TOut.emitRR(Fgpu::MTC1, FirstReg, TmpReg, IDLoc, STI);
-    return false;
-  }
-
-  MCSection *CS = getStreamer().getCurrentSectionOnly();
-  // FIXME: Enhance this expansion to use the .lit4 & .lit8 sections
-  // where appropriate.
-  MCSection *ReadOnlySection =
-      getContext().getELFSection(".rodata", ELF::SHT_PROGBITS, ELF::SHF_ALLOC);
-
-  MCSymbol *Sym = getContext().createTempSymbol();
-  const MCExpr *LoSym =
-      MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, getContext());
-  const FgpuMCExpr *LoExpr =
-      FgpuMCExpr::create(FgpuMCExpr::MEK_LO, LoSym, getContext());
-
-  getStreamer().SwitchSection(ReadOnlySection);
-  getStreamer().emitLabel(Sym, IDLoc);
-  getStreamer().emitInt32(ImmOp32);
-  getStreamer().SwitchSection(CS);
-
-  if (emitPartialAddress(TOut, IDLoc, Sym))
-    return true;
-  TOut.emitRRX(Fgpu::LWC1, FirstReg, TmpReg, MCOperand::createExpr(LoExpr),
-               IDLoc, STI);
-  return false;
-}
-
-bool FgpuAsmParser::expandLoadDoubleImmToGPR(MCInst &Inst, SMLoc IDLoc,
-                                             MCStreamer &Out,
-                                             const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  assert(Inst.getNumOperands() == 2 && "Invalid operand count");
-  assert(Inst.getOperand(0).isReg() && Inst.getOperand(1).isImm() &&
-         "Invalid instruction operand.");
-
-  unsigned FirstReg = Inst.getOperand(0).getReg();
-  uint64_t ImmOp64 = Inst.getOperand(1).getImm();
-
-  ImmOp64 = convertIntToDoubleImm(ImmOp64);
-
-  if (Lo_32(ImmOp64) == 0) {
-    if (isGP64bit()) {
-      if (loadImmediate(ImmOp64, FirstReg, Fgpu::NoRegister, false, false,
-                        IDLoc, Out, STI))
-        return true;
-    } else {
-      if (loadImmediate(Hi_32(ImmOp64), FirstReg, Fgpu::NoRegister, true, false,
-                        IDLoc, Out, STI))
-        return true;
-
-      if (loadImmediate(0, nextReg(FirstReg), Fgpu::NoRegister, true, false,
-                        IDLoc, Out, STI))
-        return true;
-    }
-    return false;
-  }
-
-  MCSection *CS = getStreamer().getCurrentSectionOnly();
-  MCSection *ReadOnlySection =
-      getContext().getELFSection(".rodata", ELF::SHT_PROGBITS, ELF::SHF_ALLOC);
-
-  MCSymbol *Sym = getContext().createTempSymbol();
-  const MCExpr *LoSym =
-      MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, getContext());
-  const FgpuMCExpr *LoExpr =
-      FgpuMCExpr::create(FgpuMCExpr::MEK_LO, LoSym, getContext());
-
-  getStreamer().SwitchSection(ReadOnlySection);
-  getStreamer().emitLabel(Sym, IDLoc);
-  getStreamer().emitValueToAlignment(8);
-  getStreamer().emitIntValue(ImmOp64, 8);
-  getStreamer().SwitchSection(CS);
-
-  unsigned TmpReg = getATReg(IDLoc);
-  if (!TmpReg)
-    return true;
-
-  if (emitPartialAddress(TOut, IDLoc, Sym))
-    return true;
-
-  TOut.emitRRX(isABI_N64() ? Fgpu::DADDiu : Fgpu::ADDiu, TmpReg, TmpReg,
-               MCOperand::createExpr(LoExpr), IDLoc, STI);
-
-  if (isGP64bit())
-    TOut.emitRRI(Fgpu::LD, FirstReg, TmpReg, 0, IDLoc, STI);
-  else {
-    TOut.emitRRI(Fgpu::LW, FirstReg, TmpReg, 0, IDLoc, STI);
-    TOut.emitRRI(Fgpu::LW, nextReg(FirstReg), TmpReg, 4, IDLoc, STI);
-  }
-  return false;
-}
-
-bool FgpuAsmParser::expandLoadDoubleImmToFPR(MCInst &Inst, bool Is64FPU,
-                                             SMLoc IDLoc, MCStreamer &Out,
-                                             const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  assert(Inst.getNumOperands() == 2 && "Invalid operand count");
-  assert(Inst.getOperand(0).isReg() && Inst.getOperand(1).isImm() &&
-         "Invalid instruction operand.");
-
-  unsigned FirstReg = Inst.getOperand(0).getReg();
-  uint64_t ImmOp64 = Inst.getOperand(1).getImm();
-
-  ImmOp64 = convertIntToDoubleImm(ImmOp64);
-
-  unsigned TmpReg = Fgpu::ZERO;
-  if (ImmOp64 != 0) {
-    TmpReg = getATReg(IDLoc);
-    if (!TmpReg)
-      return true;
-  }
-
-  if ((Lo_32(ImmOp64) == 0) &&
-      !((Hi_32(ImmOp64) & 0xffff0000) && (Hi_32(ImmOp64) & 0x0000ffff))) {
-    if (isGP64bit()) {
-      if (TmpReg != Fgpu::ZERO &&
-          loadImmediate(ImmOp64, TmpReg, Fgpu::NoRegister, false, false, IDLoc,
-                        Out, STI))
-        return true;
-      TOut.emitRR(Fgpu::DMTC1, FirstReg, TmpReg, IDLoc, STI);
-      return false;
-    }
-
-    if (TmpReg != Fgpu::ZERO &&
-        loadImmediate(Hi_32(ImmOp64), TmpReg, Fgpu::NoRegister, true, false,
-                      IDLoc, Out, STI))
-      return true;
-
-    if (hasFgpu32r2()) {
-      TOut.emitRR(Fgpu::MTC1, FirstReg, Fgpu::ZERO, IDLoc, STI);
-      TOut.emitRRR(Fgpu::MTHC1_D32, FirstReg, FirstReg, TmpReg, IDLoc, STI);
-    } else {
-      TOut.emitRR(Fgpu::MTC1, nextReg(FirstReg), TmpReg, IDLoc, STI);
-      TOut.emitRR(Fgpu::MTC1, FirstReg, Fgpu::ZERO, IDLoc, STI);
-    }
-    return false;
-  }
-
-  MCSection *CS = getStreamer().getCurrentSectionOnly();
-  // FIXME: Enhance this expansion to use the .lit4 & .lit8 sections
-  // where appropriate.
-  MCSection *ReadOnlySection =
-      getContext().getELFSection(".rodata", ELF::SHT_PROGBITS, ELF::SHF_ALLOC);
-
-  MCSymbol *Sym = getContext().createTempSymbol();
-  const MCExpr *LoSym =
-      MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, getContext());
-  const FgpuMCExpr *LoExpr =
-      FgpuMCExpr::create(FgpuMCExpr::MEK_LO, LoSym, getContext());
-
-  getStreamer().SwitchSection(ReadOnlySection);
-  getStreamer().emitLabel(Sym, IDLoc);
-  getStreamer().emitValueToAlignment(8);
-  getStreamer().emitIntValue(ImmOp64, 8);
-  getStreamer().SwitchSection(CS);
-
-  if (emitPartialAddress(TOut, IDLoc, Sym))
-    return true;
-
-  TOut.emitRRX(Is64FPU ? Fgpu::LDC164 : Fgpu::LDC1, FirstReg, TmpReg,
-               MCOperand::createExpr(LoExpr), IDLoc, STI);
-
-  return false;
-}
-
-
 bool FgpuAsmParser::expandBranchImm(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                                     const MCSubtargetInfo *STI) {
   FgpuTargetStreamer &TOut = getTargetStreamer();
@@ -2278,20 +1979,6 @@ bool FgpuAsmParser::expandBranchImm(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
 
   unsigned OpCode = 0;
   switch(Inst.getOpcode()) {
-    case Fgpu::BneImm:
-      OpCode = Fgpu::BNE;
-      break;
-    case Fgpu::BeqImm:
-      OpCode = Fgpu::BEQ;
-      break;
-    case Fgpu::BEQLImmMacro:
-      OpCode = Fgpu::BEQL;
-      IsLikely = true;
-      break;
-    case Fgpu::BNELImmMacro:
-      OpCode = Fgpu::BNEL;
-      IsLikely = true;
-      break;
     default:
       llvm_unreachable("Unknown immediate branch pseudo-instruction.");
       break;
@@ -2313,7 +2000,7 @@ bool FgpuAsmParser::expandBranchImm(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
     if (!ATReg)
       return true;
 
-    if (loadImmediate(ImmValue, ATReg, Fgpu::NoRegister, !isGP64bit(), true,
+    if (loadImmediate(ImmValue, ATReg, Fgpu::NoRegister, true, true,
                       IDLoc, Out, STI))
       return true;
 
@@ -2349,8 +2036,7 @@ void FgpuAsmParser::expandMem16Inst(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   int16_t DstRegClass = Desc.OpInfo[StartOp].RegClass;
   unsigned DstRegClassID =
       getContext().getRegisterInfo()->getRegClass(DstRegClass).getID();
-  bool IsGPR = (DstRegClassID == Fgpu::GPROutRegClassID) ||
-               (DstRegClassID == Fgpu::GPR64RegClassID);
+  bool IsGPR = (DstRegClassID == Fgpu::GPROutRegClassID);
 
   if (!IsLoad || !IsGPR || (BaseReg == DstReg)) {
     // At this point we need AT to perform the expansions
@@ -2385,8 +2071,8 @@ void FgpuAsmParser::expandMem16Inst(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
         return;
     }
 
-    if (BaseReg != Fgpu::ZERO && BaseReg != Fgpu::ZERO_64)
-      TOut.emitRRR(ABI.ArePtrs64bit() ? Fgpu::DADDu : Fgpu::ADDu, TmpReg,
+    if (BaseReg != Fgpu::ZERO)
+      TOut.emitRRR(Fgpu::ADD, TmpReg,
                    TmpReg, BaseReg, IDLoc, STI);
     emitInstWithOffset(MCOperand::createImm(int16_t(LoOffset)));
     return;
@@ -2411,7 +2097,7 @@ void FgpuAsmParser::expandMem16Inst(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
       }
 
       loadAndAddSymbolAddress(Res.getSymA(), TmpReg, BaseReg,
-                              !ABI.ArePtrs64bit(), IDLoc, Out, STI);
+                              true, IDLoc, Out, STI);
       emitInstWithOffset(MCOperand::createImm(int16_t(Res.getConstant())));
     } else {
       // FIXME: Implement 64-bit case.
@@ -2424,26 +2110,11 @@ void FgpuAsmParser::expandMem16Inst(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
           FgpuMCExpr::create(FgpuMCExpr::MEK_LO, OffExpr, getContext()));
       MCOperand HiOperand = MCOperand::createExpr(
           FgpuMCExpr::create(FgpuMCExpr::MEK_HI, OffExpr, getContext()));
-
-      if (ABI.IsN64()) {
-        MCOperand HighestOperand = MCOperand::createExpr(
-            FgpuMCExpr::create(FgpuMCExpr::MEK_HIGHEST, OffExpr, getContext()));
-        MCOperand HigherOperand = MCOperand::createExpr(
-            FgpuMCExpr::create(FgpuMCExpr::MEK_HIGHER, OffExpr, getContext()));
-
-        TOut.emitRX(Fgpu::LUi, TmpReg, HighestOperand, IDLoc, STI);
-        TOut.emitRRX(Fgpu::DADDiu, TmpReg, TmpReg, HigherOperand, IDLoc, STI);
-        TOut.emitRRI(Fgpu::DSLL, TmpReg, TmpReg, 16, IDLoc, STI);
-        TOut.emitRRX(Fgpu::DADDiu, TmpReg, TmpReg, HiOperand, IDLoc, STI);
-        TOut.emitRRI(Fgpu::DSLL, TmpReg, TmpReg, 16, IDLoc, STI);
-        if (BaseReg != Fgpu::ZERO && BaseReg != Fgpu::ZERO_64)
-          TOut.emitRRR(Fgpu::DADDu, TmpReg, TmpReg, BaseReg, IDLoc, STI);
-        emitInstWithOffset(LoOperand);
-      } else {
+      {
         // Generate the base address in TmpReg.
         TOut.emitRX(Fgpu::LUi, TmpReg, HiOperand, IDLoc, STI);
         if (BaseReg != Fgpu::ZERO)
-          TOut.emitRRR(Fgpu::ADDu, TmpReg, TmpReg, BaseReg, IDLoc, STI);
+          TOut.emitRRR(Fgpu::ADD, TmpReg, TmpReg, BaseReg, IDLoc, STI);
         // Emit the load or store with the adjusted base and offset.
         emitInstWithOffset(LoOperand);
       }
@@ -2538,206 +2209,161 @@ bool FgpuAsmParser::expandCondBranches(MCInst &Inst, SMLoc IDLoc,
     switch(PseudoOpcode) {
     default:
       llvm_unreachable("unknown opcode for branch pseudo-instruction");
-    case Fgpu::BLTImmMacro:
-      PseudoOpcode = Fgpu::BLT;
-      break;
-    case Fgpu::BLEImmMacro:
-      PseudoOpcode = Fgpu::BLE;
-      break;
-    case Fgpu::BGEImmMacro:
-      PseudoOpcode = Fgpu::BGE;
-      break;
-    case Fgpu::BGTImmMacro:
-      PseudoOpcode = Fgpu::BGT;
-      break;
-    case Fgpu::BLTUImmMacro:
-      PseudoOpcode = Fgpu::BLTU;
-      break;
-    case Fgpu::BLEUImmMacro:
-      PseudoOpcode = Fgpu::BLEU;
-      break;
-    case Fgpu::BGEUImmMacro:
-      PseudoOpcode = Fgpu::BGEU;
-      break;
-    case Fgpu::BGTUImmMacro:
-      PseudoOpcode = Fgpu::BGTU;
-      break;
-    case Fgpu::BLTLImmMacro:
-      PseudoOpcode = Fgpu::BLTL;
-      break;
-    case Fgpu::BLELImmMacro:
-      PseudoOpcode = Fgpu::BLEL;
-      break;
-    case Fgpu::BGELImmMacro:
-      PseudoOpcode = Fgpu::BGEL;
-      break;
-    case Fgpu::BGTLImmMacro:
-      PseudoOpcode = Fgpu::BGTL;
-      break;
-    case Fgpu::BLTULImmMacro:
-      PseudoOpcode = Fgpu::BLTUL;
-      break;
-    case Fgpu::BLEULImmMacro:
-      PseudoOpcode = Fgpu::BLEUL;
-      break;
-    case Fgpu::BGEULImmMacro:
-      PseudoOpcode = Fgpu::BGEUL;
-      break;
-    case Fgpu::BGTULImmMacro:
-      PseudoOpcode = Fgpu::BGTUL;
-      break;
+//    case Fgpu::BLTImmMacro:
+//      PseudoOpcode = Fgpu::BLT;
+//      break;
     }
 
-    if (loadImmediate(TrgOp.getImm(), TrgReg, Fgpu::NoRegister, !isGP64bit(),
+    if (loadImmediate(TrgOp.getImm(), TrgReg, Fgpu::NoRegister, true,
                       false, IDLoc, Out, STI))
       return true;
   }
 
   switch (PseudoOpcode) {
-  case Fgpu::BLT:
-  case Fgpu::BLTU:
-  case Fgpu::BLTL:
-  case Fgpu::BLTUL:
-    AcceptsEquality = false;
-    ReverseOrderSLT = false;
-    IsUnsigned =
-        ((PseudoOpcode == Fgpu::BLTU) || (PseudoOpcode == Fgpu::BLTUL));
-    IsLikely = ((PseudoOpcode == Fgpu::BLTL) || (PseudoOpcode == Fgpu::BLTUL));
-    ZeroSrcOpcode = Fgpu::BGTZ;
-    ZeroTrgOpcode = Fgpu::BLTZ;
-    break;
-  case Fgpu::BLE:
-  case Fgpu::BLEU:
-  case Fgpu::BLEL:
-  case Fgpu::BLEUL:
-    AcceptsEquality = true;
-    ReverseOrderSLT = true;
-    IsUnsigned =
-        ((PseudoOpcode == Fgpu::BLEU) || (PseudoOpcode == Fgpu::BLEUL));
-    IsLikely = ((PseudoOpcode == Fgpu::BLEL) || (PseudoOpcode == Fgpu::BLEUL));
-    ZeroSrcOpcode = Fgpu::BGEZ;
-    ZeroTrgOpcode = Fgpu::BLEZ;
-    break;
-  case Fgpu::BGE:
-  case Fgpu::BGEU:
-  case Fgpu::BGEL:
-  case Fgpu::BGEUL:
-    AcceptsEquality = true;
-    ReverseOrderSLT = false;
-    IsUnsigned =
-        ((PseudoOpcode == Fgpu::BGEU) || (PseudoOpcode == Fgpu::BGEUL));
-    IsLikely = ((PseudoOpcode == Fgpu::BGEL) || (PseudoOpcode == Fgpu::BGEUL));
-    ZeroSrcOpcode = Fgpu::BLEZ;
-    ZeroTrgOpcode = Fgpu::BGEZ;
-    break;
-  case Fgpu::BGT:
-  case Fgpu::BGTU:
-  case Fgpu::BGTL:
-  case Fgpu::BGTUL:
-    AcceptsEquality = false;
-    ReverseOrderSLT = true;
-    IsUnsigned =
-        ((PseudoOpcode == Fgpu::BGTU) || (PseudoOpcode == Fgpu::BGTUL));
-    IsLikely = ((PseudoOpcode == Fgpu::BGTL) || (PseudoOpcode == Fgpu::BGTUL));
-    ZeroSrcOpcode = Fgpu::BLTZ;
-    ZeroTrgOpcode = Fgpu::BGTZ;
-    break;
+//  case Fgpu::BLT:
+//  case Fgpu::BLTU:
+//  case Fgpu::BLTL:
+//  case Fgpu::BLTUL:
+//    AcceptsEquality = false;
+//    ReverseOrderSLT = false;
+//    IsUnsigned =
+//        ((PseudoOpcode == Fgpu::BLTU) || (PseudoOpcode == Fgpu::BLTUL));
+//    IsLikely = ((PseudoOpcode == Fgpu::BLTL) || (PseudoOpcode == Fgpu::BLTUL));
+//    ZeroSrcOpcode = Fgpu::BGTZ;
+//    ZeroTrgOpcode = Fgpu::BLTZ;
+//    break;
+//  case Fgpu::BLE:
+//  case Fgpu::BLEU:
+//  case Fgpu::BLEL:
+//  case Fgpu::BLEUL:
+//    AcceptsEquality = true;
+//    ReverseOrderSLT = true;
+//    IsUnsigned =
+//        ((PseudoOpcode == Fgpu::BLEU) || (PseudoOpcode == Fgpu::BLEUL));
+//    IsLikely = ((PseudoOpcode == Fgpu::BLEL) || (PseudoOpcode == Fgpu::BLEUL));
+//    ZeroSrcOpcode = Fgpu::BGEZ;
+//    ZeroTrgOpcode = Fgpu::BLEZ;
+//    break;
+//  case Fgpu::BGE:
+//  case Fgpu::BGEU:
+//  case Fgpu::BGEL:
+//  case Fgpu::BGEUL:
+//    AcceptsEquality = true;
+//    ReverseOrderSLT = false;
+//    IsUnsigned =
+//        ((PseudoOpcode == Fgpu::BGEU) || (PseudoOpcode == Fgpu::BGEUL));
+//    IsLikely = ((PseudoOpcode == Fgpu::BGEL) || (PseudoOpcode == Fgpu::BGEUL));
+//    ZeroSrcOpcode = Fgpu::BLEZ;
+//    ZeroTrgOpcode = Fgpu::BGEZ;
+//    break;
+//  case Fgpu::BGT:
+//  case Fgpu::BGTU:
+//  case Fgpu::BGTL:
+//  case Fgpu::BGTUL:
+//    AcceptsEquality = false;
+//    ReverseOrderSLT = true;
+//    IsUnsigned =
+//        ((PseudoOpcode == Fgpu::BGTU) || (PseudoOpcode == Fgpu::BGTUL));
+//    IsLikely = ((PseudoOpcode == Fgpu::BGTL) || (PseudoOpcode == Fgpu::BGTUL));
+//    ZeroSrcOpcode = Fgpu::BLTZ;
+//    ZeroTrgOpcode = Fgpu::BGTZ;
+//    break;
   default:
     llvm_unreachable("unknown opcode for branch pseudo-instruction");
   }
 
-  bool IsTrgRegZero = (TrgReg == Fgpu::ZERO);
-  bool IsSrcRegZero = (SrcReg == Fgpu::ZERO);
-  if (IsSrcRegZero && IsTrgRegZero) {
-    // FIXME: All of these Opcode-specific if's are needed for compatibility
-    // with GAS' behaviour. However, they may not generate the most efficient
-    // code in some circumstances.
-    if (PseudoOpcode == Fgpu::BLT) {
-      TOut.emitRX(Fgpu::BLTZ, Fgpu::ZERO, MCOperand::createExpr(OffsetExpr),
-                  IDLoc, STI);
-      return false;
-    }
-    if (PseudoOpcode == Fgpu::BLE) {
-      TOut.emitRX(Fgpu::BLEZ, Fgpu::ZERO, MCOperand::createExpr(OffsetExpr),
-                  IDLoc, STI);
-      Warning(IDLoc, "branch is always taken");
-      return false;
-    }
-    if (PseudoOpcode == Fgpu::BGE) {
-      TOut.emitRX(Fgpu::BGEZ, Fgpu::ZERO, MCOperand::createExpr(OffsetExpr),
-                  IDLoc, STI);
-      Warning(IDLoc, "branch is always taken");
-      return false;
-    }
-    if (PseudoOpcode == Fgpu::BGT) {
-      TOut.emitRX(Fgpu::BGTZ, Fgpu::ZERO, MCOperand::createExpr(OffsetExpr),
-                  IDLoc, STI);
-      return false;
-    }
-    if (PseudoOpcode == Fgpu::BGTU) {
-      TOut.emitRRX(Fgpu::BNE, Fgpu::ZERO, Fgpu::ZERO,
-                   MCOperand::createExpr(OffsetExpr), IDLoc, STI);
-      return false;
-    }
-    if (AcceptsEquality) {
-      // If both registers are $0 and the pseudo-branch accepts equality, it
-      // will always be taken, so we emit an unconditional branch.
-      TOut.emitRRX(Fgpu::BEQ, Fgpu::ZERO, Fgpu::ZERO,
-                   MCOperand::createExpr(OffsetExpr), IDLoc, STI);
-      Warning(IDLoc, "branch is always taken");
-      return false;
-    }
-    // If both registers are $0 and the pseudo-branch does not accept
-    // equality, it will never be taken, so we don't have to emit anything.
-    return false;
-  }
-  if (IsSrcRegZero || IsTrgRegZero) {
-    if ((IsSrcRegZero && PseudoOpcode == Fgpu::BGTU) ||
-        (IsTrgRegZero && PseudoOpcode == Fgpu::BLTU)) {
-      // If the $rs is $0 and the pseudo-branch is BGTU (0 > x) or
-      // if the $rt is $0 and the pseudo-branch is BLTU (x < 0),
-      // the pseudo-branch will never be taken, so we don't emit anything.
-      // This only applies to unsigned pseudo-branches.
-      return false;
-    }
-    if ((IsSrcRegZero && PseudoOpcode == Fgpu::BLEU) ||
-        (IsTrgRegZero && PseudoOpcode == Fgpu::BGEU)) {
-      // If the $rs is $0 and the pseudo-branch is BLEU (0 <= x) or
-      // if the $rt is $0 and the pseudo-branch is BGEU (x >= 0),
-      // the pseudo-branch will always be taken, so we emit an unconditional
-      // branch.
-      // This only applies to unsigned pseudo-branches.
-      TOut.emitRRX(Fgpu::BEQ, Fgpu::ZERO, Fgpu::ZERO,
-                   MCOperand::createExpr(OffsetExpr), IDLoc, STI);
-      Warning(IDLoc, "branch is always taken");
-      return false;
-    }
-    if (IsUnsigned) {
-      // If the $rs is $0 and the pseudo-branch is BLTU (0 < x) or
-      // if the $rt is $0 and the pseudo-branch is BGTU (x > 0),
-      // the pseudo-branch will be taken only when the non-zero register is
-      // different from 0, so we emit a BNEZ.
-      //
-      // If the $rs is $0 and the pseudo-branch is BGEU (0 >= x) or
-      // if the $rt is $0 and the pseudo-branch is BLEU (x <= 0),
-      // the pseudo-branch will be taken only when the non-zero register is
-      // equal to 0, so we emit a BEQZ.
-      //
-      // Because only BLEU and BGEU branch on equality, we can use the
-      // AcceptsEquality variable to decide when to emit the BEQZ.
-      TOut.emitRRX(AcceptsEquality ? Fgpu::BEQ : Fgpu::BNE,
-                   IsSrcRegZero ? TrgReg : SrcReg, Fgpu::ZERO,
-                   MCOperand::createExpr(OffsetExpr), IDLoc, STI);
-      return false;
-    }
-    // If we have a signed pseudo-branch and one of the registers is $0,
-    // we can use an appropriate compare-to-zero branch. We select which one
-    // to use in the switch statement above.
-    TOut.emitRX(IsSrcRegZero ? ZeroSrcOpcode : ZeroTrgOpcode,
-                IsSrcRegZero ? TrgReg : SrcReg,
-                MCOperand::createExpr(OffsetExpr), IDLoc, STI);
-    return false;
-  }
+//  bool IsTrgRegZero = (TrgReg == Fgpu::ZERO);
+//  bool IsSrcRegZero = (SrcReg == Fgpu::ZERO);
+//  if (IsSrcRegZero && IsTrgRegZero) {
+//    // FIXME: All of these Opcode-specific if's are needed for compatibility
+//    // with GAS' behaviour. However, they may not generate the most efficient
+//    // code in some circumstances.
+//    if (PseudoOpcode == Fgpu::BLT) {
+//      TOut.emitRX(Fgpu::BLTZ, Fgpu::ZERO, MCOperand::createExpr(OffsetExpr),
+//                  IDLoc, STI);
+//      return false;
+//    }
+//    if (PseudoOpcode == Fgpu::BLE) {
+//      TOut.emitRX(Fgpu::BLEZ, Fgpu::ZERO, MCOperand::createExpr(OffsetExpr),
+//                  IDLoc, STI);
+//      Warning(IDLoc, "branch is always taken");
+//      return false;
+//    }
+//    if (PseudoOpcode == Fgpu::BGE) {
+//      TOut.emitRX(Fgpu::BGEZ, Fgpu::ZERO, MCOperand::createExpr(OffsetExpr),
+//                  IDLoc, STI);
+//      Warning(IDLoc, "branch is always taken");
+//      return false;
+//    }
+//    if (PseudoOpcode == Fgpu::BGT) {
+//      TOut.emitRX(Fgpu::BGTZ, Fgpu::ZERO, MCOperand::createExpr(OffsetExpr),
+//                  IDLoc, STI);
+//      return false;
+//    }
+//    if (PseudoOpcode == Fgpu::BGTU) {
+//      TOut.emitRRX(Fgpu::BNE, Fgpu::ZERO, Fgpu::ZERO,
+//                   MCOperand::createExpr(OffsetExpr), IDLoc, STI);
+//      return false;
+//    }
+//    if (AcceptsEquality) {
+//      // If both registers are $0 and the pseudo-branch accepts equality, it
+//      // will always be taken, so we emit an unconditional branch.
+//      TOut.emitRRX(Fgpu::BEQ, Fgpu::ZERO, Fgpu::ZERO,
+//                   MCOperand::createExpr(OffsetExpr), IDLoc, STI);
+//      Warning(IDLoc, "branch is always taken");
+//      return false;
+//    }
+//    // If both registers are $0 and the pseudo-branch does not accept
+//    // equality, it will never be taken, so we don't have to emit anything.
+//    return false;
+//  }
+//  if (IsSrcRegZero || IsTrgRegZero) {
+//    if ((IsSrcRegZero && PseudoOpcode == Fgpu::BGTU) ||
+//        (IsTrgRegZero && PseudoOpcode == Fgpu::BLTU)) {
+//      // If the $rs is $0 and the pseudo-branch is BGTU (0 > x) or
+//      // if the $rt is $0 and the pseudo-branch is BLTU (x < 0),
+//      // the pseudo-branch will never be taken, so we don't emit anything.
+//      // This only applies to unsigned pseudo-branches.
+//      return false;
+//    }
+//    if ((IsSrcRegZero && PseudoOpcode == Fgpu::BLEU) ||
+//        (IsTrgRegZero && PseudoOpcode == Fgpu::BGEU)) {
+//      // If the $rs is $0 and the pseudo-branch is BLEU (0 <= x) or
+//      // if the $rt is $0 and the pseudo-branch is BGEU (x >= 0),
+//      // the pseudo-branch will always be taken, so we emit an unconditional
+//      // branch.
+//      // This only applies to unsigned pseudo-branches.
+//      TOut.emitRRX(Fgpu::BEQ, Fgpu::ZERO, Fgpu::ZERO,
+//                   MCOperand::createExpr(OffsetExpr), IDLoc, STI);
+//      Warning(IDLoc, "branch is always taken");
+//      return false;
+//    }
+//    if (IsUnsigned) {
+//      // If the $rs is $0 and the pseudo-branch is BLTU (0 < x) or
+//      // if the $rt is $0 and the pseudo-branch is BGTU (x > 0),
+//      // the pseudo-branch will be taken only when the non-zero register is
+//      // different from 0, so we emit a BNEZ.
+//      //
+//      // If the $rs is $0 and the pseudo-branch is BGEU (0 >= x) or
+//      // if the $rt is $0 and the pseudo-branch is BLEU (x <= 0),
+//      // the pseudo-branch will be taken only when the non-zero register is
+//      // equal to 0, so we emit a BEQZ.
+//      //
+//      // Because only BLEU and BGEU branch on equality, we can use the
+//      // AcceptsEquality variable to decide when to emit the BEQZ.
+//      TOut.emitRRX(AcceptsEquality ? Fgpu::BEQ : Fgpu::BNE,
+//                   IsSrcRegZero ? TrgReg : SrcReg, Fgpu::ZERO,
+//                   MCOperand::createExpr(OffsetExpr), IDLoc, STI);
+//      return false;
+//    }
+//    // If we have a signed pseudo-branch and one of the registers is $0,
+//    // we can use an appropriate compare-to-zero branch. We select which one
+//    // to use in the switch statement above.
+//    TOut.emitRX(IsSrcRegZero ? ZeroSrcOpcode : ZeroTrgOpcode,
+//                IsSrcRegZero ? TrgReg : SrcReg,
+//                MCOperand::createExpr(OffsetExpr), IDLoc, STI);
+//    return false;
+//  }
 
   // If neither the SrcReg nor the TrgReg are $0, we need AT to perform the
   // expansions. If it is not available, we return.
@@ -2767,8 +2393,7 @@ bool FgpuAsmParser::expandCondBranches(MCInst &Inst, SMLoc IDLoc,
                ReverseOrderSLT ? TrgReg : SrcReg,
                ReverseOrderSLT ? SrcReg : TrgReg, IDLoc, STI);
 
-  TOut.emitRRX(IsLikely ? (AcceptsEquality ? Fgpu::BEQL : Fgpu::BNEL)
-                        : (AcceptsEquality ? Fgpu::BEQ : Fgpu::BNE),
+  TOut.emitRRX((AcceptsEquality ? Fgpu::BEQ : Fgpu::BNE),
                ATRegNum, Fgpu::ZERO, MCOperand::createExpr(OffsetExpr), IDLoc,
                STI);
   return false;
@@ -2785,369 +2410,13 @@ bool FgpuAsmParser::expandCondBranches(MCInst &Inst, SMLoc IDLoc,
 bool FgpuAsmParser::expandDivRem(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                                  const MCSubtargetInfo *STI,
                                  const bool IsFgpu64, const bool Signed) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-
-  warnIfNoMacro(IDLoc);
-
-  const MCOperand &RdRegOp = Inst.getOperand(0);
-  assert(RdRegOp.isReg() && "expected register operand kind");
-  unsigned RdReg = RdRegOp.getReg();
-
-  const MCOperand &RsRegOp = Inst.getOperand(1);
-  assert(RsRegOp.isReg() && "expected register operand kind");
-  unsigned RsReg = RsRegOp.getReg();
-
-  unsigned RtReg;
-  int64_t ImmValue;
-
-  const MCOperand &RtOp = Inst.getOperand(2);
-  assert((RtOp.isReg() || RtOp.isImm()) &&
-         "expected register or immediate operand kind");
-  if (RtOp.isReg())
-    RtReg = RtOp.getReg();
-  else
-    ImmValue = RtOp.getImm();
-
-  unsigned DivOp;
-  unsigned ZeroReg;
-  unsigned SubOp;
-
-  if (IsFgpu64) {
-    DivOp = Signed ? Fgpu::DSDIV : Fgpu::DUDIV;
-    ZeroReg = Fgpu::ZERO_64;
-    SubOp = Fgpu::DSUB;
-  } else {
-    DivOp = Signed ? Fgpu::SDIV : Fgpu::UDIV;
-    ZeroReg = Fgpu::ZERO;
-    SubOp = Fgpu::SUB;
-  }
-
-  bool UseTraps = useTraps();
-
-  unsigned Opcode = Inst.getOpcode();
-  bool isDiv = Opcode == Fgpu::SDivMacro || Opcode == Fgpu::SDivIMacro ||
-               Opcode == Fgpu::UDivMacro || Opcode == Fgpu::UDivIMacro ||
-               Opcode == Fgpu::DSDivMacro || Opcode == Fgpu::DSDivIMacro ||
-               Opcode == Fgpu::DUDivMacro || Opcode == Fgpu::DUDivIMacro;
-
-  bool isRem = Opcode == Fgpu::SRemMacro || Opcode == Fgpu::SRemIMacro ||
-               Opcode == Fgpu::URemMacro || Opcode == Fgpu::URemIMacro ||
-               Opcode == Fgpu::DSRemMacro || Opcode == Fgpu::DSRemIMacro ||
-               Opcode == Fgpu::DURemMacro || Opcode == Fgpu::DURemIMacro;
-
-  if (RtOp.isImm()) {
-    unsigned ATReg = getATReg(IDLoc);
-    if (!ATReg)
-      return true;
-
-    if (ImmValue == 0) {
-      if (UseTraps)
-        TOut.emitRRI(Fgpu::TEQ, ZeroReg, ZeroReg, 0x7, IDLoc, STI);
-      else
-        TOut.emitII(Fgpu::BREAK, 0x7, 0, IDLoc, STI);
-      return false;
-    }
-
-    if (isRem && (ImmValue == 1 || (Signed && (ImmValue == -1)))) {
-      TOut.emitRRR(Fgpu::OR, RdReg, ZeroReg, ZeroReg, IDLoc, STI);
-      return false;
-    } else if (isDiv && ImmValue == 1) {
-      TOut.emitRRR(Fgpu::OR, RdReg, RsReg, Fgpu::ZERO, IDLoc, STI);
-      return false;
-    } else if (isDiv && Signed && ImmValue == -1) {
-      TOut.emitRRR(SubOp, RdReg, ZeroReg, RsReg, IDLoc, STI);
-      return false;
-    } else {
-      if (loadImmediate(ImmValue, ATReg, Fgpu::NoRegister, isInt<32>(ImmValue),
-                        false, Inst.getLoc(), Out, STI))
-        return true;
-      TOut.emitRR(DivOp, RsReg, ATReg, IDLoc, STI);
-      TOut.emitR(isDiv ? Fgpu::MFLO : Fgpu::MFHI, RdReg, IDLoc, STI);
-      return false;
-    }
-    return true;
-  }
-
-  // If the macro expansion of (d)div(u) or (d)rem(u) would always trap or
-  // break, insert the trap/break and exit. This gives a different result to
-  // GAS. GAS has an inconsistency/missed optimization in that not all cases
-  // are handled equivalently. As the observed behaviour is the same, we're ok.
-  if (RtReg == Fgpu::ZERO || RtReg == Fgpu::ZERO_64) {
-    if (UseTraps) {
-      TOut.emitRRI(Fgpu::TEQ, ZeroReg, ZeroReg, 0x7, IDLoc, STI);
-      return false;
-    }
-    TOut.emitII(Fgpu::BREAK, 0x7, 0, IDLoc, STI);
-    return false;
-  }
-
-  // (d)rem(u) $0, $X, $Y is a special case. Like div $zero, $X, $Y, it does
-  // not expand to macro sequence.
-  if (isRem && (RdReg == Fgpu::ZERO || RdReg == Fgpu::ZERO_64)) {
-    TOut.emitRR(DivOp, RsReg, RtReg, IDLoc, STI);
-    return false;
-  }
-
-  // Temporary label for first branch traget
-  MCContext &Context = TOut.getStreamer().getContext();
-  MCSymbol *BrTarget;
-  MCOperand LabelOp;
-
-  if (UseTraps) {
-    TOut.emitRRI(Fgpu::TEQ, RtReg, ZeroReg, 0x7, IDLoc, STI);
-  } else {
-    // Branch to the li instruction.
-    BrTarget = Context.createTempSymbol();
-    LabelOp = MCOperand::createExpr(MCSymbolRefExpr::create(BrTarget, Context));
-    TOut.emitRRX(Fgpu::BNE, RtReg, ZeroReg, LabelOp, IDLoc, STI);
-  }
-
-  TOut.emitRR(DivOp, RsReg, RtReg, IDLoc, STI);
-
-  if (!UseTraps)
-    TOut.emitII(Fgpu::BREAK, 0x7, 0, IDLoc, STI);
-
-  if (!Signed) {
-    if (!UseTraps)
-      TOut.getStreamer().emitLabel(BrTarget);
-
-    TOut.emitR(isDiv ? Fgpu::MFLO : Fgpu::MFHI, RdReg, IDLoc, STI);
-    return false;
-  }
-
-  unsigned ATReg = getATReg(IDLoc);
-  if (!ATReg)
-    return true;
-
-  if (!UseTraps)
-    TOut.getStreamer().emitLabel(BrTarget);
-
-  TOut.emitRRI(Fgpu::ADDiu, ATReg, ZeroReg, -1, IDLoc, STI);
-
-  // Temporary label for the second branch target.
-  MCSymbol *BrTargetEnd = Context.createTempSymbol();
-  MCOperand LabelOpEnd =
-      MCOperand::createExpr(MCSymbolRefExpr::create(BrTargetEnd, Context));
-
-  // Branch to the mflo instruction.
-  TOut.emitRRX(Fgpu::BNE, RtReg, ATReg, LabelOpEnd, IDLoc, STI);
-
-  if (IsFgpu64) {
-    TOut.emitRRI(Fgpu::ADDiu, ATReg, ZeroReg, 1, IDLoc, STI);
-    TOut.emitDSLL(ATReg, ATReg, 63, IDLoc, STI);
-  } else {
-    TOut.emitRI(Fgpu::LUi, ATReg, (uint16_t)0x8000, IDLoc, STI);
-  }
-
-  if (UseTraps)
-    TOut.emitRRI(Fgpu::TEQ, RsReg, ATReg, 0x6, IDLoc, STI);
-  else {
-    // Branch to the mflo instruction.
-    TOut.emitRRX(Fgpu::BNE, RsReg, ATReg, LabelOpEnd, IDLoc, STI);
-    TOut.emitNop(IDLoc, STI);
-    TOut.emitII(Fgpu::BREAK, 0x6, 0, IDLoc, STI);
-  }
-
-  TOut.getStreamer().emitLabel(BrTargetEnd);
-  TOut.emitR(isDiv ? Fgpu::MFLO : Fgpu::MFHI, RdReg, IDLoc, STI);
-  return false;
+  return true;
 }
 
 bool FgpuAsmParser::expandTrunc(MCInst &Inst, bool IsDouble, bool Is64FPU,
                                 SMLoc IDLoc, MCStreamer &Out,
                                 const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-
-  assert(Inst.getNumOperands() == 3 && "Invalid operand count");
-  assert(Inst.getOperand(0).isReg() && Inst.getOperand(1).isReg() &&
-         Inst.getOperand(2).isReg() && "Invalid instruction operand.");
-
-  unsigned FirstReg = Inst.getOperand(0).getReg();
-  unsigned SecondReg = Inst.getOperand(1).getReg();
-  unsigned ThirdReg = Inst.getOperand(2).getReg();
-
-  if (hasFgpu1() && !hasFgpu2()) {
-    unsigned ATReg = getATReg(IDLoc);
-    if (!ATReg)
-      return true;
-    TOut.emitRR(Fgpu::CFC1, ThirdReg, Fgpu::LR, IDLoc, STI);
-    TOut.emitRR(Fgpu::CFC1, ThirdReg, Fgpu::LR, IDLoc, STI);
-    TOut.emitNop(IDLoc, STI);
-    TOut.emitRRI(Fgpu::ORi, ATReg, ThirdReg, 0x3, IDLoc, STI);
-    TOut.emitRRI(Fgpu::XORi, ATReg, ATReg, 0x2, IDLoc, STI);
-    TOut.emitRR(Fgpu::CTC1, Fgpu::LR, ATReg, IDLoc, STI);
-    TOut.emitNop(IDLoc, STI);
-    TOut.emitRR(IsDouble ? (Is64FPU ? Fgpu::CVT_W_D64 : Fgpu::CVT_W_D32)
-                         : Fgpu::CVT_W_S,
-                FirstReg, SecondReg, IDLoc, STI);
-    TOut.emitRR(Fgpu::CTC1, Fgpu::LR, ThirdReg, IDLoc, STI);
-    TOut.emitNop(IDLoc, STI);
-    return false;
-  }
-
-  TOut.emitRR(IsDouble ? (Is64FPU ? Fgpu::TRUNC_W_D64 : Fgpu::TRUNC_W_D32)
-                       : Fgpu::TRUNC_W_S,
-              FirstReg, SecondReg, IDLoc, STI);
-
-  return false;
-}
-
-bool FgpuAsmParser::expandUlh(MCInst &Inst, bool Signed, SMLoc IDLoc,
-                              MCStreamer &Out, const MCSubtargetInfo *STI) {
-  if (hasFgpu32r6() || hasFgpu64r6()) {
-    return Error(IDLoc, "instruction not supported on fgpu32r6 or fgpu64r6");
-  }
-
-  const MCOperand &DstRegOp = Inst.getOperand(0);
-  assert(DstRegOp.isReg() && "expected register operand kind");
-  const MCOperand &SrcRegOp = Inst.getOperand(1);
-  assert(SrcRegOp.isReg() && "expected register operand kind");
-  const MCOperand &OffsetImmOp = Inst.getOperand(2);
-  assert(OffsetImmOp.isImm() && "expected immediate operand kind");
-
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned DstReg = DstRegOp.getReg();
-  unsigned SrcReg = SrcRegOp.getReg();
-  int64_t OffsetValue = OffsetImmOp.getImm();
-
-  // NOTE: We always need AT for ULHU, as it is always used as the source
-  // register for one of the LBu's.
-  warnIfNoMacro(IDLoc);
-  unsigned ATReg = getATReg(IDLoc);
-  if (!ATReg)
-    return true;
-
-  bool IsLargeOffset = !(isInt<16>(OffsetValue + 1) && isInt<16>(OffsetValue));
-  if (IsLargeOffset) {
-    if (loadImmediate(OffsetValue, ATReg, SrcReg, !ABI.ArePtrs64bit(), true,
-                      IDLoc, Out, STI))
-      return true;
-  }
-
-  int64_t FirstOffset = IsLargeOffset ? 0 : OffsetValue;
-  int64_t SecondOffset = IsLargeOffset ? 1 : (OffsetValue + 1);
-  if (isLittle())
-    std::swap(FirstOffset, SecondOffset);
-
-  unsigned FirstLbuDstReg = IsLargeOffset ? DstReg : ATReg;
-  unsigned SecondLbuDstReg = IsLargeOffset ? ATReg : DstReg;
-
-  unsigned LbuSrcReg = IsLargeOffset ? ATReg : SrcReg;
-  unsigned SllReg = IsLargeOffset ? DstReg : ATReg;
-
-  TOut.emitRRI(Signed ? Fgpu::LB : Fgpu::LBu, FirstLbuDstReg, LbuSrcReg,
-               FirstOffset, IDLoc, STI);
-  TOut.emitRRI(Fgpu::LBu, SecondLbuDstReg, LbuSrcReg, SecondOffset, IDLoc, STI);
-  TOut.emitRRI(Fgpu::SLL, SllReg, SllReg, 8, IDLoc, STI);
-  TOut.emitRRR(Fgpu::OR, DstReg, DstReg, ATReg, IDLoc, STI);
-
-  return false;
-}
-
-bool FgpuAsmParser::expandUsh(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
-                              const MCSubtargetInfo *STI) {
-  if (hasFgpu32r6() || hasFgpu64r6()) {
-    return Error(IDLoc, "instruction not supported on fgpu32r6 or fgpu64r6");
-  }
-
-  const MCOperand &DstRegOp = Inst.getOperand(0);
-  assert(DstRegOp.isReg() && "expected register operand kind");
-  const MCOperand &SrcRegOp = Inst.getOperand(1);
-  assert(SrcRegOp.isReg() && "expected register operand kind");
-  const MCOperand &OffsetImmOp = Inst.getOperand(2);
-  assert(OffsetImmOp.isImm() && "expected immediate operand kind");
-
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned DstReg = DstRegOp.getReg();
-  unsigned SrcReg = SrcRegOp.getReg();
-  int64_t OffsetValue = OffsetImmOp.getImm();
-
-  warnIfNoMacro(IDLoc);
-  unsigned ATReg = getATReg(IDLoc);
-  if (!ATReg)
-    return true;
-
-  bool IsLargeOffset = !(isInt<16>(OffsetValue + 1) && isInt<16>(OffsetValue));
-  if (IsLargeOffset) {
-    if (loadImmediate(OffsetValue, ATReg, SrcReg, !ABI.ArePtrs64bit(), true,
-                      IDLoc, Out, STI))
-      return true;
-  }
-
-  int64_t FirstOffset = IsLargeOffset ? 1 : (OffsetValue + 1);
-  int64_t SecondOffset = IsLargeOffset ? 0 : OffsetValue;
-  if (isLittle())
-    std::swap(FirstOffset, SecondOffset);
-
-  if (IsLargeOffset) {
-    TOut.emitRRI(Fgpu::SB, DstReg, ATReg, FirstOffset, IDLoc, STI);
-    TOut.emitRRI(Fgpu::SRL, DstReg, DstReg, 8, IDLoc, STI);
-    TOut.emitRRI(Fgpu::SB, DstReg, ATReg, SecondOffset, IDLoc, STI);
-    TOut.emitRRI(Fgpu::LBu, ATReg, ATReg, 0, IDLoc, STI);
-    TOut.emitRRI(Fgpu::SLL, DstReg, DstReg, 8, IDLoc, STI);
-    TOut.emitRRR(Fgpu::OR, DstReg, DstReg, ATReg, IDLoc, STI);
-  } else {
-    TOut.emitRRI(Fgpu::SB, DstReg, SrcReg, FirstOffset, IDLoc, STI);
-    TOut.emitRRI(Fgpu::SRL, ATReg, DstReg, 8, IDLoc, STI);
-    TOut.emitRRI(Fgpu::SB, ATReg, SrcReg, SecondOffset, IDLoc, STI);
-  }
-
-  return false;
-}
-
-bool FgpuAsmParser::expandUxw(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
-                              const MCSubtargetInfo *STI) {
-  if (hasFgpu32r6() || hasFgpu64r6()) {
-    return Error(IDLoc, "instruction not supported on fgpu32r6 or fgpu64r6");
-  }
-
-  const MCOperand &DstRegOp = Inst.getOperand(0);
-  assert(DstRegOp.isReg() && "expected register operand kind");
-  const MCOperand &SrcRegOp = Inst.getOperand(1);
-  assert(SrcRegOp.isReg() && "expected register operand kind");
-  const MCOperand &OffsetImmOp = Inst.getOperand(2);
-  assert(OffsetImmOp.isImm() && "expected immediate operand kind");
-
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned DstReg = DstRegOp.getReg();
-  unsigned SrcReg = SrcRegOp.getReg();
-  int64_t OffsetValue = OffsetImmOp.getImm();
-
-  // Compute left/right load/store offsets.
-  bool IsLargeOffset = !(isInt<16>(OffsetValue + 3) && isInt<16>(OffsetValue));
-  int64_t LxlOffset = IsLargeOffset ? 0 : OffsetValue;
-  int64_t LxrOffset = IsLargeOffset ? 3 : (OffsetValue + 3);
-  if (isLittle())
-    std::swap(LxlOffset, LxrOffset);
-
-  bool IsLoadInst = (Inst.getOpcode() == Fgpu::Ulw);
-  bool DoMove = IsLoadInst && (SrcReg == DstReg) && !IsLargeOffset;
-  unsigned TmpReg = SrcReg;
-  if (IsLargeOffset || DoMove) {
-    warnIfNoMacro(IDLoc);
-    TmpReg = getATReg(IDLoc);
-    if (!TmpReg)
-      return true;
-  }
-
-  if (IsLargeOffset) {
-    if (loadImmediate(OffsetValue, TmpReg, SrcReg, !ABI.ArePtrs64bit(), true,
-                      IDLoc, Out, STI))
-      return true;
-  }
-
-  if (DoMove)
-    std::swap(DstReg, TmpReg);
-
-  unsigned XWL = IsLoadInst ? Fgpu::LWL : Fgpu::SWL;
-  unsigned XWR = IsLoadInst ? Fgpu::LWR : Fgpu::SWR;
-  TOut.emitRRI(XWL, DstReg, TmpReg, LxlOffset, IDLoc, STI);
-  TOut.emitRRI(XWR, DstReg, TmpReg, LxrOffset, IDLoc, STI);
-
-  if (DoMove)
-    TOut.emitRRR(Fgpu::OR, TmpReg, DstReg, Fgpu::ZERO, IDLoc, STI);
-
-  return false;
+  return true;
 }
 
 bool FgpuAsmParser::expandSge(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
@@ -3167,12 +2436,12 @@ bool FgpuAsmParser::expandSge(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   warnIfNoMacro(IDLoc);
 
   switch (Inst.getOpcode()) {
-  case Fgpu::SGE:
-    OpCode = Fgpu::SLT;
-    break;
-  case Fgpu::SGEU:
-    OpCode = Fgpu::SLTu;
-    break;
+//  case Fgpu::SGE:
+//    OpCode = Fgpu::SLT;
+//    break;
+//  case Fgpu::SGEU:
+//    OpCode = Fgpu::SLTu;
+//    break;
   default:
     llvm_unreachable("unexpected 'sge' opcode");
   }
@@ -3201,16 +2470,14 @@ bool FgpuAsmParser::expandSgeImm(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   warnIfNoMacro(IDLoc);
 
   switch (Inst.getOpcode()) {
-  case Fgpu::SGEImm:
-  case Fgpu::SGEImm64:
-    OpRegCode = Fgpu::SLT;
-    OpImmCode = Fgpu::SLTi;
-    break;
-  case Fgpu::SGEUImm:
-  case Fgpu::SGEUImm64:
-    OpRegCode = Fgpu::SLTu;
-    OpImmCode = Fgpu::SLTiu;
-    break;
+//  case Fgpu::SGEImm:
+//    OpRegCode = Fgpu::SLT;
+//    OpImmCode = Fgpu::SLTi;
+//    break;
+//  case Fgpu::SGEUImm:
+//    OpRegCode = Fgpu::SLTu;
+//    OpImmCode = Fgpu::SLTiu;
+//    break;
   default:
     llvm_unreachable("unexpected 'sge' opcode with immediate");
   }
@@ -3258,14 +2525,14 @@ bool FgpuAsmParser::expandSgtImm(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   warnIfNoMacro(IDLoc);
 
   switch (Inst.getOpcode()) {
-  case Fgpu::SGTImm:
-  case Fgpu::SGTImm64:
-    OpCode = Fgpu::SLT;
-    break;
-  case Fgpu::SGTUImm:
-  case Fgpu::SGTUImm64:
-    OpCode = Fgpu::SLTu;
-    break;
+//  case Fgpu::SGTImm:
+//  case Fgpu::SGTImm64:
+//    OpCode = Fgpu::SLT;
+//    break;
+//  case Fgpu::SGTUImm:
+//  case Fgpu::SGTUImm64:
+//    OpCode = Fgpu::SLTu;
+//    break;
   default:
     llvm_unreachable("unexpected 'sgt' opcode with immediate");
   }
@@ -3304,12 +2571,12 @@ bool FgpuAsmParser::expandSle(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   warnIfNoMacro(IDLoc);
 
   switch (Inst.getOpcode()) {
-  case Fgpu::SLE:
-    OpCode = Fgpu::SLT;
-    break;
-  case Fgpu::SLEU:
-    OpCode = Fgpu::SLTu;
-    break;
+//  case Fgpu::SLE:
+//    OpCode = Fgpu::SLT;
+//    break;
+//  case Fgpu::SLEU:
+//    OpCode = Fgpu::SLTu;
+//    break;
   default:
     llvm_unreachable("unexpected 'sge' opcode");
   }
@@ -3338,14 +2605,12 @@ bool FgpuAsmParser::expandSleImm(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   warnIfNoMacro(IDLoc);
 
   switch (Inst.getOpcode()) {
-  case Fgpu::SLEImm:
-  case Fgpu::SLEImm64:
-    OpRegCode = Fgpu::SLT;
-    break;
-  case Fgpu::SLEUImm:
-  case Fgpu::SLEUImm64:
-    OpRegCode = Fgpu::SLTu;
-    break;
+//  case Fgpu::SLEImm:
+//    OpRegCode = Fgpu::SLT;
+//    break;
+//  case Fgpu::SLEUImm:
+//    OpRegCode = Fgpu::SLTu;
+//    break;
   default:
     llvm_unreachable("unexpected 'sge' opcode with immediate");
   }
@@ -3385,7 +2650,7 @@ bool FgpuAsmParser::expandAliasImmediate(MCInst &Inst, SMLoc IDLoc,
   unsigned SrcReg = Inst.getOperand(1).getReg();
   int64_t ImmValue = Inst.getOperand(2).getImm();
 
-  bool Is32Bit = isInt<32>(ImmValue) || (!isGP64bit() && isUInt<32>(ImmValue));
+  bool Is32Bit = isInt<32>(ImmValue) || (isUInt<32>(ImmValue));
 
   unsigned FinalOpcode = Inst.getOpcode();
 
@@ -3405,14 +2670,8 @@ bool FgpuAsmParser::expandAliasImmediate(MCInst &Inst, SMLoc IDLoc,
     case Fgpu::ADDi:
       FinalOpcode = Fgpu::ADD;
       break;
-    case Fgpu::ADDiu:
-      FinalOpcode = Fgpu::ADDu;
-      break;
     case Fgpu::ANDi:
       FinalOpcode = Fgpu::AND;
-      break;
-    case Fgpu::NORImm:
-      FinalOpcode = Fgpu::NOR;
       break;
     case Fgpu::ORi:
       FinalOpcode = Fgpu::OR;
@@ -3425,24 +2684,6 @@ bool FgpuAsmParser::expandAliasImmediate(MCInst &Inst, SMLoc IDLoc,
       break;
     case Fgpu::XORi:
       FinalOpcode = Fgpu::XOR;
-      break;
-    case Fgpu::ANDi64:
-      FinalOpcode = Fgpu::AND64;
-      break;
-    case Fgpu::NORImm64:
-      FinalOpcode = Fgpu::NOR64;
-      break;
-    case Fgpu::ORi64:
-      FinalOpcode = Fgpu::OR64;
-      break;
-    case Fgpu::SLTImm64:
-      FinalOpcode = Fgpu::SLT64;
-      break;
-    case Fgpu::SLTUImm64:
-      FinalOpcode = Fgpu::SLTu64;
-      break;
-    case Fgpu::XORi64:
-      FinalOpcode = Fgpu::XOR64;
       break;
     }
 
@@ -3467,52 +2708,31 @@ bool FgpuAsmParser::expandRotation(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   unsigned FirstShift = Fgpu::NOP;
   unsigned SecondShift = Fgpu::NOP;
 
-  if (hasFgpu32r2()) {
-    if (DReg == SReg) {
-      TmpReg = getATReg(Inst.getLoc());
-      if (!TmpReg)
-        return true;
-    }
-
-    if (Inst.getOpcode() == Fgpu::ROL) {
-      TOut.emitRRR(Fgpu::SUBu, TmpReg, Fgpu::ZERO, TReg, Inst.getLoc(), STI);
-      TOut.emitRRR(Fgpu::ROTRV, DReg, SReg, TmpReg, Inst.getLoc(), STI);
-      return false;
-    }
-
-    if (Inst.getOpcode() == Fgpu::ROR) {
-      TOut.emitRRR(Fgpu::ROTRV, DReg, SReg, TReg, Inst.getLoc(), STI);
-      return false;
-    }
-
-    return true;
-  }
-
-  if (hasFgpu32()) {
-    switch (Inst.getOpcode()) {
-    default:
-      llvm_unreachable("unexpected instruction opcode");
-    case Fgpu::ROL:
-      FirstShift = Fgpu::SRLV;
-      SecondShift = Fgpu::SLLV;
-      break;
-    case Fgpu::ROR:
-      FirstShift = Fgpu::SLLV;
-      SecondShift = Fgpu::SRLV;
-      break;
-    }
-
-    ATReg = getATReg(Inst.getLoc());
-    if (!ATReg)
-      return true;
-
-    TOut.emitRRR(Fgpu::SUBu, ATReg, Fgpu::ZERO, TReg, Inst.getLoc(), STI);
-    TOut.emitRRR(FirstShift, ATReg, SReg, ATReg, Inst.getLoc(), STI);
-    TOut.emitRRR(SecondShift, DReg, SReg, TReg, Inst.getLoc(), STI);
-    TOut.emitRRR(Fgpu::OR, DReg, DReg, ATReg, Inst.getLoc(), STI);
-
-    return false;
-  }
+//  if (hasFgpu32()) {
+//    switch (Inst.getOpcode()) {
+//    default:
+//      llvm_unreachable("unexpected instruction opcode");
+//    case Fgpu::ROL:
+//      FirstShift = Fgpu::SRLV;
+//      SecondShift = Fgpu::SLLV;
+//      break;
+//    case Fgpu::ROR:
+//      FirstShift = Fgpu::SLLV;
+//      SecondShift = Fgpu::SRLV;
+//      break;
+//    }
+//
+//    ATReg = getATReg(Inst.getLoc());
+//    if (!ATReg)
+//      return true;
+//
+//    TOut.emitRRR(Fgpu::SUBu, ATReg, Fgpu::ZERO, TReg, Inst.getLoc(), STI);
+//    TOut.emitRRR(FirstShift, ATReg, SReg, ATReg, Inst.getLoc(), STI);
+//    TOut.emitRRR(SecondShift, DReg, SReg, TReg, Inst.getLoc(), STI);
+//    TOut.emitRRR(Fgpu::OR, DReg, DReg, ATReg, Inst.getLoc(), STI);
+//
+//    return false;
+//  }
 
   return true;
 }
@@ -3529,210 +2749,35 @@ bool FgpuAsmParser::expandRotationImm(MCInst &Inst, SMLoc IDLoc,
   unsigned FirstShift = Fgpu::NOP;
   unsigned SecondShift = Fgpu::NOP;
 
-  if (hasFgpu32r2()) {
-    if (Inst.getOpcode() == Fgpu::ROLImm) {
-      uint64_t MaxShift = 32;
-      uint64_t ShiftValue = ImmValue;
-      if (ImmValue != 0)
-        ShiftValue = MaxShift - ImmValue;
-      TOut.emitRRI(Fgpu::ROTR, DReg, SReg, ShiftValue, Inst.getLoc(), STI);
-      return false;
-    }
-
-    if (Inst.getOpcode() == Fgpu::RORImm) {
-      TOut.emitRRI(Fgpu::ROTR, DReg, SReg, ImmValue, Inst.getLoc(), STI);
-      return false;
-    }
-
-    return true;
-  }
-
-  if (hasFgpu32()) {
-    if (ImmValue == 0) {
-      TOut.emitRRI(Fgpu::SRL, DReg, SReg, 0, Inst.getLoc(), STI);
-      return false;
-    }
-
-    switch (Inst.getOpcode()) {
-    default:
-      llvm_unreachable("unexpected instruction opcode");
-    case Fgpu::ROLImm:
-      FirstShift = Fgpu::SLL;
-      SecondShift = Fgpu::SRL;
-      break;
-    case Fgpu::RORImm:
-      FirstShift = Fgpu::SRL;
-      SecondShift = Fgpu::SLL;
-      break;
-    }
-
-    ATReg = getATReg(Inst.getLoc());
-    if (!ATReg)
-      return true;
-
-    TOut.emitRRI(FirstShift, ATReg, SReg, ImmValue, Inst.getLoc(), STI);
-    TOut.emitRRI(SecondShift, DReg, SReg, 32 - ImmValue, Inst.getLoc(), STI);
-    TOut.emitRRR(Fgpu::OR, DReg, DReg, ATReg, Inst.getLoc(), STI);
-
-    return false;
-  }
-
-  return true;
-}
-
-bool FgpuAsmParser::expandDRotation(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
-                                    const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned ATReg = Fgpu::NoRegister;
-  unsigned DReg = Inst.getOperand(0).getReg();
-  unsigned SReg = Inst.getOperand(1).getReg();
-  unsigned TReg = Inst.getOperand(2).getReg();
-  unsigned TmpReg = DReg;
-
-  unsigned FirstShift = Fgpu::NOP;
-  unsigned SecondShift = Fgpu::NOP;
-
-  if (hasFgpu64r2()) {
-    if (TmpReg == SReg) {
-      TmpReg = getATReg(Inst.getLoc());
-      if (!TmpReg)
-        return true;
-    }
-
-    if (Inst.getOpcode() == Fgpu::DROL) {
-      TOut.emitRRR(Fgpu::DSUBu, TmpReg, Fgpu::ZERO, TReg, Inst.getLoc(), STI);
-      TOut.emitRRR(Fgpu::DROTRV, DReg, SReg, TmpReg, Inst.getLoc(), STI);
-      return false;
-    }
-
-    if (Inst.getOpcode() == Fgpu::DROR) {
-      TOut.emitRRR(Fgpu::DROTRV, DReg, SReg, TReg, Inst.getLoc(), STI);
-      return false;
-    }
-
-    return true;
-  }
-
-  if (hasFgpu64()) {
-    switch (Inst.getOpcode()) {
-    default:
-      llvm_unreachable("unexpected instruction opcode");
-    case Fgpu::DROL:
-      FirstShift = Fgpu::DSRLV;
-      SecondShift = Fgpu::DSLLV;
-      break;
-    case Fgpu::DROR:
-      FirstShift = Fgpu::DSLLV;
-      SecondShift = Fgpu::DSRLV;
-      break;
-    }
-
-    ATReg = getATReg(Inst.getLoc());
-    if (!ATReg)
-      return true;
-
-    TOut.emitRRR(Fgpu::DSUBu, ATReg, Fgpu::ZERO, TReg, Inst.getLoc(), STI);
-    TOut.emitRRR(FirstShift, ATReg, SReg, ATReg, Inst.getLoc(), STI);
-    TOut.emitRRR(SecondShift, DReg, SReg, TReg, Inst.getLoc(), STI);
-    TOut.emitRRR(Fgpu::OR, DReg, DReg, ATReg, Inst.getLoc(), STI);
-
-    return false;
-  }
-
-  return true;
-}
-
-bool FgpuAsmParser::expandDRotationImm(MCInst &Inst, SMLoc IDLoc,
-                                       MCStreamer &Out,
-                                       const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned ATReg = Fgpu::NoRegister;
-  unsigned DReg = Inst.getOperand(0).getReg();
-  unsigned SReg = Inst.getOperand(1).getReg();
-  int64_t ImmValue = Inst.getOperand(2).getImm() % 64;
-
-  unsigned FirstShift = Fgpu::NOP;
-  unsigned SecondShift = Fgpu::NOP;
-
-  MCInst TmpInst;
-
-  if (hasFgpu64r2()) {
-    unsigned FinalOpcode = Fgpu::NOP;
-    if (ImmValue == 0)
-      FinalOpcode = Fgpu::DROTR;
-    else if (ImmValue % 32 == 0)
-      FinalOpcode = Fgpu::DROTR32;
-    else if ((ImmValue >= 1) && (ImmValue <= 32)) {
-      if (Inst.getOpcode() == Fgpu::DROLImm)
-        FinalOpcode = Fgpu::DROTR32;
-      else
-        FinalOpcode = Fgpu::DROTR;
-    } else if (ImmValue >= 33) {
-      if (Inst.getOpcode() == Fgpu::DROLImm)
-        FinalOpcode = Fgpu::DROTR;
-      else
-        FinalOpcode = Fgpu::DROTR32;
-    }
-
-    uint64_t ShiftValue = ImmValue % 32;
-    if (Inst.getOpcode() == Fgpu::DROLImm)
-      ShiftValue = (32 - ImmValue % 32) % 32;
-
-    TOut.emitRRI(FinalOpcode, DReg, SReg, ShiftValue, Inst.getLoc(), STI);
-
-    return false;
-  }
-
-  if (hasFgpu64()) {
-    if (ImmValue == 0) {
-      TOut.emitRRI(Fgpu::DSRL, DReg, SReg, 0, Inst.getLoc(), STI);
-      return false;
-    }
-
-    switch (Inst.getOpcode()) {
-    default:
-      llvm_unreachable("unexpected instruction opcode");
-    case Fgpu::DROLImm:
-      if ((ImmValue >= 1) && (ImmValue <= 31)) {
-        FirstShift = Fgpu::DSLL;
-        SecondShift = Fgpu::DSRL32;
-      }
-      if (ImmValue == 32) {
-        FirstShift = Fgpu::DSLL32;
-        SecondShift = Fgpu::DSRL32;
-      }
-      if ((ImmValue >= 33) && (ImmValue <= 63)) {
-        FirstShift = Fgpu::DSLL32;
-        SecondShift = Fgpu::DSRL;
-      }
-      break;
-    case Fgpu::DRORImm:
-      if ((ImmValue >= 1) && (ImmValue <= 31)) {
-        FirstShift = Fgpu::DSRL;
-        SecondShift = Fgpu::DSLL32;
-      }
-      if (ImmValue == 32) {
-        FirstShift = Fgpu::DSRL32;
-        SecondShift = Fgpu::DSLL32;
-      }
-      if ((ImmValue >= 33) && (ImmValue <= 63)) {
-        FirstShift = Fgpu::DSRL32;
-        SecondShift = Fgpu::DSLL;
-      }
-      break;
-    }
-
-    ATReg = getATReg(Inst.getLoc());
-    if (!ATReg)
-      return true;
-
-    TOut.emitRRI(FirstShift, ATReg, SReg, ImmValue % 32, Inst.getLoc(), STI);
-    TOut.emitRRI(SecondShift, DReg, SReg, (32 - ImmValue % 32) % 32,
-                 Inst.getLoc(), STI);
-    TOut.emitRRR(Fgpu::OR, DReg, DReg, ATReg, Inst.getLoc(), STI);
-
-    return false;
-  }
+//  if (hasFgpu32()) {
+//    if (ImmValue == 0) {
+//      TOut.emitRRI(Fgpu::SRL, DReg, SReg, 0, Inst.getLoc(), STI);
+//      return false;
+//    }
+//
+//    switch (Inst.getOpcode()) {
+//    default:
+//      llvm_unreachable("unexpected instruction opcode");
+//    case Fgpu::ROLImm:
+//      FirstShift = Fgpu::SLL;
+//      SecondShift = Fgpu::SRL;
+//      break;
+//    case Fgpu::RORImm:
+//      FirstShift = Fgpu::SRL;
+//      SecondShift = Fgpu::SLL;
+//      break;
+//    }
+//
+//    ATReg = getATReg(Inst.getLoc());
+//    if (!ATReg)
+//      return true;
+//
+//    TOut.emitRRI(FirstShift, ATReg, SReg, ImmValue, Inst.getLoc(), STI);
+//    TOut.emitRRI(SecondShift, DReg, SReg, 32 - ImmValue, Inst.getLoc(), STI);
+//    TOut.emitRRR(Fgpu::OR, DReg, DReg, ATReg, Inst.getLoc(), STI);
+//
+//    return false;
+//  }
 
   return true;
 }
@@ -3743,9 +2788,10 @@ bool FgpuAsmParser::expandAbs(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   unsigned FirstRegOp = Inst.getOperand(0).getReg();
   unsigned SecondRegOp = Inst.getOperand(1).getReg();
 
-  TOut.emitRI(Fgpu::BGEZ, SecondRegOp, 8, IDLoc, STI);
+  assert(false && "Not workign rn");
+//  TOut.emitRI(Fgpu::BGEZ, SecondRegOp, 8, IDLoc, STI);
   if (FirstRegOp != SecondRegOp)
-    TOut.emitRRR(Fgpu::ADDu, FirstRegOp, SecondRegOp, Fgpu::ZERO, IDLoc, STI);
+    TOut.emitRRR(Fgpu::ADD, FirstRegOp, SecondRegOp, Fgpu::ZERO, IDLoc, STI);
   else
     TOut.emitEmptyDelaySlot(false, IDLoc, STI);
   TOut.emitRRR(Fgpu::SUB, FirstRegOp, Fgpu::ZERO, SecondRegOp, IDLoc, STI);
@@ -3768,105 +2814,11 @@ bool FgpuAsmParser::expandMulImm(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   loadImmediate(ImmValue, ATReg, Fgpu::NoRegister, true, false, IDLoc, Out,
                 STI);
 
-  TOut.emitRR(Inst.getOpcode() == Fgpu::MULImmMacro ? Fgpu::MULT : Fgpu::DMULT,
-              SrcReg, ATReg, IDLoc, STI);
-
-  TOut.emitR(Fgpu::MFLO, DstReg, IDLoc, STI);
+  TOut.emitRRR(Fgpu::MUL,
+              DstReg, SrcReg, ATReg, IDLoc, STI);
 
   return false;
 }
-
-bool FgpuAsmParser::expandMulO(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
-                               const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned ATReg = Fgpu::NoRegister;
-  unsigned DstReg = Inst.getOperand(0).getReg();
-  unsigned SrcReg = Inst.getOperand(1).getReg();
-  unsigned TmpReg = Inst.getOperand(2).getReg();
-
-  ATReg = getATReg(Inst.getLoc());
-  if (!ATReg)
-    return true;
-
-  TOut.emitRR(Inst.getOpcode() == Fgpu::MULOMacro ? Fgpu::MULT : Fgpu::DMULT,
-              SrcReg, TmpReg, IDLoc, STI);
-
-  TOut.emitR(Fgpu::MFLO, DstReg, IDLoc, STI);
-
-  TOut.emitRRI(Inst.getOpcode() == Fgpu::MULOMacro ? Fgpu::SRA : Fgpu::DSRA32,
-               DstReg, DstReg, 0x1F, IDLoc, STI);
-
-  TOut.emitR(Fgpu::MFHI, ATReg, IDLoc, STI);
-
-  if (useTraps()) {
-    TOut.emitRRI(Fgpu::TNE, DstReg, ATReg, 6, IDLoc, STI);
-  } else {
-    MCContext & Context = TOut.getStreamer().getContext();
-    MCSymbol * BrTarget = Context.createTempSymbol();
-    MCOperand LabelOp =
-        MCOperand::createExpr(MCSymbolRefExpr::create(BrTarget, Context));
-
-    TOut.emitRRX(Fgpu::BEQ, DstReg, ATReg, LabelOp, IDLoc, STI);
-    if (AssemblerOptions.back()->isReorder())
-      TOut.emitNop(IDLoc, STI);
-    TOut.emitII(Fgpu::BREAK, 6, 0, IDLoc, STI);
-
-    TOut.getStreamer().emitLabel(BrTarget);
-  }
-  TOut.emitR(Fgpu::MFLO, DstReg, IDLoc, STI);
-
-  return false;
-}
-
-bool FgpuAsmParser::expandMulOU(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
-                                const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned ATReg = Fgpu::NoRegister;
-  unsigned DstReg = Inst.getOperand(0).getReg();
-  unsigned SrcReg = Inst.getOperand(1).getReg();
-  unsigned TmpReg = Inst.getOperand(2).getReg();
-
-  ATReg = getATReg(IDLoc);
-  if (!ATReg)
-    return true;
-
-  TOut.emitRR(Inst.getOpcode() == Fgpu::MULOUMacro ? Fgpu::MULTu : Fgpu::DMULTu,
-              SrcReg, TmpReg, IDLoc, STI);
-
-  TOut.emitR(Fgpu::MFHI, ATReg, IDLoc, STI);
-  TOut.emitR(Fgpu::MFLO, DstReg, IDLoc, STI);
-  if (useTraps()) {
-    TOut.emitRRI(Fgpu::TNE, ATReg, Fgpu::ZERO, 6, IDLoc, STI);
-  } else {
-    MCContext & Context = TOut.getStreamer().getContext();
-    MCSymbol * BrTarget = Context.createTempSymbol();
-    MCOperand LabelOp =
-        MCOperand::createExpr(MCSymbolRefExpr::create(BrTarget, Context));
-
-    TOut.emitRRX(Fgpu::BEQ, ATReg, Fgpu::ZERO, LabelOp, IDLoc, STI);
-    if (AssemblerOptions.back()->isReorder())
-      TOut.emitNop(IDLoc, STI);
-    TOut.emitII(Fgpu::BREAK, 6, 0, IDLoc, STI);
-
-    TOut.getStreamer().emitLabel(BrTarget);
-  }
-
-  return false;
-}
-
-bool FgpuAsmParser::expandDMULMacro(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
-                                    const MCSubtargetInfo *STI) {
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned DstReg = Inst.getOperand(0).getReg();
-  unsigned SrcReg = Inst.getOperand(1).getReg();
-  unsigned TmpReg = Inst.getOperand(2).getReg();
-
-  TOut.emitRR(Fgpu::DMULTu, SrcReg, TmpReg, IDLoc, STI);
-  TOut.emitR(Fgpu::MFLO, DstReg, IDLoc, STI);
-
-  return false;
-}
-
 
 bool FgpuAsmParser::expandSeq(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
                               const MCSubtargetInfo *STI) {
@@ -4006,7 +2958,7 @@ bool FgpuAsmParser::expandSneI(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   unsigned Opc;
   if (ImmValue > -0x8000 && ImmValue < 0) {
     ImmValue = -ImmValue;
-    Opc = isGP64bit() ? Fgpu::DADDiu : Fgpu::ADDiu;
+    Opc = Fgpu::ADDi;
   } else {
     Opc = Fgpu::XORi;
   }
@@ -4030,43 +2982,9 @@ bool FgpuAsmParser::expandSneI(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   return false;
 }
 
-
-bool FgpuAsmParser::expandSaaAddr(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
-                                  const MCSubtargetInfo *STI) {
-  assert(Inst.getNumOperands() == 3 && "expected three operands");
-  assert(Inst.getOperand(0).isReg() && "expected register operand kind");
-  assert(Inst.getOperand(1).isReg() && "expected register operand kind");
-
-  warnIfNoMacro(IDLoc);
-
-  FgpuTargetStreamer &TOut = getTargetStreamer();
-  unsigned Opcode = Inst.getOpcode() == Fgpu::SaaAddr ? Fgpu::SAA : Fgpu::SAAD;
-  unsigned RtReg = Inst.getOperand(0).getReg();
-  unsigned BaseReg = Inst.getOperand(1).getReg();
-  const MCOperand &BaseOp = Inst.getOperand(2);
-
-  if (BaseOp.isImm()) {
-    int64_t ImmValue = BaseOp.getImm();
-    if (ImmValue == 0) {
-      TOut.emitRR(Opcode, RtReg, BaseReg, IDLoc, STI);
-      return false;
-    }
-  }
-
-  unsigned ATReg = getATReg(IDLoc);
-  if (!ATReg)
-    return true;
-
-  if (expandLoadAddress(ATReg, BaseReg, BaseOp, !isGP64bit(), IDLoc, Out, STI))
-    return true;
-
-  TOut.emitRR(Opcode, RtReg, ATReg, IDLoc, STI);
-  return false;
-}
-
 unsigned FgpuAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
   switch (Inst.getOpcode()) {
-  case Fgpu::SYNC:
+  case Fgpu::SET_SYNC:
     if (Inst.getOperand(0).getImm() != 0)
       return Match_NonZeroOperandForSync;
     return Match_Success;
@@ -4135,134 +3053,6 @@ bool FgpuAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   case Match_NoFCCRegisterForCurrentISA:
     return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
                  "non-zero fcc register doesn't exist in current ISA level");
-  case Match_Immz:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo), "expected '0'");
-  case Match_UImm1_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 1-bit unsigned immediate");
-  case Match_UImm2_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 2-bit unsigned immediate");
-  case Match_UImm2_1:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected immediate in range 1 .. 4");
-  case Match_UImm3_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 3-bit unsigned immediate");
-  case Match_UImm4_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 4-bit unsigned immediate");
-  case Match_SImm4_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 4-bit signed immediate");
-  case Match_UImm5_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 5-bit unsigned immediate");
-  case Match_SImm5_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 5-bit signed immediate");
-  case Match_UImm5_1:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected immediate in range 1 .. 32");
-  case Match_UImm5_32:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected immediate in range 32 .. 63");
-  case Match_UImm5_33:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected immediate in range 33 .. 64");
-  case Match_UImm5_0_Report_UImm6:
-    // This is used on UImm5 operands that have a corresponding UImm5_32
-    // operand to avoid confusing the user.
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 6-bit unsigned immediate");
-  case Match_UImm5_Lsl2:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected both 7-bit unsigned immediate and multiple of 4");
-  case Match_UImmRange2_64:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected immediate in range 2 .. 64");
-  case Match_UImm6_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 6-bit unsigned immediate");
-  case Match_UImm6_Lsl2:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected both 8-bit unsigned immediate and multiple of 4");
-  case Match_SImm6_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 6-bit signed immediate");
-  case Match_UImm7_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 7-bit unsigned immediate");
-  case Match_UImm7_N1:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected immediate in range -1 .. 126");
-  case Match_SImm7_Lsl2:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected both 9-bit signed immediate and multiple of 4");
-  case Match_UImm8_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 8-bit unsigned immediate");
-  case Match_UImm10_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 10-bit unsigned immediate");
-  case Match_SImm10_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 10-bit signed immediate");
-  case Match_SImm11_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 11-bit signed immediate");
-  case Match_UImm16:
-  case Match_UImm16_Relaxed:
-  case Match_UImm16_AltRelaxed:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 16-bit unsigned immediate");
-  case Match_SImm16:
-  case Match_SImm16_Relaxed:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 16-bit signed immediate");
-  case Match_SImm19_Lsl2:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected both 19-bit signed immediate and multiple of 4");
-  case Match_UImm20_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 20-bit unsigned immediate");
-  case Match_UImm26_0:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 26-bit unsigned immediate");
-  case Match_SImm32:
-  case Match_SImm32_Relaxed:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 32-bit signed immediate");
-  case Match_UImm32_Coerced:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected 32-bit immediate");
-  case Match_MemSImm9:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected memory with 9-bit signed offset");
-  case Match_MemSImm10:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected memory with 10-bit signed offset");
-  case Match_MemSImm10Lsl1:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected memory with 11-bit signed offset and multiple of 2");
-  case Match_MemSImm10Lsl2:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected memory with 12-bit signed offset and multiple of 4");
-  case Match_MemSImm10Lsl3:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected memory with 13-bit signed offset and multiple of 8");
-  case Match_MemSImm11:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected memory with 11-bit signed offset");
-  case Match_MemSImm12:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected memory with 12-bit signed offset");
-  case Match_MemSImm16:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected memory with 16-bit signed offset");
-  case Match_MemSImmPtr:
-    return Error(RefineErrorLoc(IDLoc, Operands, ErrorInfo),
-                 "expected memory with 32-bit signed offset");
   case Match_RequiresPosSizeRange0_32: {
     SMLoc ErrorStart = Operands[3]->getStartLoc();
     SMLoc ErrorEnd = Operands[4]->getEndLoc();
@@ -4309,39 +3099,38 @@ int FgpuAsmParser::matchCPURegisterName(StringRef Name) {
   int CC;
 
   CC = StringSwitch<unsigned>(Name)
-           .Case("zero", 0)
-           .Cases("at", "AT", 1)
-           .Case("a0", 4)
-           .Case("a1", 5)
-           .Case("a2", 6)
-           .Case("a3", 7)
-           .Case("v0", 2)
-           .Case("v1", 3)
-           .Case("s0", 16)
-           .Case("s1", 17)
-           .Case("s2", 18)
-           .Case("s3", 19)
-           .Case("s4", 20)
-           .Case("s5", 21)
-           .Case("s6", 22)
-           .Case("s7", 23)
-           .Case("k0", 26)
-           .Case("k1", 27)
-           .Case("gp", 28)
-           .Case("sp", 29)
-           .Case("fp", 30)
-           .Case("s8", 30)
-           .Case("ra", 31)
-           .Case("t0", 8)
-           .Case("t1", 9)
-           .Case("t2", 10)
-           .Case("t3", 11)
-           .Case("t4", 12)
-           .Case("t5", 13)
-           .Case("t6", 14)
-           .Case("t7", 15)
-           .Case("t8", 24)
-           .Case("t9", 25)
+           .Cases("zero", "r0", 0)
+           .Cases("at", "AT", "r1", 1)
+           .Cases("a0", "r4", 4)
+           .Cases("a1", "r5", 5)
+           .Cases("a2", "r6", 6)
+           .Cases("a3", "r7", 7)
+           .Cases("v0", "r2", 2)
+           .Cases("v1", "r3", 3)
+           .Cases("s0", "r16", 16)
+           .Cases("s1", "r17", 17)
+           .Cases("s2", "r18", 18)
+           .Cases("s3", "r19", 19)
+           .Cases("s4", "r20", 20)
+           .Cases("s5", "r21", 21)
+           .Cases("s6", "r22", 22)
+           .Cases("s7", "r23", 23)
+           .Cases("k0", "r26", 26)
+           .Cases("bp", "r27", 27)
+           .Cases("fp", "r28", 28)
+           .Cases("gp", "r29", 29)
+           .Cases("ra", "lr", "r30", 30)
+           .Cases("sp", "r31", 31)
+           .Cases("t0", "r8", 8)
+           .Cases("t1", "r9", 9)
+           .Cases("t2", "r10", 10)
+           .Cases("t3", "r11", 11)
+           .Cases("t4", "r12", 12)
+           .Cases("t5", "r13", 13)
+           .Cases("t6", "r14", 14)
+           .Cases("t7", "r15", 15)
+           .Cases("t8", "r16", 24)
+           .Cases("t9", "r25", 25)
            .Default(-1);
 
     return CC;
@@ -4385,7 +3174,8 @@ bool FgpuAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
 
   // Check if the current operand has a custom associated parser, if so, try to
   // custom parse the operand, or fallback to the general approach.
-  OperandMatchResultTy ResTy = MatchOperandParserImpl(Operands, Mnemonic);
+  OperandMatchResultTy ResTy = llvm::MatchOperand_NoMatch;
+  // MatchOperandParserImpl(Operands, Mnemonic);
   if (ResTy == MatchOperand_Success)
     return false;
   // If there wasn't a custom match, try the generic matcher below. Otherwise,
@@ -5753,10 +4543,10 @@ bool FgpuAsmParser::ParseDirective(AsmToken DirectiveID) {
     parseDirectiveCpRestore(DirectiveID.getLoc());
     return false;
   }
-  if (IDVal == ".cplocal") {
-    parseDirectiveCpLocal(DirectiveID.getLoc());
-    return false;
-  }
+//  if (IDVal == ".cplocal") {
+//    parseDirectiveCpLocal(DirectiveID.getLoc());
+//    return false;
+//  }
   if (IDVal == ".ent") {
     StringRef SymbolName;
 

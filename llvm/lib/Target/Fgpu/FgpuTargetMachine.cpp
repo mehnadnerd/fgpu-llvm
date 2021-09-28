@@ -50,7 +50,6 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeFgpuTarget() {
 
   PassRegistry *PR = PassRegistry::getPassRegistry();
   initializeGlobalISel(*PR);
-  initializeFgpuDelaySlotFillerPass(*PR);
   initializeFgpuBranchExpansionPass(*PR);
   initializeFgpuPreLegalizerCombinerPass(*PR);
 }
@@ -237,10 +236,6 @@ FgpuTargetMachine::getTargetTransformInfo(const Function &F) {
 void FgpuPassConfig::addPreEmitPass() {
   // Expand pseudo instructions that are sensitive to register allocation.
   addPass(createFgpuExpandPseudoPass());
-
-  // The delay slot filler pass can potientially create forbidden slot hazards
-  // for FGPUR6 and therefore it should go before FgpuBranchExpansion pass.
-  addPass(createFgpuDelaySlotFillerPass());
 
   // This pass expands branches and takes care about the forbidden slot hazards.
   // Expanding branches may potentially create forbidden slot hazards for
