@@ -1398,14 +1398,14 @@ static SDValue lowerUnalignedIntStore(StoreSDNode *SD, SelectionDAG &DAG,
 // Lower (store (fp_to_sint $fp) $ptr) to (store (TruncIntFP $fp), $ptr).
 static SDValue lowerFP_TO_SINT_STORE(StoreSDNode *SD, SelectionDAG &DAG,
                                      bool SingleFloat) {
-  assert(false && "Not supported");
-  return SDValue();
-//  SDValue Val = SD->getValue();
-//
-//  if (Val.getOpcode() != ISD::FP_TO_SINT ||
-//      (Val.getValueSizeInBits() > 32 && SingleFloat))
-//    return SDValue();
-//
+  SDValue Val = SD->getValue();
+
+  if (Val.getOpcode() != ISD::FP_TO_SINT ||
+      (Val.getValueSizeInBits() > 32 && SingleFloat))
+    return SDValue();
+
+  return SDValue(); // TODO: Idk what to do here
+
 //  EVT FPTy = EVT::getFloatingPointVT(Val.getValueSizeInBits());
 //  SDValue Tr = DAG.getNode(FgpuISD::TruncIntFP, SDLoc(Val), FPTy,
 //                           Val.getOperand(0));

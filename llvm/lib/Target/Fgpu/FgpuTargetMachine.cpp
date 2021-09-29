@@ -64,11 +64,11 @@ static std::string computeDataLayout(const Triple &TT, StringRef CPU,
   Ret += "e";
   Ret += "-m:e";
 
-
   // 8 and 16 bit integers only need to have natural alignment, but try to
   // align them to 32 bits. 64 bit integers have natural alignment.
   Ret += "-i8:8:32-i16:16:32-i64:64";
-  Ret += "-n32-S64";
+  Ret += "-p:32:32"; // 32 bit pointers
+  Ret += "-n32-S64"; // 32 bit integers are natively supported, 64-bit stack align
 
   return Ret;
 }
