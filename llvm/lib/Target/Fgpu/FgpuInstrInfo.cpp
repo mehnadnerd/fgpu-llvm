@@ -217,7 +217,7 @@ FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(
 
   // Get the second to last instruction in the block.
   unsigned SecondLastOpc = 0;
-  MachineInstr *SecondLastInst = nullptr;
+  MachineInstr *SecondLastInst = nullptr; // TODO: why are we lookign at the secodn to last inst?
 
   // Skip past any debug instruction to see if the second last actual
   // is a branch.
@@ -238,7 +238,8 @@ FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(
   if (!SecondLastOpc) {
     // Unconditional branch.
     if (LastInst->isUnconditionalBranch()) {
-      TBB = LastInst->getOperand(0).getMBB();
+      //TBB = LastInst->getOperand(0).getMBB();
+      TBB = LastInst->getOperand(LastInst->getNumExplicitOperands() - 1).getMBB();
       return BT_Uncond;
     }
 
@@ -261,7 +262,7 @@ FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(
     if (!AllowModify)
       return BT_None;
 
-    TBB = SecondLastInst->getOperand(0).getMBB();
+    TBB = SecondLastInst->getOperand(SecondLastInst->getNumExplicitOperands() - 1).getMBB();
     LastInst->eraseFromParent();
     BranchInstrs.pop_back();
     return BT_Uncond;
@@ -273,7 +274,7 @@ FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(
     return BT_None;
 
   AnalyzeCondBr(SecondLastInst, SecondLastOpc, TBB, Cond);
-  FBB = LastInst->getOperand(0).getMBB();
+  FBB = LastInst->getOperand(LastInst->getNumExplicitOperands() - 1).getMBB();
 
   return BT_CondUncond;
 }

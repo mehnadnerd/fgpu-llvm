@@ -180,6 +180,9 @@ bool FgpuSEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   switch(MI.getDesc().getOpcode()) {
   default:
     return false;
+  case TargetOpcode::COPY:
+    ExpandCopy(MBB, MI);
+    break;
   case Fgpu::RetLR:
     expandRetLR(MBB, MI, Fgpu::RET);
     break;
@@ -265,7 +268,14 @@ unsigned FgpuSEInstrInfo::loadImmediate(int64_t Imm, MachineBasicBlock &MBB,
 void FgpuSEInstrInfo::expandRetLR(MachineBasicBlock &MBB,
                                   MachineInstr &I,
                                   unsigned Opc) const {
-  BuildMI(MBB, I, I.getDebugLoc(), get(Opc));
+  MachineInstrBuilder MIB = BuildMI(MBB, I, I.getDebugLoc(), get(Opc));
+  //          .addReg(Fgpu::LR, RegState::Undef);
+
+  // Retain any imp-use flags.
+  for (auto & MO : I.operands()) {
+    if (MO.isImplicit())
+      MIB.add(MO);
+  }
 }
 
 void FgpuSEInstrInfo::ExpandLi32(MachineBasicBlock &MBB, MachineInstr &I) const {
@@ -274,6 +284,12 @@ void FgpuSEInstrInfo::ExpandLi32(MachineBasicBlock &MBB, MachineInstr &I) const 
   unsigned ImmVal = (unsigned)MO.getImm();
   BuildMI(MBB, I, I.getDebugLoc(), get(Fgpu::Li), DstReg).addImm(ImmVal);
   BuildMI(MBB, I, I.getDebugLoc(), get(Fgpu::LUi), DstReg).addImm(ImmVal>>16);
+}
+
+void FgpuSEInstrInfo::ExpandCopy(MachineBasicBlock &MBB, MachineInstr &I) const {
+  unsigned DstReg = I.getOperand(0).getReg();
+  unsigned SrcReg = I.getOperand(1).getReg();
+  BuildMI(MBB, I, I.getDebugLoc(), get(Fgpu::OR), DstReg).addReg(SrcReg).addReg(Fgpu::ZERO);
 }
 
 std::pair<bool, bool>

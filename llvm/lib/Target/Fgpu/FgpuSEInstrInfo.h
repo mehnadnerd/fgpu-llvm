@@ -89,6 +89,7 @@ private:
                                         const MachineFunction &MF) const;
 
   void ExpandLi32(MachineBasicBlock &MBB, MachineInstr &I) const;
+  void ExpandCopy(MachineBasicBlock &MBB, MachineInstr &I) const;
 };
 
 }
