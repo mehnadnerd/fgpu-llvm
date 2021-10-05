@@ -66,6 +66,8 @@ FgpuSETargetLowering::FgpuSETargetLowering(const FgpuTargetMachine &TM,
     : FgpuTargetLowering(TM, STI) {
   // Set up the register classes
   addRegisterClass(MVT::i32, &Fgpu::GPROutRegClass);
+  addRegisterClass(MVT::f32, &Fgpu::FloatRegsRegClass);
+  addRegisterClass(MVT::v32f32, &Fgpu::VecRegsRegClass);
 
 //  if (!Subtarget.useSoftFloat()) { // TODO: vector support
 //    addRegisterClass(MVT::f32, &Fgpu::FGR32RegClass);

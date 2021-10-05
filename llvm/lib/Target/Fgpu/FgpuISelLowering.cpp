@@ -303,8 +303,10 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
   setOperationAction(ISD::FLOG2,             MVT::f32,   Expand);
   setOperationAction(ISD::FLOG10,            MVT::f32,   Expand);
   setOperationAction(ISD::FEXP,              MVT::f32,   Expand);
-  setOperationAction(ISD::FMA,               MVT::f32,   Expand);
+
+  setOperationAction(ISD::FMA,               MVT::f32,   Legal); // called FFMA
   setOperationAction(ISD::FMA,               MVT::f64,   Expand);
+
   setOperationAction(ISD::FREM,              MVT::f32,   Expand);
   setOperationAction(ISD::FREM,              MVT::f64,   Expand);
 
