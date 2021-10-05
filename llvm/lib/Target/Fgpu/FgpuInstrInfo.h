@@ -43,7 +43,7 @@ class FgpuInstrInfo : public FgpuGenInstrInfo {
 
 protected:
   const FgpuSubtarget &Subtarget;
-  unsigned UncondBrOpc;
+  //unsigned UncondBrOpc;
 
 public:
   enum BranchType {
@@ -177,6 +177,8 @@ private:
 
   void BuildCondBr(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
                    const DebugLoc &DL, ArrayRef<MachineOperand> Cond) const;
+  void BuildUnCondBr(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
+                   const DebugLoc &DL) const;
 };
 
 /// Create FgpuInstrInfo objects.

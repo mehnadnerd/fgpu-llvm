@@ -484,6 +484,7 @@ class Control<bits<8> op, string instr_asm>:
      instr_asm, [], IIBranch> {
   let isTerminator=1;
   let isBarrier=1;
+  let Uses=[LR];
 }
 
 
@@ -679,7 +680,7 @@ class Branch<bits<8> op, string instr_asm, PatFrag cond_op,
      [(brcond (i32 (cond_op RC:$rd, RC:$rs)), bb:$imm14)], IIBranch>{
   let isBranch = 1;
   let isTerminator = 1;
-  let isBarrier = 1;
+// let isBarrier = 1; // WTF was this marked 1???????
 }
 
 
@@ -693,6 +694,7 @@ class JmpLink<bits<8> op, string instr_asm>:
      !strconcat(instr_asm, "\t$imm14"),
       [(FgpuJmpLink imm:$imm14)], IIBranch>{
   let isCall=1;
+  let Defs=[LR];
 }
 
 //def SDT_FgpuJmpLinkRegister      : SDTypeProfile<0, 2, [SDTCisVT<0, iPTR>, SDTCisInt<0>]>;
@@ -704,6 +706,8 @@ class JmpLink<bits<8> op, string instr_asm>:
 //     !strconcat(instr_asm, "\t$rd, $imm14"),
 //      [(FgpuJmpLinkRegister ALURegs:$rd, imm:$imm14)], IIBranch>{
 //  let isCall=1;
+//  let Defs=[LR];
+//  let Uses=[LR];
 //}
 
 class SetSync_<bits<8> op, string instr_asm>:
@@ -747,12 +751,14 @@ def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_FgpuCallSeqStart,
 def callseq_end   : SDNode<"ISD::CALLSEQ_END", SDT_FgpuCallSeqEnd,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 
-def ADJCALLSTACKDOWN : FgpuPseudo<(outs), (ins uimm14:$amt1, uimm14:$amt2),
-                                  "!ADJCALLSTACKDOWN $amt1",
-                                  [(callseq_start timm:$amt1, timm:$amt2)]>;
-def ADJCALLSTACKUP   : FgpuPseudo<(outs), (ins uimm14:$amt1, uimm14:$amt2),
-                                  "!ADJCALLSTACKUP $amt1",
-                                  [(callseq_end timm:$amt1, timm:$amt2)]>;
+let Defs = [SP], Uses = [SP], hasSideEffects = 1, hasNoSchedulingInfo = 1 in {
+  def ADJCALLSTACKDOWN : FgpuPseudo<(outs), (ins uimm14:$amt1, uimm14:$amt2),
+                                    "!ADJCALLSTACKDOWN $amt1",
+                                    [(callseq_start timm:$amt1, timm:$amt2)]>;
+  def ADJCALLSTACKUP   : FgpuPseudo<(outs), (ins uimm14:$amt1, uimm14:$amt2),
+                                    "!ADJCALLSTACKUP $amt1",
+                                    [(callseq_end timm:$amt1, timm:$amt2)]>;
+}
 //}
 //===----------------------------------------------------------------------===//
 // Instruction definition
@@ -906,7 +912,7 @@ def Li32    : FgpuPseudo<(outs ALURegs:$rd), (ins imm32:$src), "Li32",
 
 def NOP     : FgpuPseudo<(outs), (ins), "nop", []>, PseudoInstExpansion<(SLL ZERO, ZERO, 0)>;
 
-let isReturn=1, isTerminator=1, isBarrier=1, hasCtrlDep=1 in
+let isReturn=1, isTerminator=1, isBarrier=1, hasCtrlDep=1, Uses = [LR] in
   def RetLR : FgpuPseudo<(outs), (ins), "", [(FgpuRET)]>;
 
 def RET     : Control<0x92, "ret">;

@@ -39,7 +39,7 @@ void FgpuInstrInfo::anchor() {}
 
 FgpuInstrInfo::FgpuInstrInfo(const FgpuSubtarget &STI, unsigned UncondBr)
     : FgpuGenInstrInfo(Fgpu::ADJCALLSTACKDOWN, Fgpu::ADJCALLSTACKUP),
-      Subtarget(STI), UncondBrOpc(UncondBr) {}
+      Subtarget(STI)/*, UncondBrOpc(UncondBr)*/ {}
 
 const FgpuInstrInfo *FgpuInstrInfo::create(FgpuSubtarget &STI) {
 
@@ -116,6 +116,16 @@ void FgpuInstrInfo::BuildCondBr(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
   MIB.addMBB(TBB);
 }
 
+void FgpuInstrInfo::BuildUnCondBr(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
+                                const DebugLoc &DL) const {
+  unsigned Opc = Fgpu::BEQ;
+  const MCInstrDesc &MCID = get(Opc);
+  MachineInstrBuilder MIB = BuildMI(&MBB, DL, MCID);
+  MIB.addReg(Fgpu::ZERO);
+  MIB.addReg(Fgpu::ZERO);
+  MIB.addMBB(TBB);
+}
+
 unsigned FgpuInstrInfo::insertBranch(MachineBasicBlock &MBB,
                                      MachineBasicBlock *TBB,
                                      MachineBasicBlock *FBB,
@@ -137,14 +147,15 @@ unsigned FgpuInstrInfo::insertBranch(MachineBasicBlock &MBB,
   // Two-way Conditional branch.
   if (FBB) {
     BuildCondBr(MBB, TBB, DL, Cond);
-    BuildMI(&MBB, DL, get(UncondBrOpc)).addMBB(FBB);
+    BuildUnCondBr(MBB, FBB, DL);
+    //BuildMI(&MBB, DL, get(UncondBrOpc)).addMBB(FBB);
     return 2;
   }
 
   // One way branch.
   // Unconditional branch.
   if (Cond.empty())
-    BuildMI(&MBB, DL, get(UncondBrOpc)).addMBB(TBB);
+    BuildUnCondBr(MBB, TBB, DL);
   else // Conditional branch.
     BuildCondBr(MBB, TBB, DL, Cond);
   return 1;
@@ -217,7 +228,7 @@ FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(
 
   // Get the second to last instruction in the block.
   unsigned SecondLastOpc = 0;
-  MachineInstr *SecondLastInst = nullptr; // TODO: why are we lookign at the secodn to last inst?
+  MachineInstr *SecondLastInst = nullptr;
 
   // Skip past any debug instruction to see if the second last actual
   // is a branch.
@@ -284,7 +295,7 @@ bool FgpuInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
   switch (BranchOpc) {
   case Fgpu::BEQ:
   case Fgpu::BNE:
-    return isInt<18>(BrOffset);
+    return isInt<14>(BrOffset);
   }
 
   llvm_unreachable("Unknown branch instruction!");
