@@ -71,10 +71,7 @@ FgpuLegalizerInfo::FgpuLegalizerInfo(const FgpuSubtarget &ST) {
   const LLT s16 = LLT::scalar(16);
   const LLT s32 = LLT::scalar(32);
   const LLT s64 = LLT::scalar(64);
-  const LLT v16s8 = LLT::fixed_vector(16, 8);
-  const LLT v8s16 = LLT::fixed_vector(8, 16);
-  const LLT v4s32 = LLT::fixed_vector(4, 32);
-  const LLT v2s64 = LLT::fixed_vector(2, 64);
+  const LLT v32s32 = LLT::fixed_vector(32, 32);
   const LLT p0 = LLT::pointer(0, 32);
 
   getActionDefinitionsBuilder({G_ADD, G_SUB, G_MUL})
@@ -260,21 +257,21 @@ FgpuLegalizerInfo::FgpuLegalizerInfo(const FgpuSubtarget &ST) {
 
   // FP instructions
   getActionDefinitionsBuilder(G_FCONSTANT)
-      .legalFor({s32, s64});
+      .legalFor({s32});
 
   getActionDefinitionsBuilder({G_FADD, G_FSUB, G_FMUL, G_FDIV, G_FABS, G_FSQRT})
       .legalIf([=, &ST](const LegalityQuery &Query) {
-        if (CheckTyN(0, Query, {s32, s64}))
+        if (CheckTyN(0, Query, {s32}))
           return true;
         return false;
       });
 
   getActionDefinitionsBuilder(G_FCMP)
-      .legalFor({{s32, s32}, {s32, s64}})
+      .legalFor({{s32, s32}, {s32, s32}})
       .minScalar(0, s32);
 
   getActionDefinitionsBuilder({G_FCEIL, G_FFLOOR})
-      .libcallFor({s32, s64});
+      .libcallFor({s32, s32});
 
   getActionDefinitionsBuilder(G_FPEXT)
       .legalFor({{s64, s32}});
@@ -412,7 +409,7 @@ bool FgpuLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
 
     if (SrcTy != s32)
       return false;
-    if (DstTy != s32 && DstTy != s64)
+    if (DstTy != s32)
       return false;
 
     // Let 0xABCDEFGH be given unsigned in MI.getOperand(1). First let's convert

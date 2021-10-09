@@ -186,6 +186,22 @@ const char *FgpuTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case FgpuISD::Wrapper:           return "FgpuISD::Wrapper";
   case FgpuISD::DynAlloc:          return "FgpuISD::DynAlloc";
   case FgpuISD::Sync:              return "FgpuISD::Sync";
+  case FgpuISD::LUi:               return "FgpuISD::LUi";
+  case FgpuISD::Li:                return "FgpuISD::Li";
+  case FgpuISD::LP:                return "FgpuISD::LP";
+  case FgpuISD::WGOFF:             return "FgpuISD::WGOFF";
+  case FgpuISD::WGID:              return "FgpuISD::WGID";
+  case FgpuISD::LID:               return "FgpuISD::LID";
+  case FgpuISD::WGSIZE:            return "FgpuISD::WGSIZE";
+  case FgpuISD::SIZE:              return "FgpuISD::SIZE";
+  case FgpuISD::DOT:               return "FgpuISD::DOT";
+  case FgpuISD::AADD:              return "FgpuISD::AADD";
+  case FgpuISD::AMAX:              return "FgpuISD::AMAX";
+  case FgpuISD::RELU:              return "FgpuISD::RELU";
+  case FgpuISD::SLW:               return "FgpuISD::SLW";
+  case FgpuISD::SLWC:              return "FgpuISD::SLWC";
+  case FgpuISD::SSW:               return "FgpuISD::SSW";
+  case FgpuISD::SSWC:              return "FgpuISD::SSWC";
   }
   return nullptr;
 }
@@ -247,7 +263,7 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
   setOperationAction(ISD::BRCOND,             MVT::Other, Custom);
   setOperationAction(ISD::FCOPYSIGN,          MVT::f32,   Custom);
   setOperationAction(ISD::FCOPYSIGN,          MVT::f64,   Custom);
-  setOperationAction(ISD::FP_TO_SINT,         MVT::i32,   Custom);
+  //setOperationAction(ISD::FP_TO_SINT,         MVT::i32,   Custom);
 
     setOperationAction(ISD::FABS, MVT::f32, Custom);
     setOperationAction(ISD::FABS, MVT::f64, Custom);
@@ -269,13 +285,11 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
 
   // Operations not directly supported by Fgpu.
   setOperationAction(ISD::BR_CC,             MVT::f32,   Expand);
-  setOperationAction(ISD::BR_CC,             MVT::f64,   Expand);
   setOperationAction(ISD::BR_CC,             MVT::i32,   Expand);
   setOperationAction(ISD::BR_CC,             MVT::i64,   Expand);
   setOperationAction(ISD::SELECT_CC,         MVT::i32,   Expand);
   setOperationAction(ISD::SELECT_CC,         MVT::i64,   Expand);
   setOperationAction(ISD::SELECT_CC,         MVT::f32,   Expand);
-  setOperationAction(ISD::SELECT_CC,         MVT::f64,   Expand);
   setOperationAction(ISD::UINT_TO_FP,        MVT::i32,   Expand);
   setOperationAction(ISD::UINT_TO_FP,        MVT::i64,   Expand);
   setOperationAction(ISD::FP_TO_UINT,        MVT::i32,   Expand);
@@ -292,23 +306,23 @@ FgpuTargetLowering::FgpuTargetLowering(const FgpuTargetMachine &TM,
     setOperationAction(ISD::ROTR, MVT::i32,   Expand);
     setOperationAction(ISD::ROTR, MVT::i64,   Expand);
   setOperationAction(ISD::FSIN,              MVT::f32,   Expand);
-  setOperationAction(ISD::FSIN,              MVT::f64,   Expand);
   setOperationAction(ISD::FCOS,              MVT::f32,   Expand);
-  setOperationAction(ISD::FCOS,              MVT::f64,   Expand);
   setOperationAction(ISD::FSINCOS,           MVT::f32,   Expand);
-  setOperationAction(ISD::FSINCOS,           MVT::f64,   Expand);
   setOperationAction(ISD::FPOW,              MVT::f32,   Expand);
-  setOperationAction(ISD::FPOW,              MVT::f64,   Expand);
   setOperationAction(ISD::FLOG,              MVT::f32,   Expand);
   setOperationAction(ISD::FLOG2,             MVT::f32,   Expand);
   setOperationAction(ISD::FLOG10,            MVT::f32,   Expand);
   setOperationAction(ISD::FEXP,              MVT::f32,   Expand);
 
-  setOperationAction(ISD::FMA,               MVT::f32,   Legal); // called FFMA
-  setOperationAction(ISD::FMA,               MVT::f64,   Expand);
+  setOperationAction(ISD::FP_TO_SINT,        MVT::i32,   Expand);
+  setOperationAction(ISD::FP_TO_SINT,        MVT::f32,   Expand);
+  setOperationAction(ISD::SINT_TO_FP,        MVT::i32,   Expand);
+  setOperationAction(ISD::SINT_TO_FP,        MVT::f32,   Expand);
+  //TODO: one of these is legal i think
 
+
+  setOperationAction(ISD::FMA,               MVT::f32,   Legal); // called FFMA
   setOperationAction(ISD::FREM,              MVT::f32,   Expand);
-  setOperationAction(ISD::FREM,              MVT::f64,   Expand);
 
   // Lower f16 conversion operations into library calls
   setOperationAction(ISD::FP16_TO_FP,        MVT::f32,   Expand);
@@ -1445,8 +1459,7 @@ SDValue FgpuTargetLowering::lowerFP_TO_SINT(SDValue Op,
   if (Op.getValueSizeInBits() > 32)
     return SDValue();
 
-  assert(false && "No "
-                  "fp");
+  assert(false && "Not supported fp");
   return SDValue();
 //  EVT FPTy = EVT::getFloatingPointVT(Op.getValueSizeInBits());
 //  SDValue Trunc = DAG.getNode(FgpuISD::TruncIntFP, SDLoc(Op), FPTy,
@@ -2740,9 +2753,10 @@ bool FgpuTargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
                                       bool ForCodeSize) const {
   if (VT != MVT::f32 && VT != MVT::f64)
     return false;
-  if (Imm.isNegZero())
-    return false;
-  return Imm.isZero();
+  return true; // can do with Li32
+//  if (Imm.isNegZero())
+//    return false;
+//  return Imm.isZero();
 }
 
 unsigned FgpuTargetLowering::getJumpTableEncoding() const {

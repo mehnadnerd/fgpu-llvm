@@ -272,6 +272,12 @@ unsigned FgpuELFObjectWriter::getRelocType(MCContext &Ctx,
       return ELF::R_FGPU_PCHI16;
     case Fgpu::fixup_FGPU_PCLO16:
       return ELF::R_FGPU_PCLO16;
+    case Fgpu::fixup_Fgpu_PC14:
+      return ELF::R_FGPU_PC14;
+    case Fgpu::fixup_Fgpu_PC7:
+      return ELF::R_FGPU_PC7;
+    case Fgpu::fixup_Fgpu_JSUB:
+      return ELF::R_FGPU_JSUB;
     }
 
     llvm_unreachable("invalid PC-relative fixup kind!");

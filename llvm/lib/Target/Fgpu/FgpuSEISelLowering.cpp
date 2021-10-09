@@ -69,18 +69,6 @@ FgpuSETargetLowering::FgpuSETargetLowering(const FgpuTargetMachine &TM,
   addRegisterClass(MVT::f32, &Fgpu::FloatRegsRegClass);
   addRegisterClass(MVT::v32f32, &Fgpu::VecRegsRegClass);
 
-//  if (!Subtarget.useSoftFloat()) { // TODO: vector support
-//    addRegisterClass(MVT::f32, &Fgpu::FGR32RegClass);
-//
-//    // When dealing with single precision only, use libcalls
-//    if (!Subtarget.isSingleFloat()) {
-//      if (Subtarget.isFP64bit())
-//        addRegisterClass(MVT::f64, &Fgpu::FGR64RegClass);
-//      else
-//        addRegisterClass(MVT::f64, &Fgpu::AFGR64RegClass);
-//    }
-//  }
-
   setOperationAction(ISD::SMUL_LOHI,          MVT::i32, Custom);
   setOperationAction(ISD::UMUL_LOHI,          MVT::i32, Custom);
   setOperationAction(ISD::MULHS,              MVT::i32, Custom);
@@ -108,7 +96,6 @@ FgpuSETargetLowering::FgpuSETargetLowering(const FgpuTargetMachine &TM,
   }
 
   setOperationAction(ISD::MUL, MVT::i32, Legal);
-  // TODO: MADD
 
   computeRegisterProperties(Subtarget.getRegisterInfo());
 }

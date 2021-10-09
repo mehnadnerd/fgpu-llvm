@@ -286,6 +286,12 @@ class FPInsn<bits<8> op, string instr_asm, SDNode OpNode, InstrItinClass itin, R
   let isReMaterializable = 1;
 }
 
+class FPInsnUnary<bits<8> op, string instr_asm, SDNode OpNode, InstrItinClass itin, RegisterClass RC, bit isComm = 0>:
+  FRRR<op, (outs RC:$rd), (ins RC:$rs), !strconcat(instr_asm, "\t$rd, $rs"),
+     [(set RC:$rd, (OpNode RC:$rs))], itin> {
+  let isReMaterializable = 1;
+}
+
 class FFMA<bits<8> op, string instr_asm, InstrItinClass itin, RegisterClass RC, bit isComm = 0>:
   FRRR<op, (outs RC:$rd_out), (ins RC:$rd, RC:$rs, RC:$rt), !strconcat(instr_asm, "\t$rd, $rs, $rt"),
      [(set RC:$rd_out, (fadd RC:$rd, (fmul RC:$rs, RC:$rt)))], itin> {
@@ -819,6 +825,8 @@ def SSWCZ : SWCZ_<0xFF, "sswcz">;
 def FADD    : FPInsn<0xC0, "fadd", fadd, IIAlu, FloatRegs, 1>;
 def FMUL    : FPInsn<0xC1, "fmul", fmul, IIAlu, FloatRegs, 1>;
 def FSUB    : FPInsn<0xC8, "fsub", fsub, IIAlu, FloatRegs, 0>;
+def FDIV    : FPInsn<0xC2, "fdiv", fdiv, IIAlu, FloatRegs, 0>;
+def FSQRT   : FPInsnUnary<0xC4, "fqrt", fsqrt, IIAlu, FloatRegs, 0>;
 
 
 def LWC : Load_LWC<0x77, "lwc", load_a, VecRegs>;
@@ -923,12 +931,15 @@ def SET_SYNC    : SetSync_<0x95, "set_sync">;
 
 def BEQ   : Branch<0x62, "beq", seteq, brtarget14, ALURegs>;
 def BNE   : Branch<0x63, "bne", setne, brtarget14, ALURegs>;
+let isBarrier = 1, isBranch = 1, isTerminator = 1 in {
+  def B     : FgpuPseudo<(outs), (ins brtarget14:$imm14), "B", [(br bb:$imm14)]>;
+}
 
 def PDOM_BEQ   : Branch<0x65, "pdom_beq", seteq, brtarget7, ALURegs>;
 def PDOM_BNE   : Branch<0x66, "pdom_bne", setne, brtarget7, ALURegs>;
 
 def JSUB  : JmpLink<0x64, "jsub">;
-def : Pat<(br bb:$addr), (BEQ ZERO, ZERO, bb:$addr)>;
+//def : Pat<(br bb:$addr), (BEQ ZERO, ZERO, bb:$addr)>; // replaced by the pseudo-inst B above
 
 //def JALR  : JmpLinkRegister<0x67, "jalr">;
 

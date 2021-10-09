@@ -53,8 +53,25 @@ namespace {
     bool expandMI(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                   MachineBasicBlock::iterator &NMBB);
     bool expandMBB(MachineBasicBlock &MBB);
+    bool expandB(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
+                 MachineBasicBlock::iterator &NMBB);
    };
   char FgpuExpandPseudo::ID = 0;
+}
+
+bool FgpuExpandPseudo::expandB(MachineBasicBlock &MBB,
+                                MachineBasicBlock::iterator MBBI,
+                                MachineBasicBlock::iterator &NMBB) {
+  const MCInstrDesc &NewDesc = TII->get(Fgpu::BEQ);
+  DebugLoc dl = MBB.findDebugLoc(MBBI);
+
+  MachineInstrBuilder MIB = BuildMI(MBB, MBBI, dl, NewDesc);
+  MIB.addReg(Fgpu::ZERO).addReg(Fgpu::ZERO);
+
+  LLVM_DEBUG(dbgs() << "Num operands" << MBBI->getNumOperands());
+  MBBI->getOperand(0).dump();
+  MIB->addOperand(MBBI->getOperand(0));
+  MBBI->eraseFromParent();
 }
 
 bool FgpuExpandPseudo::expandMI(MachineBasicBlock &MBB,
@@ -62,10 +79,15 @@ bool FgpuExpandPseudo::expandMI(MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator &NMBB) {
 
   bool Modified = false;
+  LLVM_DEBUG(dbgs() << "Trying to expand MI with opcode " << MBBI->getOpcode() << "\n");
 
-  //switch (MBBI->getOpcode()) {
-  //  // case Fgpu::ATOMIC_CMP_SWAP_I32_POSTRA:
-  //}
+  switch (MBBI->getOpcode()) {
+    case Fgpu::B:
+      expandB(MBB, MBBI, NMBB);
+      Modified = true;
+
+      break;
+  }
 
   return Modified;
 }
