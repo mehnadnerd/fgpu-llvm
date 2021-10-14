@@ -237,7 +237,7 @@ void FgpuTargetStreamer::emitStoreWithImmOffset(
   // Generate the base address in ATReg.
   emitRI(Fgpu::LUi, ATReg, HiOffset, IDLoc, STI);
   if (BaseReg != Fgpu::ZERO)
-    emitRRR(Fgpu::ADD, ATReg, ATReg, BaseReg, IDLoc, STI);
+    emitRRR(Fgpu::ADD, ATReg, ATReg, BaseReg, IDLoc, STI); // TODO: this ainn't right
   // Emit the store with the adjusted base and offset.
   emitRRI(Opcode, SrcReg, ATReg, LoOffset, IDLoc, STI);
 }
@@ -273,7 +273,7 @@ void FgpuTargetStreamer::emitLoadWithImmOffset(unsigned Opcode, unsigned DstReg,
   // Generate the base address in TmpReg.
   emitRI(Fgpu::LUi, TmpReg, HiOffset, IDLoc, STI);
   if (BaseReg != Fgpu::ZERO)
-    emitRRR(Fgpu::ADD, TmpReg, TmpReg, BaseReg, IDLoc, STI);
+    emitRRR(Fgpu::ADD, TmpReg, TmpReg, BaseReg, IDLoc, STI); // TODO: i donn't think this works
   // Emit the load with the adjusted base and offset.
   emitRRI(Opcode, DstReg, TmpReg, LoOffset, IDLoc, STI);
 }

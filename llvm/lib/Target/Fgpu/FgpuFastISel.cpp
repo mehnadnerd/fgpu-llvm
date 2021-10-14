@@ -350,6 +350,8 @@ unsigned FgpuFastISel::materializeInt(const Constant *C, MVT VT) {
 
 unsigned FgpuFastISel::materialize32BitInt(int64_t Imm,
                                            const TargetRegisterClass *RC) {
+  return 0;
+  // TODO: disabled
   unsigned ResultReg = createResultReg(RC);
 
   if (isUInt<16>(Imm)) {

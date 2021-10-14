@@ -16,5 +16,6 @@ def RetCC_Fgpu : CallingConv<[
   CCDelegateTo<RetCC_FgpuEABI>
 ]>;
 
-def CSR_CC_Fgpu  : CalleeSavedRegs<(sequence "R%u", 6, 29)>;
+//def CSR_CC_Fgpu  : CalleeSavedRegs<(sequence "R%u", 6, 29)>; // TODO: maybe make seperate kernel cc
+def CSR_CC_Fgpu  : CalleeSavedRegs<(add)>;
 

@@ -18,6 +18,7 @@
 // Node immediate fits as 14-bit sign extended on target immediate.
 // e.g. addi
 def imm_eq_31  : PatLeaf<(i32 imm), [{ return (N->getZExtValue() == 31) ; }]>;
+def imm_eq_16  : PatLeaf<(i32 imm), [{ return (N->getZExtValue() == 16) ; }]>;
 def imm_eq_7   : PatLeaf<(i32 imm), [{ return (N->getZExtValue() == 7) ; }]>;
 def imm_eq_4   : PatLeaf<(i32 imm), [{ return (N->getZExtValue() == 4) ; }]>;
 def imm_eq_3   : PatLeaf<(i32 imm), [{ return (N->getZExtValue() == 3) ; }]>;
@@ -287,7 +288,7 @@ class FPInsn<bits<8> op, string instr_asm, SDNode OpNode, InstrItinClass itin, R
 }
 
 class FPInsnUnary<bits<8> op, string instr_asm, SDNode OpNode, InstrItinClass itin, RegisterClass RC, bit isComm = 0>:
-  FRRR<op, (outs RC:$rd), (ins RC:$rs), !strconcat(instr_asm, "\t$rd, $rs"),
+  FRR<op, (outs RC:$rd), (ins RC:$rs), !strconcat(instr_asm, "\t$rd, $rs"),
      [(set RC:$rd, (OpNode RC:$rs))], itin> {
   let isReMaterializable = 1;
 }
@@ -480,9 +481,18 @@ class RTMInstr<bits<8> op, string instr_asm, SDNode OpNode, Operand Imm, PatLeaf
 class LoadUpper<bits<8> op, string instr_asm, SDNode OpNode, RegisterClass RC, Operand Imm>:
   FRI<op, (outs RC:$rd), (ins Imm:$imm16),
      !strconcat(instr_asm, "\t$rd, $imm16"),
-     [(set ALURegs:$rd, (OpNode uuimm16:$imm16))], IIAlu> {
+     [(set ALURegs:$rd, uuimm16:$imm16)], IIAlu> { // I think correvt
   let isReMaterializable = 1;
   let AddedComplexity = 20;
+}
+
+class LoadLower<bits<8> op, string instr_asm, SDNode OpNode, RegisterClass RC, Operand Imm>:
+  FRI<op, (outs RC:$rd_out), (ins RC:$rd, Imm:$imm16),
+     !strconcat(instr_asm, "\t$rd, $imm16"),
+     [(set ALURegs:$rd_out, (or (shl (srl ALURegs:$rd, imm_eq_16), imm_eq_16 ), uuimm16:$imm16))], IIAlu> { // I think is correct
+  let isReMaterializable = 1;
+  let AddedComplexity = 20;
+  let Constraints = "$rd_out = $rd";
 }
 
 class Control<bits<8> op, string instr_asm>:
@@ -830,9 +840,12 @@ def FSQRT   : FPInsnUnary<0xC4, "fqrt", fsqrt, IIAlu, FloatRegs, 0>;
 
 
 def LWC : Load_LWC<0x77, "lwc", load_a, VecRegs>;
-def : Pat<( v128i8 (load_a (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7)))),        (LWC ALURegs:$rt, ALURegs:$rs, 0)>;
-def : Pat<( v128i8 (load_a (add ALURegs:$rt, immSExt16:$imm))),                     (LWC ALURegs:$rt, ZERO, immSExt16:$imm)>;
-def : Pat<( v128i8 (load_a ALURegs:$rt)),                                           (LWC ALURegs:$rt, ZERO, 0)>;
+// def : Pat<( v128i8 (load_a (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7)))),        (LWC ALURegs:$rt, ALURegs:$rs, 0)>;
+// def : Pat<( v128i8 (load_a (add ALURegs:$rt, immSExt16:$imm))),                     (LWC ALURegs:$rt, ZERO, immSExt16:$imm)>;
+// def : Pat<( v128i8 (load_a ALURegs:$rt)),                                           (LWC ALURegs:$rt, ZERO, 0)>;
+def : Pat<( v32f32 (load_a (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7)))),        (LWC ALURegs:$rt, ALURegs:$rs, 0)>;
+def : Pat<( v32f32 (load_a (add ALURegs:$rt, immSExt16:$imm))),                     (LWC ALURegs:$rt, ZERO, immSExt16:$imm)>;
+def : Pat<( v32f32 (load_a ALURegs:$rt)),                                           (LWC ALURegs:$rt, ZERO, 0)>;
 
 //def LLWC : Load_LLWC<0xD7, "llwc", load_a, FloatRegs>;
 //def : Pat<( f32 (load_a (add ALURegs:$rs, ALURegs:$rt))),                       (LLWC ALURegs:$rt, ALURegs:$rs, 0)>;
@@ -843,9 +856,9 @@ def : Pat<( v128i8 (load_a ALURegs:$rt)),                                       
 
 def SWC : SWC_<0x7F, "swc">;
 //def SWC : Store_SWC<0x7F, "swc", store_a, VecRegs>;
-//def : Pat<(store_a VecRegs:$rd, (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7))),  (SWC VecRegs:$rd, ALURegs:$rt, ALURegs:$rs, 0)>;
-//def : Pat<(store_a VecRegs:$rd, (add ALURegs:$rt, immSExt16:$imm)),               (SWC VecRegs:$rd, ALURegs:$rt, ZERO, immSExt16:$imm)>;
-//def : Pat<(store_a VecRegs:$rd, ALURegs:$rt),                                     (SWC VecRegs:$rd, ALURegs:$rt, ZERO, 0)>;
+def : Pat<(store_a VecRegs:$rd, (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7))),  (SWC VecRegs:$rd, ALURegs:$rt, ALURegs:$rs, 0)>;
+def : Pat<(store_a VecRegs:$rd, (add ALURegs:$rt, immSExt16:$imm)),               (SWC VecRegs:$rd, ALURegs:$rt, ZERO, immSExt16:$imm)>;
+def : Pat<(store_a VecRegs:$rd, ALURegs:$rt),                                     (SWC VecRegs:$rd, ALURegs:$rt, ZERO, 0)>;
 
 //def LSWC : Store_LSWC<0xDF, "lswc", store_a, FloatRegs>;
 //def : Pat<(store_a FloatRegs:$rs, (add ALURegs:$addr, ALURegs:$rt)),                       (LSWC FloatRegs:$rs, ALURegs:$rt, ALURegs:$addr, 0)>;
@@ -854,9 +867,9 @@ def SWC : SWC_<0x7F, "swc">;
 
 
 def SLWC : Load_SLWC<0xD7, "slwc", shr_load, VecRegs>;
-def : Pat<( v128i8 (shr_load (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7)))),        (SLWC ALURegs:$rt, ALURegs:$rs, 0)>;
-def : Pat<( v128i8 (shr_load (add ALURegs:$rt, immSExt16:$imm))),                     (SLWC ALURegs:$rt, ZERO, immSExt16:$imm)>;
-def : Pat<( v128i8 (shr_load ALURegs:$rt)),                                           (SLWC ALURegs:$rt, ZERO, 0)>;
+// def : Pat<( v128i8 (shr_load (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7)))),        (SLWC ALURegs:$rt, ALURegs:$rs, 0)>;
+// def : Pat<( v128i8 (shr_load (add ALURegs:$rt, immSExt16:$imm))),                     (SLWC ALURegs:$rt, ZERO, immSExt16:$imm)>;
+// def : Pat<( v128i8 (shr_load ALURegs:$rt)),                                           (SLWC ALURegs:$rt, ZERO, 0)>;
 
 def SSWC : SWC_<0xDF, "sswc">;
 //def SSWC : Store_SSWC<0xDF, "sswc", store_a, VecRegs>;
@@ -882,10 +895,11 @@ def SUB     : ArithLogicR<0x12, "sub", sub, IIAlu, ALURegs, 0>;
 def MUL     : ArithLogicR<0x51, "mul", mul, IIAlu, ALURegs, 1>;
 def MACC    : Macc<0x58, "macc", IIAlu, ALURegs, 0>;
 def LUi     : LoadUpper<0x1D, "lui", LUi_Pseudo, ALURegs, uimm16>;
+//def Li      : LoadLower<0x19, "li", Li_Pseudo, ALURegs, uimm16>; // TODO: make this
 def Li      : LoadUpper<0x19, "li", Li_Pseudo, ALURegs, uimm16>;
 
 def : Pat<(LUi_Pseudo (i32 tglobaladdr:$dst)), (LUi tglobaladdr:$dst)>;
-def : Pat<(Li_Pseudo (i32 tglobaladdr:$dst)), (Li tglobaladdr:$dst)>;
+def : Pat<(Li_Pseudo (i32 tglobaladdr:$dst)), (Li tglobaladdr:$dst)>; // TODO: make work
 
 def SLL     : ArithLogicR<0x20, "sll", shl, IIAlu, ALURegs, 0>;
 def SLLi    : ArithLogicI<0x21, "slli", shl, uimm14, uimm5>;

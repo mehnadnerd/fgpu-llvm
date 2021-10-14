@@ -139,23 +139,30 @@ bool FgpuInstructionSelector::materialize32BitImm(Register DestReg, APInt Imm,
                                                   MachineIRBuilder &B) const {
   assert(Imm.getBitWidth() == 32 && "Unsupported immediate size.");
   // Ori zero extends immediate. Used for values with zeros in high 16 bits.
-  if (Imm.getHiBits(16).isNullValue()) {
+  if (Imm.getHiBits(18).isNullValue()) {
     MachineInstr *Inst =
-        B.buildInstr(Fgpu::Li, {DestReg}, {Register(Fgpu::ZERO)})
-            .addImm(Imm.getLoBits(16).getLimitedValue());
+        B.buildInstr(Fgpu::ORi, {DestReg}, {Register(Fgpu::ZERO)})
+            .addImm(Imm.getLoBits(14).getLimitedValue());
     return constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
   }
-  // Lui places immediate in high 16 bits and sets low 16 bits to zero.
-  if (Imm.getLoBits(16).isNullValue()) {
-    MachineInstr *Inst = B.buildInstr(Fgpu::LUi, {DestReg}, {})
-                             .addImm(Imm.getHiBits(16).getLimitedValue());
-    return constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
-  }
+  //TODO: re-enable once understand the behaviour of Li/LUi better
+//  if (Imm.getHiBits(16).isNullValue()) {
+//    MachineInstr *Inst =
+//        B.buildInstr(Fgpu::Li, {DestReg}, {Register(Fgpu::ZERO)})
+//            .addImm(Imm.getLoBits(16).getLimitedValue());
+//    return constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
+//  }
+//  // Lui places immediate in high 16 bits and sets low 16 bits to zero.
+//  if (Imm.getLoBits(16).isNullValue()) {
+//    MachineInstr *Inst = B.buildInstr(Fgpu::LUi, {DestReg}, {})
+//                             .addImm(Imm.getHiBits(16).getLimitedValue());
+//    return constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
+//  }
   // Values that cannot be materialized with single immediate instruction.
-  Register LUiReg = B.getMRI()->createVirtualRegister(&Fgpu::GPROutRegClass);
-  MachineInstr *LUi = B.buildInstr(Fgpu::LUi, {LUiReg}, {})
+  // Register LUiReg = B.getMRI()->createVirtualRegister(&Fgpu::GPROutRegClass);
+  MachineInstr *LUi = B.buildInstr(Fgpu::LUi, {DestReg}, {})
                           .addImm(Imm.getHiBits(16).getLimitedValue());
-  MachineInstr *Li = B.buildInstr(Fgpu::Li, {DestReg}, {LUiReg})
+  MachineInstr *Li = B.buildInstr(Fgpu::Li, {DestReg}, {})
                           .addImm(Imm.getLoBits(16).getLimitedValue());
   if (!constrainSelectedInstRegOperands(*LUi, TII, TRI, RBI))
     return false;

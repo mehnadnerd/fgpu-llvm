@@ -1632,27 +1632,28 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
     TmpReg = ATReg;
   }
 
-  if (isInt<16>(ImmValue)) {
-    if (!UseSrcReg)
-      SrcReg = ZeroReg;
-    //TODO: this won't work because Li doesn't sign-extennd i think
-    TOut.emitRRI(Fgpu::Li, DstReg, SrcReg, ImmValue, IDLoc, STI);
-    return false;
-  }
-
-  if (isUInt<16>(ImmValue)) {
-    unsigned TmpReg = DstReg;
-    if (SrcReg == DstReg) {
-      TmpReg = getATReg(IDLoc);
-      if (!TmpReg)
-        return true;
-    }
-
-    TOut.emitRI(Fgpu::Li, TmpReg, ImmValue, IDLoc, STI); // TODO: should be Li??
-    if (UseSrcReg)
-      TOut.emitRRR(ABI.GetPtrAdduOp(), DstReg, TmpReg, SrcReg, IDLoc, STI);
-    return false;
-  }
+  // TODO: these won't work b/c of how LUi/Li are implemented
+//  if (isInt<16>(ImmValue)) {
+//    if (!UseSrcReg)
+//      SrcReg = ZeroReg;
+//    //TODO: this won't work because Li doesn't sign-extennd i think
+//    TOut.emitRRI(Fgpu::Li, DstReg, SrcReg, ImmValue, IDLoc, STI);
+//    return false;
+//  }
+//
+//  if (isUInt<16>(ImmValue)) {
+//    unsigned TmpReg = DstReg;
+//    if (SrcReg == DstReg) {
+//      TmpReg = getATReg(IDLoc);
+//      if (!TmpReg)
+//        return true;
+//    }
+//
+//    TOut.emitRI(Fgpu::Li, TmpReg, ImmValue, IDLoc, STI); // TODO: should be Li??
+//    if (UseSrcReg)
+//      TOut.emitRRR(ABI.GetPtrAdduOp(), DstReg, TmpReg, SrcReg, IDLoc, STI);
+//    return false;
+//  }
 
   if (isInt<32>(ImmValue) || isUInt<32>(ImmValue)) {
     warnIfNoMacro(IDLoc);
@@ -1662,7 +1663,7 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
 
     TOut.emitRI(Fgpu::LUi, TmpReg, Bits31To16, IDLoc, STI);
     if (Bits15To0)
-      TOut.emitRRI(Fgpu::ORi, TmpReg, TmpReg, Bits15To0, IDLoc, STI);
+      TOut.emitRI(Fgpu::Li, TmpReg, Bits15To0, IDLoc, STI);
     if (UseSrcReg)
       TOut.emitRRR(AdduOp, DstReg, TmpReg, SrcReg, IDLoc, STI);
     return false;
@@ -1680,7 +1681,7 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
     unsigned LastSet = findLastSet((uint64_t)ImmValue);
     unsigned ShiftAmount = FirstSet - (15 - (LastSet - FirstSet));
     uint16_t Bits = (ImmValue >> ShiftAmount) & 0xffff;
-    TOut.emitRRI(Fgpu::ORi, TmpReg, ZeroReg, Bits, IDLoc, STI);
+    TOut.emitRI(Fgpu::Li, TmpReg, Bits, IDLoc, STI);
     TOut.emitRRI(Fgpu::SLLi, TmpReg, TmpReg, ShiftAmount, IDLoc, STI);
 
     if (UseSrcReg)
@@ -1690,6 +1691,7 @@ bool FgpuAsmParser::loadImmediate(int64_t ImmValue, unsigned DstReg,
   }
 
   warnIfNoMacro(IDLoc);
+  assert(false && "Not supported size of immediate");
 
   // The remaining case is packed with a sequence of dsll and ori with zeros
   // being omitted and any neighbouring dsll's being coalesced.
@@ -1879,7 +1881,7 @@ bool FgpuAsmParser::loadAndAddSymbolAddress(const MCExpr *SymExpr,
   }
 
   TOut.emitRX(Fgpu::LUi, TmpReg, MCOperand::createExpr(HiExpr), IDLoc, STI);
-  TOut.emitRRX(Fgpu::ADDi, TmpReg, TmpReg, MCOperand::createExpr(LoExpr), // TODO: should be Li??
+  TOut.emitRX(Fgpu::Li, TmpReg, MCOperand::createExpr(LoExpr), // TODO: should be Li??
                IDLoc, STI);
 
   if (UseSrcReg)
@@ -1923,6 +1925,7 @@ bool FgpuAsmParser::emitPartialAddress(FgpuTargetStreamer &TOut, SMLoc IDLoc,
     // FIXME: With -msym32 option, the address expansion for N64 should probably
     // use the O32 / N32 case. It's safe to use the 64 address expansion as the
     // symbol's value is considered sign extended.
+    assert(false && "I have no confience in this working"); // not going to bother to TODO this
       TOut.emitRX(Fgpu::LUi, ATReg, MCOperand::createExpr(HiExpr), IDLoc, STI);
   }
   return false;
