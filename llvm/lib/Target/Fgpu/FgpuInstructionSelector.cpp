@@ -159,11 +159,12 @@ bool FgpuInstructionSelector::materialize32BitImm(Register DestReg, APInt Imm,
 //    return constrainSelectedInstRegOperands(*Inst, TII, TRI, RBI);
 //  }
   // Values that cannot be materialized with single immediate instruction.
-  // Register LUiReg = B.getMRI()->createVirtualRegister(&Fgpu::GPROutRegClass);
-  MachineInstr *LUi = B.buildInstr(Fgpu::LUi, {DestReg}, {})
+  Register LUiReg = B.getMRI()->createVirtualRegister(&Fgpu::GPROutRegClass);
+  MachineInstr *LUi = B.buildInstr(Fgpu::LUi, {LUiReg}, {})
                           .addImm(Imm.getHiBits(16).getLimitedValue());
   MachineInstr *Li = B.buildInstr(Fgpu::Li, {DestReg}, {})
                           .addImm(Imm.getLoBits(16).getLimitedValue());
+  MachineInstr *Add = B.buildInstr(Fgpu::ADD, {DestReg}, {DestReg, LUiReg});
   if (!constrainSelectedInstRegOperands(*LUi, TII, TRI, RBI))
     return false;
   if (!constrainSelectedInstRegOperands(*Li, TII, TRI, RBI))

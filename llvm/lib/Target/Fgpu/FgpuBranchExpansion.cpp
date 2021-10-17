@@ -388,6 +388,7 @@ bool FgpuBranchExpansion::buildProperJumpMI(MachineBasicBlock *MBB,
 // wrong code if branches whose allowed offsets are [-128, -126, ..., 126]
 // are present.
 void FgpuBranchExpansion::expandToLongBranch(MBBInfo &I) {
+  assert(false && "don't work");
   MachineBasicBlock::iterator Pos;
   MachineBasicBlock *MBB = I.Br->getParent(), *TgtMBB = getTargetMBB(*I.Br);
   DebugLoc DL = I.Br->getDebugLoc();

@@ -54,6 +54,8 @@ void FgpuFunctionInfo::initGlobalBaseReg(MachineFunction &MF) {
   if (!GlobalBaseReg)
     return;
 
+  assert(false && "not supporte");
+
   MachineBasicBlock &MBB = MF.front();
   MachineBasicBlock::iterator I = MBB.begin();
   MachineRegisterInfo &RegInfo = MF.getRegInfo();

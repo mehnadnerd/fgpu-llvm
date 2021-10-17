@@ -487,12 +487,11 @@ class LoadUpper<bits<8> op, string instr_asm, SDNode OpNode, RegisterClass RC, O
 }
 
 class LoadLower<bits<8> op, string instr_asm, SDNode OpNode, RegisterClass RC, Operand Imm>:
-  FRI<op, (outs RC:$rd_out), (ins RC:$rd, Imm:$imm16),
-     !strconcat(instr_asm, "\t$rd, $imm16"),
-     [(set ALURegs:$rd_out, (or (shl (srl ALURegs:$rd, imm_eq_16), imm_eq_16 ), uuimm16:$imm16))], IIAlu> { // I think is correct
+  FRI<op, (outs RC:$rd_out), (ins Imm:$imm16),
+     !strconcat(instr_asm, "\t$rd_out, $imm16"),
+     [(set ALURegs:$rd_out, uuimm16:$imm16)], IIAlu> { // I think is correct
   let isReMaterializable = 1;
   let AddedComplexity = 20;
-  let Constraints = "$rd_out = $rd";
 }
 
 class Control<bits<8> op, string instr_asm>:
@@ -744,6 +743,7 @@ def SDTAto        : SDTypeProfile<1, 2, [SDTCisSameAs<0,2>, SDTCisInt<0>, SDTCis
 //let hasNoSchedulingInfo = 1 in {
 def LUi_Pseudo    : SDNode<"FgpuISD::LUi"      , SDTRTMInst, []>;
 def Li_Pseudo     : SDNode<"FgpuISD::Li"      , SDTRTMInst, []>;
+//def Li_Pseudo     : SDNode<"FgpuISD::Li"      , SDTypeProfile<1, 2, []>, []>;
 def RELU_Pseudo   : SDNode<"FgpuISD::RELU"    , SDTACTInst, []>;
 def LP_Pseudo     : SDNode<"FgpuISD::LP"      , SDTRTMInst, [SDNPHasChain]>;
 def LID_Pseudo    : SDNode<"FgpuISD::LID"    , SDTRTMInst, [SDNPHasChain]>;
@@ -899,6 +899,7 @@ def LUi     : LoadUpper<0x1D, "lui", LUi_Pseudo, ALURegs, uimm16>;
 def Li      : LoadUpper<0x19, "li", Li_Pseudo, ALURegs, uimm16>;
 
 def : Pat<(LUi_Pseudo (i32 tglobaladdr:$dst)), (LUi tglobaladdr:$dst)>;
+//def : Pat<(Li_Pseudo ALURegs:$rd, (i32 tglobaladdr:$dst)), (Li ALURegs:$rd, tglobaladdr:$dst)>;
 def : Pat<(Li_Pseudo (i32 tglobaladdr:$dst)), (Li tglobaladdr:$dst)>; // TODO: make work
 
 def SLL     : ArithLogicR<0x20, "sll", shl, IIAlu, ALURegs, 0>;

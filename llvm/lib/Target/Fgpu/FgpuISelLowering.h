@@ -278,9 +278,9 @@ class TargetRegisterClass;
                           SelectionDAG &DAG) const {
       SDValue Hi = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_HI);
       SDValue Lo = getTargetNode(N, Ty, DAG, FgpuII::MO_ABS_LO);
-      return DAG.getNode(ISD::ADD, DL, Ty,
-                         DAG.getNode(FgpuISD::LUi, DL, Ty, Hi),
-                         DAG.getNode(FgpuISD::Li, DL, Ty, Lo));
+      SDValue LHi = DAG.getNode(FgpuISD::LUi, DL, Ty, Hi);
+      SDValue LLo = DAG.getNode(FgpuISD::Li, DL, Ty, Lo);
+      return DAG.getNode(ISD::ADD, DL, Ty, LHi, LLo);
    }
 
     // This method creates the following nodes, which are necessary for

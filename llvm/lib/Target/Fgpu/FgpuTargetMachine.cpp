@@ -223,6 +223,7 @@ bool FgpuPassConfig::addInstSelector() {
 
 void FgpuPassConfig::addPreRegAlloc() {
   addPass(createFgpuOptimizePICCallPass());
+  addPass(createFgpuExpandPseudoPass());
 }
 
 TargetTransformInfo
@@ -235,7 +236,6 @@ FgpuTargetMachine::getTargetTransformInfo(const Function &F) {
 // machine code is emitted.
 void FgpuPassConfig::addPreEmitPass() {
   // Expand pseudo instructions that are sensitive to register allocation.
-  addPass(createFgpuExpandPseudoPass());
 
   // This pass expands branches and takes care about the forbidden slot hazards.
   // Expanding branches may potentially create forbidden slot hazards for
@@ -245,7 +245,7 @@ void FgpuPassConfig::addPreEmitPass() {
   // then we can be sure that all branches are expanded properly and no hazards
   // exists.
   // Any new pass should go before this pass.
-  addPass(createFgpuBranchExpansion());
+  //addPass(createFgpuBranchExpansion());
 
 }
 

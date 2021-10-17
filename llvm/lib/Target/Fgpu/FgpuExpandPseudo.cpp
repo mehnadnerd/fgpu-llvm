@@ -41,6 +41,12 @@ namespace {
     bool runOnMachineFunction(MachineFunction &Fn) override;
 
     MachineFunctionProperties getRequiredProperties() const override {
+      return MachineFunctionProperties();
+//      return MachineFunctionProperties().set(
+//          MachineFunctionProperties::Property::NoVRegs);
+    }
+
+    MachineFunctionProperties getClearedProperties() const override {
       return MachineFunctionProperties().set(
           MachineFunctionProperties::Property::NoVRegs);
     }
@@ -53,13 +59,15 @@ namespace {
     bool expandMI(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                   MachineBasicBlock::iterator &NMBB);
     bool expandMBB(MachineBasicBlock &MBB);
-    bool expandB(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
+    void expandB(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                  MachineBasicBlock::iterator &NMBB);
+    void expandLi32(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
+                    MachineBasicBlock::iterator &NMBB) const;
    };
   char FgpuExpandPseudo::ID = 0;
 }
 
-bool FgpuExpandPseudo::expandB(MachineBasicBlock &MBB,
+void FgpuExpandPseudo::expandB(MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator MBBI,
                                 MachineBasicBlock::iterator &NMBB) {
   const MCInstrDesc &NewDesc = TII->get(Fgpu::BEQ);
@@ -74,6 +82,22 @@ bool FgpuExpandPseudo::expandB(MachineBasicBlock &MBB,
   MBBI->eraseFromParent();
 }
 
+void FgpuExpandPseudo::expandLi32(MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator MBBI,
+                                  MachineBasicBlock::iterator &NMBB) const {
+  unsigned DstReg = MBBI->getOperand(0).getReg();
+  const MachineOperand &MO = MBBI->getOperand(1);
+  unsigned ImmVal = (unsigned)MO.getImm();
+  MachineRegisterInfo &RegInfo = MBB.getParent()->getRegInfo();
+  const TargetRegisterClass *RC = &Fgpu::GPROutRegClass;
+  unsigned TmpReg = RegInfo.createVirtualRegister(RC);
+  unsigned TmpReg2 = RegInfo.createVirtualRegister(RC);
+  BuildMI(MBB, MBBI, MBBI->getDebugLoc(), TII->get(Fgpu::LUi), TmpReg).addImm(ImmVal>>16);
+  BuildMI(MBB, MBBI, MBBI->getDebugLoc(), TII->get(Fgpu::Li), TmpReg2).addImm(ImmVal);
+  BuildMI(MBB, MBBI, MBBI->getDebugLoc(), TII->get(Fgpu::ADD), DstReg).addReg(TmpReg).addReg(TmpReg2);
+  MBBI->eraseFromParent();
+}
+
 bool FgpuExpandPseudo::expandMI(MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator MBBI,
                                 MachineBasicBlock::iterator &NMBB) {
@@ -83,9 +107,14 @@ bool FgpuExpandPseudo::expandMI(MachineBasicBlock &MBB,
 
   switch (MBBI->getOpcode()) {
     case Fgpu::B:
+      LLVM_DEBUG(dbgs() << "Expanding MI B psuedo\n");
       expandB(MBB, MBBI, NMBB);
       Modified = true;
-
+      break;
+    case Fgpu::Li32:
+      LLVM_DEBUG(dbgs() << "Expanding MI Li32 psuedo\n");
+      expandLi32(MBB, MBBI, NMBB);
+      Modified = true;
       break;
   }
 

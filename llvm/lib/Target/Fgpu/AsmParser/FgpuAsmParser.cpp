@@ -1394,8 +1394,8 @@ FgpuAsmParser::tryExpandInstruction(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   switch (Inst.getOpcode()) {
   default:
     return MER_NotAMacro;
-  case Fgpu::Li32:
-    return expandLoadImm(Inst, true, IDLoc, Out, STI) ? MER_Fail : MER_Success;
+//  case Fgpu::Li32:
+//    return expandLoadImm(Inst, true, IDLoc, Out, STI) ? MER_Fail : MER_Success;
 //  case Fgpu::LoadImm64:
 //    return expandLoadImm(Inst, false, IDLoc, Out, STI) ? MER_Fail : MER_Success;
 //  case Fgpu::LoadAddrImm32:

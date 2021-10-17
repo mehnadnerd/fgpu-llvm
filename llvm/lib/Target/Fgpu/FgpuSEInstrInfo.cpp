@@ -186,9 +186,6 @@ bool FgpuSEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case Fgpu::RetLR:
     expandRetLR(MBB, MI, Fgpu::RET);
     break;
-  case Fgpu::Li32:
-    ExpandLi32(MBB, MI);
-    break;
   }
 
   MBB.erase(MI);
@@ -278,13 +275,6 @@ void FgpuSEInstrInfo::expandRetLR(MachineBasicBlock &MBB,
   }
 }
 
-void FgpuSEInstrInfo::ExpandLi32(MachineBasicBlock &MBB, MachineInstr &I) const {
-  unsigned DstReg = I.getOperand(0).getReg();
-  const MachineOperand &MO = I.getOperand(1);
-  unsigned ImmVal = (unsigned)MO.getImm();
-  BuildMI(MBB, I, I.getDebugLoc(), get(Fgpu::LUi), DstReg).addImm(ImmVal>>16);
-  BuildMI(MBB, I, I.getDebugLoc(), get(Fgpu::Li), DstReg).addImm(ImmVal);
-}
 
 void FgpuSEInstrInfo::ExpandCopy(MachineBasicBlock &MBB, MachineInstr &I) const {
   unsigned DstReg = I.getOperand(0).getReg();

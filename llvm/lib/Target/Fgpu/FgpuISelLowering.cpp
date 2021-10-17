@@ -856,6 +856,7 @@ SDValue FgpuTargetLowering::lowerBlockAddress(SDValue Op,
 SDValue FgpuTargetLowering::
 lowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const
 {
+  assert(false && "Not implemented");
   // If the relocation model is PIC, use the General Dynamic TLS Model or
   // Local Dynamic TLS model, otherwise use the Initial Exec or
   // Local Exec TLS Model.
