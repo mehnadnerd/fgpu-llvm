@@ -24,6 +24,7 @@
 #include "Targets/Le64.h"
 #include "Targets/M68k.h"
 #include "Targets/MSP430.h"
+#include "Targets/Fgpu.h"
 #include "Targets/Mips.h"
 #include "Targets/NVPTX.h"
 #include "Targets/OSTargets.h"
@@ -241,6 +242,9 @@ TargetInfo *AllocateTarget(const llvm::Triple &Triple,
 
   case llvm::Triple::msp430:
     return new MSP430TargetInfo(Triple, Opts);
+
+  case llvm::Triple::fgpu:
+    return new FgpuTargetInfo(Triple, Opts);
 
   case llvm::Triple::mips:
     switch (os) {

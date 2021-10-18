@@ -1,0 +1,30 @@
+//===-- BuiltinsFgpu.def - Fgpu Builtin function database --------*- C++ -*-==//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines the FGPU-specific builtin function database. Users of
+// this file must define the BUILTIN macro to make use of this information.
+//
+//===----------------------------------------------------------------------===//
+
+// The format of this database matches clang/Basic/Builtins.def.
+
+BUILTIN(__builtin_fgpu_lid, "ii", "nc")
+BUILTIN(__builtin_fgpu_size, "ii", "nc")
+BUILTIN(__builtin_fgpu_wgid, "ii", "nc")
+BUILTIN(__builtin_fgpu_wgsize, "ii", "nc")
+BUILTIN(__builtin_fgpu_wgoff, "ii", "nc")
+
+BUILTIN(__builtin_fgpu_dot, "V32fV32fV32f*i", "nc") // TODO: check address space
+
+BUILTIN(__builtin_fgpu_lsync, "v", "")
+BUILTIN(__builtin_fgpu_gsync, "v", "")
+
+
+//BUILTIN(__builtin_msa_xori_b, "V16cV16cIUi", "nc")
+
+#undef BUILTIN

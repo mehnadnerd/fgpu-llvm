@@ -41,6 +41,7 @@ module Clang_Basic {
   textual header "Basic/BuiltinsHexagonDep.def"
   textual header "Basic/BuiltinsHexagonMapCustomDep.def"
   textual header "Basic/BuiltinsMips.def"
+  textual header "Basic/BuiltinsFgpu.def"
   textual header "Basic/BuiltinsNEON.def"
   textual header "Basic/BuiltinsNVPTX.def"
   textual header "Basic/BuiltinsPPC.def"

@@ -574,6 +574,7 @@ CodeGen::CGCXXABI *CodeGen::CreateItaniumCXXABI(CodeGenModule &CGM) {
                              /*UseARMGuardVarABI=*/true);
 
   case TargetCXXABI::GenericMIPS:
+  case TargetCXXABI::GenericFGPU:
     return new ItaniumCXXABI(CGM, /*UseARMMethodPtrABI=*/true);
 
   case TargetCXXABI::WebAssembly:

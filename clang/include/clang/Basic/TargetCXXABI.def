@@ -88,6 +88,12 @@ ITANIUM_CXXABI(GenericAArch64, "aarch64")
 ///   - representation of member function pointers adjusted as in ARM.
 ITANIUM_CXXABI(GenericMIPS, "mips")
 
+/// The generic Fgpu ABI is a modified version of the Itanium ABI.
+///
+/// At the moment, only change from the generic ABI in this case is:
+///   - representation of member function pointers adjusted as in ARM.
+ITANIUM_CXXABI(GenericFGPU, "fgpu")
+
 /// The WebAssembly ABI is a modified version of the Itanium ABI.
 ///
 /// The changes from the Itanium ABI are:

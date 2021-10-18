@@ -90,6 +90,8 @@ public:
     switch (Kind) {
     case GenericARM:
       return T.isARM() || T.isAArch64();
+    case GenericFGPU:
+      return T.isFGPU();
 
     case iOS:
     case WatchOS:
@@ -166,6 +168,7 @@ public:
     case Fuchsia:
     case GenericARM:
     case GenericAArch64:
+    case GenericFGPU:
     case GenericMIPS:
       // TODO: ARM-style pointers to member functions put the discriminator in
       //       the this adjustment, so they don't require functions to have any
@@ -250,6 +253,7 @@ public:
     case GenericItanium:
     case iOS:   // old iOS compilers did not follow this rule
     case Microsoft:
+    case GenericFGPU:
     case GenericMIPS:
     case XL:
       return true;
@@ -288,6 +292,7 @@ public:
     case GenericAArch64:
     case GenericARM:
     case iOS:
+    case GenericFGPU:
     case GenericMIPS:
     case XL:
       return UseTailPaddingUnlessPOD03;

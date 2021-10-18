@@ -290,6 +290,16 @@ namespace clang {
     };
   }
 
+  /// FGPU builtins
+  namespace Fgpu {
+  enum {
+    LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,
+#define BUILTIN(ID, TYPE, ATTRS) BI##ID,
+#include "clang/Basic/BuiltinsFgpu.def"
+    LastTSBuiltin
+  };
+  }
+
   /// XCore builtins
   namespace XCore {
     enum {
