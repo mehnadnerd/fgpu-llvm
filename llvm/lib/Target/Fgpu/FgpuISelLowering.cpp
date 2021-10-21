@@ -185,7 +185,8 @@ const char *FgpuTargetLowering::getTargetNodeName(unsigned Opcode) const {
 //  case FgpuISD::EH_RETURN:         return "FgpuISD::EH_RETURN";
   case FgpuISD::Wrapper:           return "FgpuISD::Wrapper";
   case FgpuISD::DynAlloc:          return "FgpuISD::DynAlloc";
-  case FgpuISD::Sync:              return "FgpuISD::Sync";
+  case FgpuISD::LSYNC:              return "FgpuISD::LSYNC";
+  case FgpuISD::GSYNC:              return "FgpuISD::GSYNC";
   case FgpuISD::LUi:               return "FgpuISD::LUi";
   case FgpuISD::Li:                return "FgpuISD::Li";
   case FgpuISD::LP:                return "FgpuISD::LP";
@@ -202,6 +203,10 @@ const char *FgpuTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case FgpuISD::SLWC:              return "FgpuISD::SLWC";
   case FgpuISD::SSW:               return "FgpuISD::SSW";
   case FgpuISD::SSWC:              return "FgpuISD::SSWC";
+
+  case FgpuISD::MOVC:              return "FgpuISD::MOVC";
+  case FgpuISD::VDOTM0:              return "FgpuISD::VDOTM0";
+  case FgpuISD::VDOTM1:              return "FgpuISD::VDOTM1";
   }
   return nullptr;
 }
@@ -1207,7 +1212,7 @@ SDValue FgpuTargetLowering::lowerATOMIC_FENCE(SDValue Op,
   // FIXME: Set SType for weaker fences where supported/appropriate.
   unsigned SType = 0;
   SDLoc DL(Op);
-  return DAG.getNode(FgpuISD::Sync, DL, MVT::Other, Op.getOperand(0),
+  return DAG.getNode(FgpuISD::GSYNC, DL, MVT::Other, Op.getOperand(0),
                      DAG.getConstant(SType, DL, MVT::i32));
 }
 

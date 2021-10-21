@@ -32,7 +32,16 @@ def int_fgpu_wgoff : GCCBuiltin<"__builtin_fgpu_wgoff">,
   Intrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem]>;
 
 def int_fgpu_dot : GCCBuiltin<"__builtin_fgpu_dot">,
-  Intrinsic<[fgpu_v32f32_ty], [fgpu_v32f32_ty, llvm_ptr_ty, llvm_i32_ty], [IntrNoMem]>;
+  Intrinsic<[llvm_float_ty], [llvm_float_ty, fgpu_v32f32_ty, llvm_ptr_ty, llvm_i32_ty], [IntrNoMem]>;
+
+def int_fgpu_movc : GCCBuiltin<"__builtin_fgpu_movc">,
+  Intrinsic<[fgpu_v32f32_ty], [fgpu_v32f32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+
+def int_fgpu_vdotm0 : GCCBuiltin<"__builtin_fgpu_vdotm0">,
+  Intrinsic<[llvm_float_ty], [llvm_float_ty, fgpu_v32f32_ty, llvm_ptr_ty, llvm_i32_ty], [IntrNoMem]>;
+
+def int_fgpu_vdotm1 : GCCBuiltin<"__builtin_fgpu_vdotm1">,
+  Intrinsic<[llvm_float_ty], [llvm_float_ty, fgpu_v32f32_ty, llvm_ptr_ty, llvm_i32_ty], [IntrNoMem]>;
 
 def int_fgpu_lsync : GCCBuiltin<"__builtin_fgpu_lsync">,
   Intrinsic<[], [], []>;

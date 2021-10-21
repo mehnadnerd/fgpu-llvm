@@ -447,6 +447,35 @@ SDValue FgpuSETargetLowering::lowerBITCAST(SDValue Op,
   return SDValue();
 }
 
+static SDValue lowerIntrinsicHelper(unsigned int opcode, SDLoc &DL, SDValue Op, SelectionDAG &DAG) {
+  assert(Op->getOperand(0).getOpcode() == ISD::TargetConstant); // asert that it i sintrinsic
+  assert(Op->getNumValues() == 1 && "Only 1 return value");
+  SmallVector<SDValue, 4> Ops;
+  for (int i = 1; i < Op.getNumOperands(); ++i) {
+    Ops.push_back(Op->getOperand(i));
+  }
+  SmallVector<EVT, 1> ResultTys;
+  for (EVT Ty : Op->values()) {
+    ResultTys.push_back(Ty);
+  }
+
+  return DAG.getNode(opcode, DL, ResultTys, Ops);
+}
+
+static SDValue lowerVoidIntrinsicHelper(unsigned int opcode, SDValue Op, SelectionDAG &DAG) {
+  SDLoc DL(Op);
+  SmallVector<SDValue, 4> Ops;
+  for (int i = 1; i < Op.getNumOperands(); ++i) {
+    Ops.push_back(Op->getOperand(i));
+  }
+  SmallVector<EVT, 1> ResultTys;
+  for (EVT Ty : Op->values()) {
+    ResultTys.push_back(Ty);
+  }
+
+  return DAG.getNode(opcode, DL, ResultTys, Ops);
+}
+
 SDValue FgpuSETargetLowering::lowerINTRINSIC_WO_CHAIN(SDValue Op,
                                                       SelectionDAG &DAG) const {
   SDLoc DL(Op);
@@ -463,6 +492,18 @@ SDValue FgpuSETargetLowering::lowerINTRINSIC_WO_CHAIN(SDValue Op,
     EVT PtrVT = getPointerTy(DAG.getDataLayout());
     return DAG.getNode(FgpuISD::ThreadPointer, DL, PtrVT);
   }
+
+  case Intrinsic::fgpu_lid: return lowerIntrinsicHelper(FgpuISD::LID, DL, Op, DAG);
+  case Intrinsic::fgpu_size: return lowerIntrinsicHelper(FgpuISD::SIZE, DL, Op, DAG);
+  case Intrinsic::fgpu_wgid: return lowerIntrinsicHelper(FgpuISD::WGID, DL, Op, DAG);
+  case Intrinsic::fgpu_wgoff: return lowerIntrinsicHelper(FgpuISD::WGOFF, DL, Op, DAG);
+  case Intrinsic::fgpu_wgsize: return lowerIntrinsicHelper(FgpuISD::WGSIZE, DL, Op, DAG);
+  case Intrinsic::fgpu_lsync: return lowerIntrinsicHelper(FgpuISD::LSYNC, DL, Op, DAG);
+  case Intrinsic::fgpu_gsync: return lowerIntrinsicHelper(FgpuISD::GSYNC, DL, Op, DAG);
+  case Intrinsic::fgpu_movc: return lowerIntrinsicHelper(FgpuISD::MOVC, DL, Op, DAG);
+  case Intrinsic::fgpu_dot: return lowerIntrinsicHelper(FgpuISD::DOT, DL, Op, DAG);
+  case Intrinsic::fgpu_vdotm0: return lowerIntrinsicHelper(FgpuISD::VDOTM0, DL, Op, DAG);
+  case Intrinsic::fgpu_vdotm1: return lowerIntrinsicHelper(FgpuISD::VDOTM1, DL, Op, DAG);
   }
 }
 
@@ -488,6 +529,8 @@ SDValue FgpuSETargetLowering::lowerINTRINSIC_VOID(SDValue Op,
   switch (Intr) {
   default:
     return SDValue();
+  case Intrinsic::fgpu_gsync: return lowerVoidIntrinsicHelper(FgpuISD::GSYNC, Op, DAG);
+  case Intrinsic::fgpu_lsync: return lowerVoidIntrinsicHelper(FgpuISD::LSYNC, Op, DAG);
 //  case Intrinsic::fgpu_st_b:
 //  case Intrinsic::fgpu_st_h:
 //  case Intrinsic::fgpu_st_w:

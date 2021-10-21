@@ -98,7 +98,13 @@ class TargetRegisterClass;
     SSWC,
     Wrapper,
     DynAlloc,
-    Sync
+    LSYNC,
+    GSYNC,
+
+    MOVC,
+    VDOTM0,
+    VDOTM1,
+
     };
 
   } // ene namespace FgpuISD
