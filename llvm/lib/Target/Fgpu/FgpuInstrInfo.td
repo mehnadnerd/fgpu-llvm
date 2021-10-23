@@ -395,10 +395,10 @@ class VRRI<bits<8> op, string instr_asm>:
   let isCommutable = 0;
 }
 
-class VDOTC<bits<8> op, string instr_asm>:
+class VDOTC<bits<8> op, string instr_asm, SDPatternOperator opnode>:
   FPU_RVRI<op, (outs ALURegs:$rd_out), (ins ALURegs:$rd, VecRegs:$rs, ALURegs:$rt, simm9:$imm9),
 	  !strconcat(instr_asm, "\t$rd, $rs, [$rt + $imm9]"),
-	  [], IIAlu> {
+	  [(set ALURegs:$rd_out, (opnode ALURegs:$rd, VecRegs:$rs, ALURegs:$rt, immSExt9:$imm9))], IIAlu> {
   let isCommutable = 0;
   let isReMaterializable = 1;
   let mayLoad = 1;
@@ -751,8 +751,15 @@ def WGOFF_Pseudo  : SDNode<"FgpuISD::WGOFF"    , SDTRTMInst, [SDNPHasChain]>;
 def WGID_Pseudo   : SDNode<"FgpuISD::WGID"    , SDTRTMInst, [SDNPHasChain]>;
 def WGSIZE_Pseudo : SDNode<"FgpuISD::WGSIZE"    , SDTRTMInst, [SDNPHasChain]>;
 def SIZE_Pseudo   : SDNode<"FgpuISD::SIZE"    , SDTRTMInst, [SDNPHasChain]>;
+def LSYNC_Pseudo  : SDNode<"FgpuISD::LSYNC"   , SDTypeProfile<0, 0, []>, [SDNPOutGlue, SDNPSideEffect]>;
+def GSYNC_Pseudo  : SDNode<"FgpuISD::GSYNC"   , SDTypeProfile<0, 0, []>, [SDNPOutGlue, SDNPSideEffect]>;
 
-def DOT_Pseudo    : SDNode<"FgpuISD::DOT" , SDTypeProfile<1, 3, []>, []>;
+
+def DOT_Pseudo    : SDNode<"FgpuISD::DOT" , SDTypeProfile<1, 4, []>, []>;
+
+def VDOTM0_Pseudo    : SDNode<"FgpuISD::VDOTM0" , SDTypeProfile<1, 4, []>, [SDNPMayLoad, SDNPMemOperand]>;
+def VDOTM1_Pseudo    : SDNode<"FgpuISD::VDOTM1" , SDTypeProfile<1, 4, []>, [SDNPMayLoad, SDNPMemOperand]>;
+def MOVC_Pseudo      : SDNode<"FgpuISD::MOVC" , SDTypeProfile<1, 4, []>, []>;
 
 def NOP_Pseudo    : SDNode<"FgpuISD::NOP"      , SDTRTMInst, []>;
 
@@ -805,9 +812,9 @@ def : Pat<(truncstorei8 ALURegs:$rd, ALURegs:$addr), (SB ALURegs:$rd, ZERO, ALUR
 def ADDi    : ArithLogicI<0x11, "addi", add, simm14, immSExt14>;
 def ADD     : ArithLogicR<0x10, "add", add, IIAlu, ALURegs, 1>;
 
-def VDOT    : VDOTC<0xD1, "vdot">;
-def VDOTM0  : VDOTC<0xD2, "vdotm0">;
-def VDOTM1  : VDOTC<0xD8, "vdotm1">;
+def VDOT    : VDOTC<0xD1, "vdot", DOT_Pseudo>;
+def VDOTM0  : VDOTC<0xD2, "vdotm0", VDOTM0_Pseudo>;
+def VDOTM1  : VDOTC<0xD8, "vdotm1", VDOTM1_Pseudo>;
 def ACT     : ACTC<0xE4, "act">;
 def CFG     : CFG<0xE0, "cfg">;
 def FFMA    : FFMA<0xC9, "ffma", IIAlu, FloatRegs, 0>;
