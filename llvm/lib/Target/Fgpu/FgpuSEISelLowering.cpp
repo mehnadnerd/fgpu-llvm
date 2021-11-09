@@ -465,7 +465,7 @@ static SDValue lowerIntrinsicHelper(unsigned int opcode, SDLoc &DL, SDValue Op, 
 static SDValue lowerVoidIntrinsicHelper(unsigned int opcode, SDValue Op, SelectionDAG &DAG) {
   SDLoc DL(Op);
   SmallVector<SDValue, 4> Ops;
-  for (int i = 1; i < Op.getNumOperands(); ++i) {
+  for (int i = 0; i < 1; ++i) { // TODO: the 2 is because of *reasons* like it has two things before it
     Ops.push_back(Op->getOperand(i));
   }
   SmallVector<EVT, 1> ResultTys;
@@ -498,8 +498,6 @@ SDValue FgpuSETargetLowering::lowerINTRINSIC_WO_CHAIN(SDValue Op,
   case Intrinsic::fgpu_wgid: return lowerIntrinsicHelper(FgpuISD::WGID, DL, Op, DAG);
   case Intrinsic::fgpu_wgoff: return lowerIntrinsicHelper(FgpuISD::WGOFF, DL, Op, DAG);
   case Intrinsic::fgpu_wgsize: return lowerIntrinsicHelper(FgpuISD::WGSIZE, DL, Op, DAG);
-  case Intrinsic::fgpu_lsync: return lowerIntrinsicHelper(FgpuISD::LSYNC, DL, Op, DAG);
-  case Intrinsic::fgpu_gsync: return lowerIntrinsicHelper(FgpuISD::GSYNC, DL, Op, DAG);
   case Intrinsic::fgpu_movc: return lowerIntrinsicHelper(FgpuISD::MOVC, DL, Op, DAG);
   case Intrinsic::fgpu_dot: return lowerIntrinsicHelper(FgpuISD::DOT, DL, Op, DAG);
   case Intrinsic::fgpu_vdotm0: return lowerIntrinsicHelper(FgpuISD::VDOTM0, DL, Op, DAG);

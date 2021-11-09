@@ -396,13 +396,20 @@ class VRRI<bits<8> op, string instr_asm>:
 }
 
 class VDOTC<bits<8> op, string instr_asm, SDPatternOperator opnode>:
-  FPU_RVRI<op, (outs ALURegs:$rd_out), (ins ALURegs:$rd, VecRegs:$rs, ALURegs:$rt, simm9:$imm9),
+  FPU_RVRI<op, (outs FloatRegs:$rd_out), (ins FloatRegs:$rd, VecRegs:$rs, ALURegs:$rt, simm9:$imm9),
 	  !strconcat(instr_asm, "\t$rd, $rs, [$rt + $imm9]"),
-	  [(set ALURegs:$rd_out, (opnode ALURegs:$rd, VecRegs:$rs, ALURegs:$rt, immSExt9:$imm9))], IIAlu> {
+	  [(set FloatRegs:$rd_out, (opnode FloatRegs:$rd, VecRegs:$rs, ALURegs:$rt, immSExt9:$imm9))], IIAlu> {
   let isCommutable = 0;
-  let isReMaterializable = 1;
+  let isReMaterializable = 0;
   let mayLoad = 1;
   let Constraints = "$rd_out = $rd";
+}
+
+class MOVCC<bits<8> op, string instr_asm, SDPatternOperator opnode>:
+  FPU_VRVI<op,(outs VecRegs:$rd), (ins VecRegs:$rs, ALURegs:$rt, uimm9:$imm9),
+	  !strconcat(instr_asm, "\t$rd, $rs, $rt, $imm9"),
+	  [(set VecRegs:$rd, (opnode VecRegs:$rs, ALURegs:$rt, immZExt9:$imm9))], IIAlu> {
+  let isCommutable = 0;
 }
 
 ///* x86-style operation with a memory operand */
@@ -503,8 +510,8 @@ class Control<bits<8> op, string instr_asm>:
 }
 
 
-class Sync_<bits<8> op, string instr_asm>:
-  FCTRL<op, (outs), (ins), instr_asm, [], IIBranch> {
+class Sync_<bits<8> op, string instr_asm, SDPatternOperator opnode>:
+  FCTRL<op, (outs), (ins), instr_asm, [(opnode)], IIBranch> {
   let isBarrier=1;
 }
 
@@ -581,7 +588,7 @@ class Load_SLWC<bits<8> op, string instr_asm, PatFrag OpNode, RegisterClass RC> 
 class Store_SSWC<bits<8> op, string instr_asm, PatFrag OpNode, RegisterClass RC>
   : FPU_SMEMC<op, (outs), (ins RC:$rd, ALURegs:$rt, ALURegs:$rs, simm9:$imm9),
             !strconcat(instr_asm, "\t$rd, [$rt + $rs + $imm9]"),
-    [(set RC:$rd, (OpNode (add ALURegs:$rt, (add (shl ALURegs:$rs, imm_eq_7), immSExt16:$imm9))))], IILoad>{
+    [(OpNode RC:$rd, (add ALURegs:$rt, (add (shl ALURegs:$rs, imm_eq_7), immSExt16:$imm9)))], IILoad>{
   let isPseudo = 0;
   let mayStore = 1;
   let AddedComplexity = 1000;
@@ -739,27 +746,29 @@ class SetSync_<bits<8> op, string instr_asm>:
 def SDTRTMInst    : SDTypeProfile<1, 1, [ SDTCisInt<1>]>;
 def SDTACTInst    : SDTypeProfile<1, 1, [ SDTCisFP<0>]>;
 def SDTAto        : SDTypeProfile<1, 2, [SDTCisSameAs<0,2>, SDTCisInt<0>, SDTCisPtrTy<1>]>;
+def SDTDot        : SDTypeProfile<1, 4, [SDTCisVT<0, f32>, SDTCisSameAs<0,1>, SDTCisVT<2, v32f32>, SDTCisPtrTy<3>, SDTCisVT<4, i32>]>;
+def SDTSync       : SDTypeProfile<0, 0, []>;
 
 //let hasNoSchedulingInfo = 1 in {
 def LUi_Pseudo    : SDNode<"FgpuISD::LUi"      , SDTRTMInst, []>;
 def Li_Pseudo     : SDNode<"FgpuISD::Li"      , SDTRTMInst, []>;
 //def Li_Pseudo     : SDNode<"FgpuISD::Li"      , SDTypeProfile<1, 2, []>, []>;
 def RELU_Pseudo   : SDNode<"FgpuISD::RELU"    , SDTACTInst, []>;
-def LP_Pseudo     : SDNode<"FgpuISD::LP"      , SDTRTMInst, [SDNPHasChain]>;
-def LID_Pseudo    : SDNode<"FgpuISD::LID"    , SDTRTMInst, [SDNPHasChain]>;
-def WGOFF_Pseudo  : SDNode<"FgpuISD::WGOFF"    , SDTRTMInst, [SDNPHasChain]>;
-def WGID_Pseudo   : SDNode<"FgpuISD::WGID"    , SDTRTMInst, [SDNPHasChain]>;
-def WGSIZE_Pseudo : SDNode<"FgpuISD::WGSIZE"    , SDTRTMInst, [SDNPHasChain]>;
-def SIZE_Pseudo   : SDNode<"FgpuISD::SIZE"    , SDTRTMInst, [SDNPHasChain]>;
-def LSYNC_Pseudo  : SDNode<"FgpuISD::LSYNC"   , SDTypeProfile<0, 0, []>, [SDNPOutGlue, SDNPSideEffect]>;
-def GSYNC_Pseudo  : SDNode<"FgpuISD::GSYNC"   , SDTypeProfile<0, 0, []>, [SDNPOutGlue, SDNPSideEffect]>;
+def LP_Pseudo     : SDNode<"FgpuISD::LP"      , SDTRTMInst, []>;
+def LID_Pseudo    : SDNode<"FgpuISD::LID"    , SDTRTMInst, []>;
+def WGOFF_Pseudo  : SDNode<"FgpuISD::WGOFF"    , SDTRTMInst, []>;
+def WGID_Pseudo   : SDNode<"FgpuISD::WGID"    , SDTRTMInst, []>;
+def WGSIZE_Pseudo : SDNode<"FgpuISD::WGSIZE"    , SDTRTMInst, []>;
+def SIZE_Pseudo   : SDNode<"FgpuISD::SIZE"    , SDTRTMInst, []>;
 
+def LSYNC_Pseudo  : SDNode<"FgpuISD::LSYNC"   , SDTSync, [SDNPSideEffect, SDNPHasChain]>; // , SDNPOutGlue
+def GSYNC_Pseudo  : SDNode<"FgpuISD::GSYNC"   , SDTSync, [SDNPSideEffect, SDNPHasChain]>; // , SDNPOutGlue
 
-def DOT_Pseudo    : SDNode<"FgpuISD::DOT" , SDTypeProfile<1, 4, []>, []>;
+def DOT_Pseudo       : SDNode<"FgpuISD::DOT" , SDTDot, [SDNPMayLoad, SDNPSideEffect]>;
 
-def VDOTM0_Pseudo    : SDNode<"FgpuISD::VDOTM0" , SDTypeProfile<1, 4, []>, [SDNPMayLoad, SDNPMemOperand]>;
-def VDOTM1_Pseudo    : SDNode<"FgpuISD::VDOTM1" , SDTypeProfile<1, 4, []>, [SDNPMayLoad, SDNPMemOperand]>;
-def MOVC_Pseudo      : SDNode<"FgpuISD::MOVC" , SDTypeProfile<1, 4, []>, []>;
+def VDOTM0_Pseudo    : SDNode<"FgpuISD::VDOTM0" , SDTDot, [SDNPMayLoad, SDNPSideEffect]>; // SDNPMemOperand
+def VDOTM1_Pseudo    : SDNode<"FgpuISD::VDOTM1" , SDTDot, [SDNPMayLoad, SDNPSideEffect]>; // SDNPMemOperand
+def MOVC_Pseudo      : SDNode<"FgpuISD::MOVC" , SDTypeProfile<1, 3, [SDTCisVT<0, v32f32>, SDTCisVT<1, v32f32>, SDTCisVT<2, i32>,SDTCisVT<3, i32>]>, []>;
 
 def NOP_Pseudo    : SDNode<"FgpuISD::NOP"      , SDTRTMInst, []>;
 
@@ -812,7 +821,7 @@ def : Pat<(truncstorei8 ALURegs:$rd, ALURegs:$addr), (SB ALURegs:$rd, ZERO, ALUR
 def ADDi    : ArithLogicI<0x11, "addi", add, simm14, immSExt14>;
 def ADD     : ArithLogicR<0x10, "add", add, IIAlu, ALURegs, 1>;
 
-def VDOT    : VDOTC<0xD1, "vdot", DOT_Pseudo>;
+def VDOT    : VDOTC<0xD1, "vdot",   DOT_Pseudo>;
 def VDOTM0  : VDOTC<0xD2, "vdotm0", VDOTM0_Pseudo>;
 def VDOTM1  : VDOTC<0xD8, "vdotm1", VDOTM1_Pseudo>;
 def ACT     : ACTC<0xE4, "act">;
@@ -821,14 +830,15 @@ def FFMA    : FFMA<0xC9, "ffma", IIAlu, FloatRegs, 0>;
 //def BUT16   : BUT16<0xE4, "but16">;
 //def BUT0    : BUT0<0xE5, "but0">;
 //def GTWID   : GTWID<0xE6, "gtwid">;
+def MOVC    : MOVCC<0xED, "movc", MOVC_Pseudo>;
 
-def VRVI    : VRVI<0xED, "vrvi">;
-def VRVV    : VRVV<0xEE, "vrvv">;
-def VRRI    : VRRI<0xE5, "vrri">;
-def VVVI    : VVVI<0xEA, "vvvi">;
-def VVI     : VVI<0xE9, "vvi">;
-def VVRV    : VVRV<0xE3, "vvrv">;
-def RVI     : RVI<0xEC, "rvi">;
+//def VRVI    : VRVI<0xED, "vrvi">;
+//def VRVV    : VRVV<0xEE, "vrvv">;
+//def VRRI    : VRRI<0xE5, "vrri">;
+//def VVVI    : VVVI<0xEA, "vvvi">;
+//def VVI     : VVI<0xE9, "vvi">;
+//def VVRV    : VVRV<0xE3, "vvrv">;
+//def RVI     : RVI<0xEC, "rvi">;
 
 def LBZ  : LBZ_<0xF1, "lbz">;
 def SBZ  : SBZ_<0xF9, "sbz">;
@@ -874,15 +884,15 @@ def : Pat<(store_a VecRegs:$rd, ALURegs:$rt),                                   
 
 
 def SLWC : Load_SLWC<0xD7, "slwc", shr_load, VecRegs>;
-// def : Pat<( v128i8 (shr_load (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7)))),        (SLWC ALURegs:$rt, ALURegs:$rs, 0)>;
-// def : Pat<( v128i8 (shr_load (add ALURegs:$rt, immSExt16:$imm))),                     (SLWC ALURegs:$rt, ZERO, immSExt16:$imm)>;
-// def : Pat<( v128i8 (shr_load ALURegs:$rt)),                                           (SLWC ALURegs:$rt, ZERO, 0)>;
+def : Pat<( v32f32 (shr_load (add ALURegs:$rt, (shl ALURegs:$rs, imm_eq_7)))),        (SLWC ALURegs:$rt, ALURegs:$rs, 0)>;
+def : Pat<( v32f32 (shr_load (add ALURegs:$rt, immSExt16:$imm))),                     (SLWC ALURegs:$rt, ZERO, immSExt16:$imm)>;
+def : Pat<( v32f32 (shr_load ALURegs:$rt)),                                           (SLWC ALURegs:$rt, ZERO, 0)>;
 
-def SSWC : SWC_<0xDF, "sswc">;
-//def SSWC : Store_SSWC<0xDF, "sswc", store_a, VecRegs>;
-//def : Pat<(store_a VecRegs:$rs, (add ALURegs:$addr, ALURegs:$rt)),                (SSWC VecRegs:$rs, ALURegs:$rt, ALURegs:$addr, 0)>;
-//def : Pat<(store_a VecRegs:$rs, (add ALURegs:$addr, immSExt9:$imm6)),             (SSWC VecRegs:$rs, ZERO, ALURegs:$addr, immSExt9:$imm6)>;
-//def : Pat<(store_a VecRegs:$rs, ALURegs:$addr),                                   (SSWC VecRegs:$rs, ZERO, ALURegs:$addr, 0)>;
+//def SSWC : SWC_<0xDF, "sswc">;
+def SSWC : Store_SSWC<0xDF, "sswc", shr_store, VecRegs>;
+def : Pat<(shr_store VecRegs:$rs, (add ALURegs:$addr, ALURegs:$rt)),                (SSWC VecRegs:$rs, ALURegs:$rt, ALURegs:$addr, 0)>;
+def : Pat<(shr_store VecRegs:$rs, (add ALURegs:$addr, immSExt9:$imm6)),             (SSWC VecRegs:$rs, ZERO, ALURegs:$addr, immSExt9:$imm6)>;
+def : Pat<(shr_store VecRegs:$rs, ALURegs:$addr),                                   (SSWC VecRegs:$rs, ZERO, ALURegs:$addr, 0)>;
 
 def SLW : Load_SLW<0xD5, "slw", shr_load, ALURegs>;
 def : Pat<(i32 (shr_load (add ALURegs:$rt, ALURegs:$rs))),                                 (SLW $rt, $rs, 0)>;
@@ -946,8 +956,8 @@ let isReturn=1, isTerminator=1, isBarrier=1, hasCtrlDep=1, Uses = [LR] in
   def RetLR : FgpuPseudo<(outs), (ins), "", [(FgpuRET)]>;
 
 def RET     : Control<0x92, "ret">;
-def LSYNC    : Sync_<0x93, "lsync">;
-def GSYNC    : Sync_<0x94, "gsync">;
+def LSYNC    : Sync_<0x93, "lsync", LSYNC_Pseudo>;
+def GSYNC    : Sync_<0x94, "gsync", GSYNC_Pseudo>;
 
 def SET_SYNC    : SetSync_<0x95, "set_sync">;
 

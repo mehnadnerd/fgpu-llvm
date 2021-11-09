@@ -19,13 +19,12 @@ BUILTIN(__builtin_fgpu_wgid, "ii", "nc")
 BUILTIN(__builtin_fgpu_wgsize, "ii", "nc")
 BUILTIN(__builtin_fgpu_wgoff, "ii", "nc")
 
-//TODO: also add in the input for the accumulator since it is inout
-BUILTIN(__builtin_fgpu_dot, "ffV32fV32f*1i", "nc") // TODO: check address space
+BUILTIN(__builtin_fgpu_dot, "ffV32fV32f*1i", "nc")
 
-BUILTIN(__builtin_fgpu_vdotm0, "ffV32fV32f*1i", "nc") // TODO: check address space
-BUILTIN(__builtin_fgpu_vdotm1, "ffV32fV32f*1i", "nc") // TODO: check address space
+BUILTIN(__builtin_fgpu_vdotm0, "ffV32fV32f*1i", "nc")
+BUILTIN(__builtin_fgpu_vdotm1, "ffV32fV32f*1i", "nc")
 
-BUILTIN(__builtin_fgpu_movc, "V32fV32fii", "nc") // TODO: check address space
+BUILTIN(__builtin_fgpu_movc, "V32fV32fii", "nc")
 
 
 

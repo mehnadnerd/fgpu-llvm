@@ -98,7 +98,7 @@ bool FgpuInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
   SmallVector<MachineInstr*, 2> BranchInstrs;
   BranchType BT = analyzeBranch(MBB, TBB, FBB, Cond, AllowModify, BranchInstrs);
 
-  return (BT == BT_None) || (BT == BT_Indirect);
+  return (BT == BT_CouldntAnalyse) || (BT == BT_Indirect); // true return means couldn't analyse
 }
 
 void FgpuInstrInfo::BuildCondBr(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
@@ -224,7 +224,7 @@ FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(
 
   // Not an analyzable branch (e.g., indirect jump).
   if (!getAnalyzableBrOpc(LastOpc))
-    return LastInst->isIndirectBranch() ? BT_Indirect : BT_None;
+    return LastInst->isIndirectBranch() ? BT_Indirect : BT_CouldntAnalyse;
 
   // Get the second to last instruction in the block.
   unsigned SecondLastOpc = 0;
@@ -242,7 +242,7 @@ FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(
 
     // Not an analyzable branch (must be an indirect jump).
     if (isUnpredicatedTerminator(*SecondLastInst) && !SecondLastOpc)
-      return BT_None;
+      return BT_CouldntAnalyse;
   }
 
   // If there is only one terminator instruction, process it.
@@ -262,7 +262,7 @@ FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(
   // If we reached here, there are two branches.
   // If there are three terminators, we don't know what sort of block this is.
   if (++I != REnd && isUnpredicatedTerminator(*I))
-    return BT_None;
+    return BT_CouldntAnalyse;
 
   BranchInstrs.insert(BranchInstrs.begin(), SecondLastInst);
 
@@ -271,7 +271,7 @@ FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(
   if (SecondLastInst->isUnconditionalBranch()) {
     // Return if the last instruction cannot be removed.
     if (!AllowModify)
-      return BT_None;
+      return BT_CouldntAnalyse;
 
     TBB = SecondLastInst->getOperand(SecondLastInst->getNumExplicitOperands() - 1).getMBB();
     LastInst->eraseFromParent();
@@ -281,8 +281,13 @@ FgpuInstrInfo::BranchType FgpuInstrInfo::analyzeBranch(
 
   // Conditional branch followed by an unconditional branch.
   // The last one must be unconditional.
-  if (!LastInst->isUnconditionalBranch())
-    return BT_None;
+  bool lastB = LastOpc == Fgpu::BEQ;
+  lastB &= LastInst->getNumExplicitOperands() >= 2;
+  lastB &= (LastInst->getOperand(0).isReg() && LastInst->getOperand(1).isReg());
+  lastB &= (LastInst->getOperand(0).getReg() == LastInst->getOperand(1).getReg());
+  // lastB is an ersatz isUnconditionalbranch, since there isn't one in the ISA
+  if (!LastInst->isUnconditionalBranch() && !lastB)
+    return BT_CouldntAnalyse;
 
   AnalyzeCondBr(SecondLastInst, SecondLastOpc, TBB, Cond);
   FBB = LastInst->getOperand(LastInst->getNumExplicitOperands() - 1).getMBB();

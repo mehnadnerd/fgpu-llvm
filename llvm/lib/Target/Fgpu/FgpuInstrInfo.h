@@ -47,7 +47,7 @@ protected:
 
 public:
   enum BranchType {
-    BT_None,       // Couldn't analyze branch.
+    BT_CouldntAnalyse,       // Couldn't analyze branch.
     BT_NoBranch,   // No branches found.
     BT_Uncond,     // One unconditional branch.
     BT_Cond,       // One conditional branch.

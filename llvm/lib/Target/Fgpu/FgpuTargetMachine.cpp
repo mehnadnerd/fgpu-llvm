@@ -14,6 +14,7 @@
 #include "MCTargetDesc/FgpuABIInfo.h"
 #include "MCTargetDesc/FgpuMCTargetDesc.h"
 #include "Fgpu.h"
+#include "FgpuLoopIdiomRecognition.h"
 #include "FgpuSEISelDAGToDAG.h"
 #include "FgpuSubtarget.h"
 #include "FgpuTargetObjectFile.h"
@@ -29,9 +30,12 @@
 #include "llvm/CodeGen/GlobalISel/RegBankSelect.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Debug.h"
@@ -44,6 +48,12 @@ using namespace llvm;
 
 #define DEBUG_TYPE "fgpu"
 
+namespace llvm {
+void initializeFgpuLoopIdiomRecognizeLegacyPassPass(PassRegistry &);
+Pass *createFgpuLoopIdiomPass();
+
+}
+
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeFgpuTarget() {
   // Register the target.
   RegisterTargetMachine<FgpuebTargetMachine> X(getTheFgpuTarget());
@@ -52,6 +62,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeFgpuTarget() {
   initializeGlobalISel(*PR);
   initializeFgpuBranchExpansionPass(*PR);
   initializeFgpuPreLegalizerCombinerPass(*PR);
+  initializeFgpuLoopIdiomRecognizeLegacyPassPass(*PR);
 }
 
 static std::string computeDataLayout(const Triple &TT, StringRef CPU,
@@ -212,6 +223,7 @@ std::unique_ptr<CSEConfigBase> FgpuPassConfig::getCSEConfig() const {
 void FgpuPassConfig::addIRPasses() {
   TargetPassConfig::addIRPasses();
   addPass(createAtomicExpandPass());
+  addPass(createFgpuLoopIdiomPass());
 }
 // Install an instruction selector pass using
 // the ISelDag to gen Fgpu code.

@@ -32,6 +32,7 @@ add_llvm_target(FgpuCodeGen
   FgpuISelLowering.cpp
   FgpuFrameLowering.cpp
   FgpuLegalizerInfo.cpp
+  FgpuLoopIdiomRecognition.cpp
   FgpuBranchExpansion.cpp
   FgpuMCInstLower.cpp
   FgpuMachineFunction.cpp
@@ -54,13 +55,16 @@ add_llvm_target(FgpuCodeGen
   AsmPrinter
   CodeGen
   Core
+  IPO
   MC
   FgpuDesc
   FgpuInfo
   SelectionDAG
+  Scalar
   Support
   Target
   GlobalISel
+  TransformUtils
 
   ADD_TO_COMPONENT
   Fgpu
