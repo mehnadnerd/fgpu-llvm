@@ -1091,7 +1091,7 @@ bool FgpuLoopIdiomRecognize::recogniseDot(Loop *L, int BECount,
 
   // It should have a preheader containing nothing but an unconditional branch.
   BasicBlock *PH = L->getLoopPreheader();
-  if (!PH || &PH->front() != PH->getTerminator()) {
+  if (!PH) { //  || &PH->front() != PH->getTerminator()
     LLVM_DEBUG(dbgs() << "Dot Couldn't get preheader\n");
     return false;
   }

@@ -56,8 +56,6 @@ public:
 
   // Pass Pipeline Configuration
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
-  void adjustPassManager(PassManagerBuilder &PMB) override;
-  void registerPassBuilderCallbacks(PassBuilder &PB) override;
 
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();
